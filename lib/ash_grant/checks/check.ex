@@ -330,15 +330,67 @@ defmodule AshGrant.Check do
   defp fallback_evaluation(record, filter, context) do
     tenant = context[:tenant]
 
-    # Analyze what the filter references
-    has_tenant_ref = filter_references_tenant?(filter)
-    has_actor_ref = filter_references_actor?(filter)
+    # First try to extract "field in [list]" pattern (from scope_resolver)
+    case extract_in_list_check(filter) do
+      {field, list} when is_list(list) ->
+        record_value = Map.get(record, field)
+        record_value in list
 
-    # Only check what the filter actually references
-    tenant_ok = if has_tenant_ref, do: check_tenant_match(record, tenant), else: true
-    actor_ok = if has_actor_ref, do: check_actor_match(record, filter, context), else: true
+      _ ->
+        # Analyze what the filter references
+        has_tenant_ref = filter_references_tenant?(filter)
+        has_actor_ref = filter_references_actor?(filter)
 
-    tenant_ok and actor_ok
+        # Only check what the filter actually references
+        tenant_ok = if has_tenant_ref, do: check_tenant_match(record, tenant), else: true
+        actor_ok = if has_actor_ref, do: check_actor_match(record, filter, context), else: true
+
+        tenant_ok and actor_ok
+    end
+  end
+
+  # Extract "field in [list]" pattern from filter expression (used by scope_resolver)
+  # Returns {field, list} tuple or nil
+  defp extract_in_list_check(filter) do
+    # Parse from string/inspect representation
+    filter_str = inspect(filter)
+
+    cond do
+      # Simple format: "field_name in [\"id1\", \"id2\"]"
+      match = Regex.run(~r/^(\w+)\s+in\s+\[(.+)\]$/, filter_str) ->
+        [_, field_name, list_content] = match
+        ids = Regex.scan(~r/"([^"]+)"/, list_content) |> Enum.map(fn [_, id] -> id end)
+        if ids != [], do: {String.to_existing_atom(field_name), ids}, else: nil
+
+      # Complex Ash.Query format with :in
+      String.contains?(filter_str, ":in") and String.contains?(filter_str, "[\"") ->
+        extract_in_list_from_inspect(filter_str)
+
+      true ->
+        nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  defp extract_in_list_from_inspect(filter_str) do
+    # Extract field name: look for :name, :field_name pattern
+    field_match = Regex.run(~r/attribute:\s*%[^}]*:name,\s*:(\w+)/, filter_str)
+
+    # Extract list: look for ["id1", "id2", ...] pattern
+    list_match = Regex.run(~r/\["([^"]+)"(?:,\s*"([^"]+)")*\]/, filter_str)
+
+    case {field_match, list_match} do
+      {[_, field_name], [full_match | _]} ->
+        # Parse all IDs from the list
+        ids = Regex.scan(~r/"([^"]+)"/, full_match) |> Enum.map(fn [_, id] -> id end)
+        if ids != [], do: {String.to_existing_atom(field_name), ids}, else: nil
+
+      _ ->
+        nil
+    end
+  rescue
+    _ -> nil
   end
 
   # Check if the filter expression references ^tenant()
@@ -376,43 +428,74 @@ defmodule AshGrant.Check do
         false
 
       _ ->
-        # Extract the field being compared to ^actor(:id) from the filter expression
-        case extract_actor_field(filter) do
-          # No actor field found in filter, pass
-          nil ->
-            true
+        # First try to extract "field in ^actor(:list_field)" pattern
+        case extract_actor_in_list_check(filter) do
+          {record_field, actor_field} ->
+            # Check if record's field value is in actor's list field
+            record_value = Map.get(record, record_field)
+            actor_list = Map.get(actor, actor_field) || []
+            record_value in actor_list
 
-          field ->
-            record_owner = Map.get(record, field)
-            actor_id = Map.get(actor, :id)
-            record_owner == actor_id
+          nil ->
+            # Fall back to extract "field == ^actor(:actor_field)" pattern
+            case extract_actor_equality_check(filter) do
+              {record_field, actor_field} ->
+                record_value = Map.get(record, record_field)
+                actor_value = Map.get(actor, actor_field)
+                record_value == actor_value
+
+              nil ->
+                # No actor pattern found, assume OK (other checks may apply)
+                true
+            end
         end
     end
   end
 
-  # Extract the field name being compared to ^actor(:id) from a filter expression
-  # This parses the filter to find patterns like `field == ^actor(:id)`
-  defp extract_actor_field(filter) do
+  # Extract "field in ^actor(:list_field)" pattern from filter expression
+  # Returns {record_field, actor_field} tuple or nil
+  defp extract_actor_in_list_check(filter) do
     filter_str = inspect(filter)
 
-    # Pattern: look for `field_name == {:_actor, :id}` or similar
-    # The filter string looks like: `(tenant_id == :_tenant) and (author_id == {:_actor, :id})`
+    # Pattern: look for `field_name in {:_actor, :list_field}`
+    # The filter string looks like: `organization_unit_id in {:_actor, :accessible_org_unit_ids}`
+    cond do
+      match = Regex.run(~r/(\w+)\s+in\s+\{:_actor,\s*:(\w+)\}/, filter_str) ->
+        [_, record_field, actor_field] = match
+        {String.to_existing_atom(record_field), String.to_existing_atom(actor_field)}
+
+      # Also match Ash.Expr struct representations
+      match = Regex.run(~r/:name,\s*:(\w+).*:in.*:_actor.*:(\w+)/, filter_str) ->
+        [_, record_field, actor_field] = match
+        {String.to_existing_atom(record_field), String.to_existing_atom(actor_field)}
+
+      true ->
+        nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  # Extract "field == ^actor(:actor_field)" pattern from filter expression
+  # Returns {record_field, actor_field} tuple or nil
+  # This handles any actor field (not just :id), e.g., `field == ^actor(:org_unit_id)`
+  defp extract_actor_equality_check(filter) do
+    filter_str = inspect(filter)
+
+    # Pattern: look for `field_name == {:_actor, :actor_field}` or similar
+    # The filter string looks like: `organization_unit_id == {:_actor, :org_unit_id}`
 
     cond do
-      # Match pattern: field_name == {:_actor, :id}
-      match = Regex.run(~r/(\w+)\s*==\s*\{:_actor,\s*:id\}/, filter_str) ->
-        [_, field_name] = match
-        String.to_existing_atom(field_name)
+      # Match pattern: field_name == {:_actor, :actor_field}
+      match = Regex.run(~r/(\w+)\s*==\s*\{:_actor,\s*:(\w+)\}/, filter_str) ->
+        [_, record_field, actor_field] = match
+        {String.to_existing_atom(record_field), String.to_existing_atom(actor_field)}
 
-      # Match pattern: :name, :field_name ... :_actor (for struct representations)
-      match = Regex.run(~r/:name,\s*:(\w+).*:_actor/, filter_str) ->
-        [_, field_name] = match
-        String.to_existing_atom(field_name)
-
-      # Match pattern: attribute: :field_name ... :_actor
-      match = Regex.run(~r/attribute:\s*:(\w+).*:_actor/, filter_str) ->
-        [_, field_name] = match
-        String.to_existing_atom(field_name)
+      # Match Ash.Expr struct representations with equality
+      # e.g., `%Ash.Query.Operator.Eq{... left: %{name: :organization_unit_id}, right: {:_actor, :org_unit_id}}`
+      match = Regex.run(~r/:name,\s*:(\w+).*:_actor,\s*:(\w+)/, filter_str) ->
+        [_, record_field, actor_field] = match
+        {String.to_existing_atom(record_field), String.to_existing_atom(actor_field)}
 
       true ->
         nil
