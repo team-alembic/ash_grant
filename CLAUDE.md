@@ -6,6 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AshGrant is a permission-based authorization extension for Ash Framework. It provides an Apache Shiro-inspired permission system with deny-wins semantics, supporting both RBAC and resource-instance permissions.
 
+## Language Policy
+
+**All repository content must be written in English**, including:
+- README.md, CHANGELOG.md, and all documentation
+- Code comments and docstrings (@moduledoc, @doc)
+- Commit messages and PR descriptions
+- CLAUDE.md instructions
+
 ## Common Commands
 
 ```bash
@@ -104,44 +112,46 @@ Tests require PostgreSQL. The test alias auto-runs `ecto.create` and `ecto.migra
 
 ## Git Workflow
 
+All changes must go through Pull Requests (no direct push to main).
+
 ### Branch Naming Convention
 
-| 타입 | 브랜치명 | 예시 |
-|------|---------|------|
-| 기능 추가 | `feat/<description>` | `feat/sat-solver-callbacks` |
-| 버그 수정 | `fix/<description>` | `fix/in-operator-fallback` |
-| 문서 수정 | `docs/<description>` | `docs/update-readme` |
-| 리팩토링 | `refactor/<description>` | `refactor/evaluator-cleanup` |
-| 릴리스 | `release/v<version>` | `release/v0.4.1` |
+| Type | Branch Name | Example |
+|------|-------------|---------|
+| Feature | `feat/<description>` | `feat/sat-solver-callbacks` |
+| Bug Fix | `fix/<description>` | `fix/in-operator-fallback` |
+| Documentation | `docs/<description>` | `docs/update-readme` |
+| Refactoring | `refactor/<description>` | `refactor/evaluator-cleanup` |
+| Release | `release/v<version>` | `release/v0.4.1` |
 
-### Feature (새 기능)
+### Feature
 
 ```bash
 git checkout -b feat/my-feature
-# 작업...
+# Work on feature...
 git push -u origin feat/my-feature
-# PR 생성 → CI 통과 → Merge
+# Create PR → CI passes → Merge
 ```
 
-### Fix (버그 수정)
+### Fix
 
 ```bash
 git checkout -b fix/bug-description
-# 수정...
-mix test  # 로컬 테스트
+# Fix the bug...
+mix test  # Local test
 git push -u origin fix/bug-description
-# PR 생성 → CI 통과 → Merge
+# Create PR → CI passes → Merge
 ```
 
-### Release (버전 릴리스)
+### Release
 
 ```bash
 git checkout -b release/v0.4.2
-# 1. mix.exs 버전 수정
-# 2. CHANGELOG.md 업데이트 (Unreleased → 버전)
+# 1. Update version in mix.exs
+# 2. Update CHANGELOG.md (move Unreleased to new version)
 git push -u origin release/v0.4.2
-# PR 생성 → CI 통과 → Merge
-# 3. main에서 태그
+# Create PR → CI passes → Merge
+# 3. Tag on main
 git checkout main && git pull
 git tag v0.4.2
 git push --tags
@@ -152,5 +162,5 @@ git push --tags
 ```
 <type>: <description>
 
-types: feat, fix, docs, refactor, test, release
+Types: feat, fix, docs, refactor, test, release
 ```
