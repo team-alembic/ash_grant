@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-01-21
+
+### Added
+
+- **Policy Configuration Testing**: DSL-based testing framework for verifying policy configurations without a database
+  - `AshGrant.PolicyTest` - Main module with `use` macro for defining policy tests
+  - `assert_can/2,3` and `assert_cannot/2,3` assertion macros
+  - `resource/1`, `actor/2`, `describe/2`, `test/2` DSL macros
+  - `AshGrant.PolicyTest.Runner` - Test execution with summary statistics
+  - `AshGrant.PolicyTest.Result` - Result struct with timing information
+
+- **YAML Policy Tests**: Alternative format for non-Elixir developers
+  - `AshGrant.PolicyTest.YamlParser` - Parse and run YAML test files
+  - `AshGrant.PolicyTest.YamlExporter` - Export DSL tests to YAML
+  - `AshGrant.PolicyTest.DslGenerator` - Generate DSL code from YAML
+
+- **Policy Export**: Export policy configurations to documentation formats
+  - `AshGrant.PolicyExport.Mermaid` - Generate Mermaid flowchart diagrams
+  - `AshGrant.PolicyExport.Markdown` - Generate Markdown documentation
+
+- **Mix Tasks**: CLI tools for policy testing and export
+  - `mix ash_grant.verify` - Run policy configuration tests
+  - `mix ash_grant.export` - Export policies to YAML/Mermaid/Markdown
+  - `mix ash_grant.import` - Convert YAML to Elixir DSL
+
+### Dependencies
+
+- Added `yaml_elixir ~> 2.9` as optional dependency for YAML support
+
 ## [0.4.1] - 2026-01-21
 
 ### Added
