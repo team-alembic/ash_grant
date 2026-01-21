@@ -964,6 +964,29 @@ All functions accept a `:context` option for passing additional resolver context
 AshGrant.Introspect.actor_permissions(Post, user, context: %{tenant: tenant_id})
 ```
 
+## SAT Solver Optimization
+
+AshGrant implements Ash's optional policy check callbacks to help the SAT solver
+make smarter authorization decisions:
+
+| Callback | Purpose |
+|----------|---------|
+| `simplify/2` | Decomposes checks into simpler SAT expressions |
+| `implies?/3` | Determines if one check guarantees another is true |
+| `conflicts?/3` | Determines if two checks are mutually exclusive |
+
+These callbacks enable the authorizer to reach decisions with fewer variables
+in conditions, potentially short-circuiting evaluation before loading data.
+
+**Current implementation:**
+
+- `simplify/2` returns the ref unchanged (permissions are runtime-resolved)
+- `implies?/3` returns `true` when check refs have identical module and options
+- `conflicts?/3` returns `false` (deny-wins is handled at evaluation time)
+
+This provides a foundation for future optimizations while maintaining correct
+behavior with Ash's policy system.
+
 ## API Reference
 
 ### Modules
@@ -980,8 +1003,8 @@ AshGrant.Introspect.actor_permissions(Post, user, context: %{tenant: tenant_id})
 | `AshGrant.Evaluator` | Deny-wins permission evaluation |
 | `AshGrant.PermissionResolver` | Behaviour for resolving permissions |
 | `AshGrant.ScopeResolver` | Behaviour for scope resolution (legacy) |
-| `AshGrant.Check` | SimpleCheck for write actions |
-| `AshGrant.FilterCheck` | FilterCheck for read actions |
+| `AshGrant.Check` | SimpleCheck for write actions (with SAT solver callbacks) |
+| `AshGrant.FilterCheck` | FilterCheck for read actions (with SAT solver callbacks) |
 | `AshGrant.Info` | DSL introspection helpers |
 
 ## Testing

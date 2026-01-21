@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **SAT Solver Optimization Callbacks**: Implements `Ash.Policy.Check` optional callbacks for smarter authorization decisions
+  - `simplify/2` - Returns ref unchanged (permissions are runtime-resolved)
+  - `implies?/3` - Returns `true` when check refs have identical module and options
+  - `conflicts?/3` - Returns `false` (deny-wins is handled at evaluation time)
+  - Enables the authorizer to reach decisions with fewer variables in conditions
+  - Suggested by Jonatan Männchen (Ash contributor)
+
 ## [0.4.0] - 2026-01-05
 
 ### Added
