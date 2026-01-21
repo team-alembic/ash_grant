@@ -37,6 +37,7 @@ defmodule AshGrant.MixProject do
       {:igniter, "~> 0.6", only: [:dev, :test]},
       {:ash, "~> 3.0"},
       {:spark, "~> 2.0"},
+      {:yaml_elixir, "~> 2.9", optional: true},
 
       # DB (test only)
       {:ash_postgres, "~> 2.0", only: :test},
