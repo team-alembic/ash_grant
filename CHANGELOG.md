@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-01-21
+
 ### Added
 
 - **SAT Solver Optimization Callbacks**: Implements `Ash.Policy.Check` optional callbacks for smarter authorization decisions
@@ -15,6 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `conflicts?/3` - Returns `false` (deny-wins is handled at evaluation time)
   - Enables the authorizer to reach decisions with fewer variables in conditions
   - Suggested by Jonatan Männchen (Ash contributor)
+
+### Changed
+
+- **Version management**: Removed hardcoded version numbers from documentation
+  - README.md now references GitHub without specific tag (always uses latest)
+  - `@moduledoc` installation section now links to README
+  - Single source of truth: `mix.exs @version`
+
+- **Deprecation timeline**: Extended `owner_field` deprecation from v0.3.0 to v1.0.0
+  - Affects: `dsl.ex`, `info.ex`, `validate_scopes.ex`, `CHANGELOG.md`
 
 ## [0.4.0] - 2026-01-05
 
@@ -112,7 +124,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Deprecated
 
-- **`owner_field` DSL option**: This option is deprecated and will be removed in v0.3.0.
+- **`owner_field` DSL option**: This option is deprecated and will be removed in v1.0.0.
   Use explicit scope expressions instead:
   ```elixir
   # Instead of: owner_field :author_id
@@ -213,6 +225,7 @@ end
 | `AshGrant.Check` | SimpleCheck for write actions |
 | `AshGrant.FilterCheck` | FilterCheck for read actions |
 
+[0.4.1]: https://github.com/jhlee111/ash_grant/releases/tag/v0.4.1
 [0.4.0]: https://github.com/jhlee111/ash_grant/releases/tag/v0.4.0
 [0.3.1]: https://github.com/jhlee111/ash_grant/releases/tag/v0.3.1
 [0.3.0]: https://github.com/jhlee111/ash_grant/releases/tag/v0.3.0

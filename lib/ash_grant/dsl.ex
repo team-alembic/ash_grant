@@ -61,7 +61,7 @@ defmodule AshGrant.Dsl do
 
   ## Owner Field (Deprecated)
 
-  The `owner_field` option is **deprecated** and will be removed in v0.3.0.
+  The `owner_field` option is **deprecated** and will be removed in v1.0.0.
   Use explicit scope expressions instead:
 
       # Instead of owner_field :author_id, use:
@@ -217,7 +217,7 @@ defmodule AshGrant.Dsl do
         DEPRECATED: Use explicit `scope :own, expr(field == ^actor(:id))` instead.
 
         The field that identifies the owner of a record. This option is
-        deprecated and will be removed in v0.3.0.
+        deprecated and will be removed in v1.0.0.
         """
       ],
       default_policies: [

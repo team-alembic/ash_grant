@@ -28,15 +28,7 @@ defmodule AshGrant do
 
   ## Installation
 
-  Add to your dependencies in `mix.exs`:
-
-      def deps do
-        [
-          {:ash_grant, github: "jhlee111/ash_grant", tag: "v0.2.1"}
-        ]
-      end
-
-  > **Note**: This package is not yet published to Hex.pm.
+  See the [README](https://github.com/jhlee111/ash_grant#installation) for installation instructions.
 
   ## Quick Start
 

@@ -79,7 +79,7 @@ defmodule AshGrant.Transformers.ValidateScopes do
         With:
             scope :own, expr(#{owner_field} == ^actor(:id))
 
-        The owner_field option will be removed in v0.3.0.
+        The owner_field option will be removed in v1.0.0.
         """,
         []
       )
