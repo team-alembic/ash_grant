@@ -136,6 +136,53 @@ defmodule AshGrant.FilterCheck do
     "has permission filter for #{resource}:#{action}"
   end
 
+  @doc """
+  Simplifies a check reference into a SAT expression of simpler check references.
+
+  For AshGrant filter checks, we return the ref unchanged since permissions are
+  resolved dynamically at runtime and cannot be further decomposed statically.
+
+  This callback is used by Ash's SAT solver to optimize policy evaluation.
+  """
+  @impl true
+  def simplify(ref, _context) do
+    ref
+  end
+
+  @doc """
+  Determines if one check reference implies another.
+
+  Two AshGrant filter checks imply each other if they have identical options
+  (same action and resource overrides). This helps the SAT solver avoid
+  redundant evaluations.
+  """
+  @impl true
+  def implies?(ref1, ref2, _context) do
+    normalize_ref(ref1) == normalize_ref(ref2)
+  end
+
+  @doc """
+  Determines if two check references conflict (are mutually exclusive).
+
+  AshGrant filter checks don't inherently conflict with each other.
+  Returns `false` for all cases.
+  """
+  @impl true
+  def conflicts?(_ref1, _ref2, _context) do
+    false
+  end
+
+  # Normalize ref to handle both {Module, opts} and Module formats
+  defp normalize_ref({module, opts}) when is_atom(module) and is_list(opts) do
+    {module, Enum.sort(opts)}
+  end
+
+  defp normalize_ref(module) when is_atom(module) do
+    {module, []}
+  end
+
+  defp normalize_ref(other), do: other
+
   @impl true
   def filter(actor, authorizer, opts) do
     if actor == nil do
