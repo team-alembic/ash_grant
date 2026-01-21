@@ -26,6 +26,7 @@ on top of RBAC systems—just resolve roles to permissions in your resolver.
 - **Permission metadata**: Optional `description` and `source` fields for debugging
 - **Permissionable protocol**: Convert custom structs to permissions with zero boilerplate
 - **Permission introspection**: Runtime helpers for querying actor permissions and available actions
+- **Policy configuration testing**: DSL and YAML-based testing framework for verifying policy setup
 
 ## Installation
 
@@ -1006,6 +1007,171 @@ behavior with Ash's policy system.
 | `AshGrant.Check` | SimpleCheck for write actions (with SAT solver callbacks) |
 | `AshGrant.FilterCheck` | FilterCheck for read actions (with SAT solver callbacks) |
 | `AshGrant.Info` | DSL introspection helpers |
+| `AshGrant.PolicyTest` | Policy configuration testing DSL |
+| `AshGrant.PolicyTest.Runner` | Test runner for policy tests |
+| `AshGrant.PolicyExport` | Export policies to various formats |
+
+## Policy Configuration Testing
+
+AshGrant provides a DSL-based testing framework for verifying policy configurations without requiring a database. This tests **policy configuration**, not data - no database records needed.
+
+### DSL-Based Tests
+
+Write policy tests using Elixir DSL:
+
+```elixir
+defmodule MyApp.PolicyTests.DocumentPolicyTest do
+  use AshGrant.PolicyTest
+
+  resource MyApp.Document
+
+  actor :reader, %{role: :reader}
+  actor :author, %{role: :author, id: "author_001"}
+  actor :guest, %{permissions: []}
+
+  describe "read access" do
+    test "reader can read" do
+      assert_can :reader, :read
+    end
+
+    test "guest cannot read" do
+      assert_cannot :guest, :read
+    end
+
+    test "reader can read published documents" do
+      assert_can :reader, :read, %{status: :published}
+    end
+
+    test "reader cannot read drafts" do
+      assert_cannot :reader, :read, %{status: :draft}
+    end
+  end
+
+  describe "update access" do
+    test "author can update own drafts" do
+      assert_can :author, :update, %{author_id: "author_001", status: :draft}
+    end
+  end
+end
+```
+
+### Assertion Macros
+
+| Macro | Description |
+|-------|-------------|
+| `assert_can(actor, action)` | Actor can perform action |
+| `assert_can(actor, action, record)` | Actor can access specific record |
+| `assert_cannot(actor, action)` | Actor cannot perform action |
+| `assert_cannot(actor, action, record)` | Actor cannot access specific record |
+
+Action can be specified as:
+- Atom: `:read` (shorthand for `action: :read`)
+- Keyword: `action: :approve` (specific action name)
+- Keyword: `action_type: :update` (all actions of type)
+
+### YAML Format
+
+Policy tests can also be written in YAML for non-developers or interchange:
+
+```yaml
+resource: MyApp.Document
+
+actors:
+  reader:
+    role: reader
+  author:
+    role: author
+    id: "author_001"
+
+tests:
+  - name: "reader can read"
+    assert_can:
+      actor: reader
+      action: read
+
+  - name: "reader can read published"
+    assert_can:
+      actor: reader
+      action: read
+      record:
+        status: published
+
+  - name: "reader cannot read drafts"
+    assert_cannot:
+      actor: reader
+      action: read
+      record:
+        status: draft
+```
+
+### Mix Tasks
+
+**Run policy tests:**
+
+```bash
+# Run DSL tests
+mix ash_grant.verify test/policy_tests/
+
+# Run YAML tests
+mix ash_grant.verify priv/policy_tests/document.yaml
+
+# Verbose output
+mix ash_grant.verify test/policy_tests/ --verbose
+```
+
+**Export policies:**
+
+```bash
+# Export to YAML
+mix ash_grant.export MyApp.Document --format=yaml
+
+# Export to Mermaid diagram
+mix ash_grant.export MyApp.Document --format=mermaid
+
+# Export to Markdown documentation
+mix ash_grant.export MyApp.Document --format=markdown
+
+# Export to file
+mix ash_grant.export MyApp.Document --format=markdown --output=docs/document.md
+```
+
+**Import YAML to DSL:**
+
+```bash
+# Generate DSL code from YAML (output to stdout)
+mix ash_grant.import priv/policy_tests/document.yaml
+
+# Generate and write to file
+mix ash_grant.import priv/policy_tests/document.yaml --output=test/policy_tests/document_test.exs
+```
+
+### Running Policy Tests
+
+Use the `AshGrant.PolicyTest.Runner` module programmatically:
+
+```elixir
+# Run a single module
+results = AshGrant.PolicyTest.Runner.run_module(MyApp.PolicyTests.DocumentPolicyTest)
+
+# Run all policy test modules
+summary = AshGrant.PolicyTest.Runner.run_all()
+# => %{passed: 10, failed: 0, results: [...]}
+
+# Run specific modules
+summary = AshGrant.PolicyTest.Runner.run_all(modules: [DocumentPolicyTest, PostPolicyTest])
+```
+
+### Dependencies
+
+To use YAML format, add `yaml_elixir` to your dependencies:
+
+```elixir
+def deps do
+  [
+    {:yaml_elixir, "~> 2.9"}
+  ]
+end
+```
 
 ## Testing
 

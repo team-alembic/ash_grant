@@ -1,0 +1,48 @@
+resource: AshGrant.Test.Document
+
+actors:
+  admin:
+    role: admin
+  author:
+    role: author
+  reviewer:
+    role: reviewer
+  reader:
+    role: reader
+  guest:
+    permissions: []
+
+tests:
+  - name: "admin can read"
+    assert_can:
+      actor: admin
+      action: read
+
+  - name: "reader can read"
+    assert_can:
+      actor: reader
+      action: read
+
+  - name: "guest cannot read"
+    assert_cannot:
+      actor: guest
+      action: read
+
+  - name: "reader can read approved documents"
+    assert_can:
+      actor: reader
+      action: read
+      record:
+        status: approved
+
+  - name: "reader cannot read drafts"
+    assert_cannot:
+      actor: reader
+      action: read
+      record:
+        status: draft
+
+  - name: "author can update"
+    assert_can:
+      actor: author
+      action_type: update
