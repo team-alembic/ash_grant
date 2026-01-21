@@ -458,6 +458,144 @@ defmodule AshGrant.SimplifyCallbackTest do
     end
   end
 
+  # Tests for potential gotchas in normalize_ref
+  describe "normalize_ref edge cases and gotchas" do
+    test "implies? handles non-list opts gracefully" do
+      # Edge case: opts is not a list (should not crash)
+      ref1 = {Check, :invalid}
+      ref2 = {Check, :invalid}
+      context = %{resource: TestResource}
+
+      # Should return a boolean, not crash
+      result = Check.implies?(ref1, ref2, context)
+      assert is_boolean(result)
+    end
+
+    test "implies? returns false for malformed refs vs valid refs" do
+      ref1 = {Check, :invalid}
+      ref2 = {Check, []}
+      context = %{resource: TestResource}
+
+      # Malformed ref should not match valid ref
+      assert Check.implies?(ref1, ref2, context) == false
+    end
+
+    test "simplify handles non-list opts gracefully" do
+      ref = {Check, :invalid}
+      context = %{resource: TestResource}
+
+      # Should return the ref unchanged, not crash
+      result = Check.simplify(ref, context)
+      assert result == ref
+    end
+
+    test "conflicts? handles non-list opts gracefully" do
+      ref1 = {Check, :invalid}
+      ref2 = {Check, []}
+      context = %{resource: TestResource}
+
+      # Should return false, not crash
+      result = Check.conflicts?(ref1, ref2, context)
+      assert result == false
+    end
+
+    test "implies? handles string module name" do
+      # Edge case: someone passes a string instead of atom
+      ref1 = {"Check", []}
+      ref2 = {Check, []}
+      context = %{resource: TestResource}
+
+      # Should not match since types differ
+      result = Check.implies?(ref1, ref2, context)
+      assert result == false
+    end
+
+    test "implies? handles nil in tuple" do
+      ref1 = {nil, []}
+      ref2 = {Check, []}
+      context = %{resource: TestResource}
+
+      # nil is an atom, so this should work
+      result = Check.implies?(ref1, ref2, context)
+      assert result == false
+    end
+
+    test "implies? with deeply nested opts" do
+      # Complex options should still be compared correctly
+      ref1 = {Check, [action: "update", metadata: %{nested: [1, 2, 3]}]}
+      ref2 = {Check, [action: "update", metadata: %{nested: [1, 2, 3]}]}
+      context = %{resource: TestResource}
+
+      assert Check.implies?(ref1, ref2, context) == true
+    end
+
+    test "implies? with different nested opts" do
+      ref1 = {Check, [action: "update", metadata: %{nested: [1, 2, 3]}]}
+      ref2 = {Check, [action: "update", metadata: %{nested: [1, 2, 4]}]}
+      context = %{resource: TestResource}
+
+      assert Check.implies?(ref1, ref2, context) == false
+    end
+
+    test "implies? normalizes option order for complex options" do
+      ref1 = {Check, [z_option: "last", a_option: "first"]}
+      ref2 = {Check, [a_option: "first", z_option: "last"]}
+      context = %{resource: TestResource}
+
+      assert Check.implies?(ref1, ref2, context) == true
+    end
+
+    test "FilterCheck implies? handles malformed refs" do
+      ref1 = {FilterCheck, :invalid}
+      ref2 = {FilterCheck, []}
+      context = %{resource: TestResource}
+
+      result = FilterCheck.implies?(ref1, ref2, context)
+      assert result == false
+    end
+  end
+
+  # Tests for strict_check integration
+  describe "strict_check integration" do
+    # Verify that our callbacks don't interfere with the normal
+    # strict_check -> match? flow in SimpleCheck
+
+    test "Check module has strict_check callback" do
+      # SimpleCheck should provide strict_check automatically
+      assert function_exported?(Check, :strict_check, 3)
+    end
+
+    test "FilterCheck module has strict_check callback" do
+      # FilterCheck should provide strict_check automatically
+      assert function_exported?(FilterCheck, :strict_check, 3)
+    end
+
+    test "Check module has type callback" do
+      assert function_exported?(Check, :type, 0)
+    end
+
+    test "FilterCheck module has type callback" do
+      assert function_exported?(FilterCheck, :type, 0)
+    end
+
+    test "all required callbacks are exported for Check" do
+      # Verify Check exports all the callbacks we implemented
+      assert function_exported?(Check, :simplify, 2)
+      assert function_exported?(Check, :implies?, 3)
+      assert function_exported?(Check, :conflicts?, 3)
+      assert function_exported?(Check, :describe, 1)
+      assert function_exported?(Check, :match?, 3)
+    end
+
+    test "all required callbacks are exported for FilterCheck" do
+      assert function_exported?(FilterCheck, :simplify, 2)
+      assert function_exported?(FilterCheck, :implies?, 3)
+      assert function_exported?(FilterCheck, :conflicts?, 3)
+      assert function_exported?(FilterCheck, :describe, 1)
+      assert function_exported?(FilterCheck, :filter, 3)
+    end
+  end
+
   # Integration tests to verify callbacks work with Ash's policy evaluation
   describe "integration with Ash.can?" do
     # These tests use an in-memory resource to verify the callbacks integrate
