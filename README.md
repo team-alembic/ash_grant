@@ -18,7 +18,7 @@ on top of RBAC systems—just resolve roles to permissions in your resolver.
 ### Core Permission System
 - [**Unified Permission Format**](#permission-format): `resource:instance_id:action:scope` syntax
 - [**Deny-wins semantics**](#deny-wins-pattern): Deny rules always override allow rules
-- [**Wildcard matching**](#wildcard-matching-rules): `*` for resources/actions, `read*` for action prefixes
+- [**Wildcard matching**](#wildcard-matching-rules): `*` for resources/actions, `read*` for action types
 - [**Instance-level permissions**](#instance-permissions-specific-instance_id): Share specific resources (like Google Docs sharing)
 
 ### Scopes & Filtering (Ash-style Inline Expressions)
