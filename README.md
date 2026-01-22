@@ -51,9 +51,7 @@ end
 
 ## Quick Start
 
-### 1. Add the Extension to Your Resource (Minimal Setup)
-
-With `default_policies: true`, you don't need to write any policy boilerplate:
+### 1. Add the Extension to Your Resource
 
 ```elixir
 defmodule MyApp.Blog.Post do
@@ -63,66 +61,59 @@ defmodule MyApp.Blog.Post do
     extensions: [AshGrant]
 
   ash_grant do
-    resolver MyApp.PermissionResolver
-    default_policies true  # Auto-generates read/write policies!
-    # resource_name defaults to "post" (derived from MyApp.Blog.Post)
+    # Resolver converts actor to permission strings
+    resolver fn actor, _context ->
+      case actor do
+        %{role: :admin} -> ["post:*:*:all"]           # Full access
+        %{role: :editor} -> [
+          "post:*:read:all",                          # Read all posts
+          "post:*:create:all",                        # Create posts
+          "post:*:update:own"                         # Update own posts only
+        ]
+        %{role: :viewer} -> ["post:*:read:published"] # Read published only
+        _ -> []
+      end
+    end
 
+    default_policies true  # Auto-generates read/write policies
+
+    # Scopes define row-level filters (referenced by permission strings)
     scope :all, true
     scope :own, expr(author_id == ^actor(:id))
     scope :published, expr(status == :published)
   end
 
-  # No policies block needed - AshGrant generates them automatically!
   # ... attributes, actions, etc.
 end
 ```
 
-### 1b. Explicit Policies (Full Control)
+**How it works:**
+1. Actor (`%{role: :editor, id: "user_123"}`) is passed to the resolver
+2. Resolver returns permission strings like `"post:*:update:own"`
+3. Permission `post:*:update:own` references scope `:own`
+4. Scope `:own` adds filter `author_id == actor.id` to queries
 
-For more control, you can disable `default_policies` and define policies explicitly:
+### 2. Use It
 
 ```elixir
-defmodule MyApp.Blog.Post do
-  use Ash.Resource,
-    domain: MyApp.Blog,
-    authorizers: [Ash.Policy.Authorizer],
-    extensions: [AshGrant]
+# Editor can read all posts
+editor = %{id: "user_123", role: :editor}
+Post |> Ash.read!(actor: editor)
 
-  ash_grant do
-    resolver MyApp.PermissionResolver
-    resource_name "post"  # Optional: defaults to "post" from module name
+# Editor can only update their own posts
+Ash.update!(post, %{title: "New Title"}, actor: editor)
+# => Succeeds if post.author_id == "user_123"
+# => Fails if post.author_id != "user_123"
 
-    scope :all, true
-    scope :own, expr(author_id == ^actor(:id))
-    scope :published, expr(status == :published)
-    scope :own_draft, [:own], expr(status == :draft)
-  end
-
-  # Define policies explicitly for full control
-  policies do
-    # Admin bypass
-    bypass actor_attribute_equals(:role, :admin) do
-      authorize_if always()
-    end
-
-    # Read actions: use filter_check (returns filtered results)
-    policy action_type(:read) do
-      authorize_if AshGrant.filter_check()
-    end
-
-    # Write actions: use check (returns true/false)
-    policy action_type([:create, :update, :destroy]) do
-      authorize_if AshGrant.check()
-    end
-  end
-
-  # ... attributes, actions, etc.
-end
+# Viewer can only read published posts
+viewer = %{id: "user_456", role: :viewer}
+Post |> Ash.read!(actor: viewer)
+# => Returns only posts where status == :published
 ```
 
-### 2. Implement a PermissionResolver
+### 3. Module-Based Resolver (Production)
 
-The resolver fetches permissions for the current actor:
+For production, extract the resolver to a module:
 
 ```elixir
 defmodule MyApp.PermissionResolver do
@@ -133,10 +124,50 @@ defmodule MyApp.PermissionResolver do
 
   @impl true
   def resolve(actor, _context) do
-    # Get permissions from user's roles
+    # Load permissions from database
     actor
-    |> get_roles()
-    |> Enum.flat_map(& &1.permissions)
+    |> MyApp.Accounts.get_user_permissions()
+    |> Enum.map(& &1.permission_string)
+  end
+end
+```
+
+Then reference it in your resource:
+
+```elixir
+ash_grant do
+  resolver MyApp.PermissionResolver
+  # ...
+end
+```
+
+### 4. Explicit Policies (Full Control)
+
+For more control, disable `default_policies` and define policies explicitly:
+
+```elixir
+ash_grant do
+  resolver MyApp.PermissionResolver
+  # default_policies false (default)
+
+  scope :all, true
+  scope :own, expr(author_id == ^actor(:id))
+end
+
+policies do
+  # Admin bypass
+  bypass actor_attribute_equals(:role, :admin) do
+    authorize_if always()
+  end
+
+  # Read actions: use filter_check (returns filtered results)
+  policy action_type(:read) do
+    authorize_if AshGrant.filter_check()
+  end
+
+  # Write actions: use check (returns true/false)
+  policy action_type([:create, :update, :destroy]) do
+    authorize_if AshGrant.check()
   end
 end
 ```
