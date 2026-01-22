@@ -19,7 +19,7 @@ defmodule AshGrant do
   - **Instance-level permissions**: Share specific resources (like Google Docs sharing)
   - **Instance permissions with scopes (ABAC)**: Conditional instance access (`doc:doc_123:update:draft`)
   - **Deny-wins semantics**: Deny rules always override allow rules
-  - **Wildcard matching**: `*` for resources/actions, `read*` for action prefixes
+  - **Wildcard matching**: `*` for resources/actions, `read*` for action types
   - **Scope DSL**: Define scopes inline with `expr()` expressions
   - **Context injection**: Use `^context(:key)` for injectable/testable scopes
   - **Multi-tenancy Support**: Full support for `^tenant()` in scope expressions
