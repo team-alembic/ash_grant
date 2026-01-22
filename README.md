@@ -1022,9 +1022,39 @@ behavior with Ash's policy system.
 
 AshGrant provides a DSL-based testing framework for verifying policy configurations without requiring a database. This tests **policy configuration**, not data - no database records needed.
 
+### Resource Setup
+
+Policy tests verify how your resolver converts roles to permissions. Here's an example resource:
+
+```elixir
+defmodule MyApp.Post do
+  use Ash.Resource,
+    authorizers: [Ash.Policy.Authorizer],
+    extensions: [AshGrant]
+
+  ash_grant do
+    # Resolver converts actor roles to permission strings
+    resolver fn actor, _context ->
+      case actor do
+        %{role: :admin} -> ["post:*:*:all"]
+        %{role: :editor} -> ["post:*:read:all", "post:*:update:own", "post:*:create:all"]
+        %{role: :viewer} -> ["post:*:read:published"]
+        _ -> []
+      end
+    end
+
+    default_policies true
+
+    scope :all, true
+    scope :own, expr(author_id == ^actor(:id))
+    scope :published, expr(status == :published)
+  end
+end
+```
+
 ### DSL-Based Tests
 
-Write policy tests using Elixir DSL:
+Write policy tests to verify the resolver and scope configuration:
 
 ```elixir
 defmodule MyApp.PolicyTests.PostPolicyTest do
