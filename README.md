@@ -15,14 +15,21 @@ on top of RBAC systems—just resolve roles to permissions in your resolver.
 
 ## Features
 
+### Core Permission System
 - **Unified Permission Format**: `resource:instance_id:action:scope` syntax
-- **Instance-level permissions**: Share specific resources (like Google Docs sharing)
 - **Deny-wins semantics**: Deny rules always override allow rules
 - **Wildcard matching**: `*` for resources/actions, `read*` for action prefixes
+- **Instance-level permissions**: Share specific resources (like Google Docs sharing)
+
+### Scopes & Filtering (Ash-style Inline Expressions)
 - **Scope DSL**: Define scopes inline with `expr()` expressions
 - **Multi-tenancy Support**: Full support for `^tenant()` in scope expressions
+
+### Ash Policy Authorizer Integration
 - **Two check types**: `filter_check/1` for reads, `check/1` for writes
 - **Default policies**: Auto-generate standard policies to reduce boilerplate
+
+### Developer Experience & Tooling
 - **Permission metadata**: Optional `description` and `source` fields for debugging
 - **Permissionable protocol**: Convert custom structs to permissions with zero boilerplate
 - **Permission introspection**: Runtime helpers for querying actor permissions and available actions
