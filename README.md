@@ -1027,36 +1027,53 @@ AshGrant provides a DSL-based testing framework for verifying policy configurati
 Write policy tests using Elixir DSL:
 
 ```elixir
-defmodule MyApp.PolicyTests.DocumentPolicyTest do
+defmodule MyApp.PolicyTests.PostPolicyTest do
   use AshGrant.PolicyTest
 
-  resource MyApp.Document
+  resource MyApp.Post
 
-  actor :reader, %{role: :reader}
+  actor :admin, %{role: :admin}
   actor :author, %{role: :author, id: "author_001"}
+  actor :reader, %{role: :reader}
   actor :guest, %{permissions: []}
 
   describe "read access" do
-    test "reader can read" do
-      assert_can :reader, :read
+    test "author can read all posts" do
+      assert_can :author, :read
     end
 
-    test "guest cannot read" do
-      assert_cannot :guest, :read
-    end
-
-    test "reader can read published documents" do
+    test "reader can read published posts" do
       assert_can :reader, :read, %{status: :published}
     end
 
     test "reader cannot read drafts" do
       assert_cannot :reader, :read, %{status: :draft}
     end
+
+    test "guest cannot read" do
+      assert_cannot :guest, :read
+    end
   end
 
-  describe "update access" do
-    test "author can update own drafts" do
-      assert_can :author, :update, %{author_id: "author_001", status: :draft}
+  describe "write access" do
+    test "author can update own posts" do
+      assert_can :author, :update, %{author_id: "author_001"}
+    end
+
+    test "author cannot update others posts" do
+      assert_cannot :author, :update, %{author_id: "other_user"}
+    end
+
+    test "author can destroy own posts" do
+      assert_can :author, :destroy, %{author_id: "author_001"}
+    end
+
+    test "author cannot destroy others posts" do
+      assert_cannot :author, :destroy, %{author_id: "other_user"}
+    end
+
+    test "reader cannot update any posts" do
+      assert_cannot :reader, :update
     end
   end
 end
@@ -1081,22 +1098,22 @@ Action can be specified as:
 Policy tests can also be written in YAML for non-developers or interchange:
 
 ```yaml
-resource: MyApp.Document
+resource: MyApp.Post
 
 actors:
-  reader:
-    role: reader
   author:
     role: author
     id: "author_001"
+  reader:
+    role: reader
 
 tests:
-  - name: "reader can read"
+  - name: "author can read all posts"
     assert_can:
-      actor: reader
+      actor: author
       action: read
 
-  - name: "reader can read published"
+  - name: "reader can read published posts"
     assert_can:
       actor: reader
       action: read
@@ -1109,6 +1126,20 @@ tests:
       action: read
       record:
         status: draft
+
+  - name: "author can update own posts"
+    assert_can:
+      actor: author
+      action: update
+      record:
+        author_id: "author_001"
+
+  - name: "author cannot update others posts"
+    assert_cannot:
+      actor: author
+      action: update
+      record:
+        author_id: "other_user"
 ```
 
 ### Mix Tasks
