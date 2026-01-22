@@ -1287,15 +1287,28 @@ plus deny-wins semantics and edge conditions.
 
 ## Disclosure
 
-I've been a developer for about six years. I became interested in Elixir, Phoenix, and Ash a couple of years ago, but only started actually building with them about four months ago. This library was born out of my own needs, and honestly, my skills in this ecosystem aren't at the level where I'd normally attempt building something like this.
+  I've been a developer for about six years. I became interested in Elixir, Phoenix, and Ash a couple of years ago, but only started actually building with
+  them about four months ago. This library was born out of my own needs, and honestly, my skills in this ecosystem aren't at the level where I'd normally
+  attempt building something like this.
 
-Most of AshGrant was developed through TDD with Claude Code—I described what I needed, Claude Code wrote the tests to verify behavior, and I treated it like any third-party library: if the author's tests pass, I use it. I haven't read every line of code in detail, so I can't guarantee everything works perfectly. Please evaluate it for your own use case, and I hope you find it useful.
+  Most of AshGrant was developed through TDD with Claude Code—I described what I needed, Claude Code wrote the tests and implementation, and I reviewed the
+  results. I treated it like any third-party library: if the tests pass and the code looks reasonable, I use it. I haven't read every line of code in detail,
+  so I can't guarantee everything works perfectly.
 
-If you have suggestions or find issues, please feel free to open an issue or submit a PR—contributions are very welcome.
+  I'm using this in production because I need it now, but please consider this more as a **proof of concept**—a proposal for how authorization could be handled
+   in Ash. I'm sharing this publicly in hopes that it can be a starting point. If others find it useful and want to contribute, we could build something better
+   together.
 
-What made this possible is how exceptionally well-documented Elixir and Ash are. The clear abstractions—DSLs, Domains, Resources, Extensions—gave me a precise vocabulary to communicate my requirements to an LLM. These well-defined concepts provided both the courage to start and the foundation to actually ship something I use in production.
+  If you have suggestions or find issues, please feel free to open an issue or submit a PR—contributions are very welcome.
 
-I'm deeply grateful to Zach for creating Ash Framework, the Ash Core Team, all the contributors, and the broader Elixir community. We have something special here.
+  What made this possible is how exceptionally well-documented Elixir and Ash are. The clear abstractions—DSLs, Domains, Resources, Extensions—gave me a
+  precise vocabulary to communicate my requirements to an LLM. These well-defined concepts provided both the courage to start and the foundation to actually
+  ship something I use in production.
+
+  I'm deeply grateful to Zach for creating Ash Framework, the Ash Core Team, all the contributors, and the broader Elixir community. We have something special
+  here.
+
+
 
 ## License
 
