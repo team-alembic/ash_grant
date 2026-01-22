@@ -1033,47 +1033,34 @@ defmodule MyApp.PolicyTests.PostPolicyTest do
   resource MyApp.Post
 
   actor :admin, %{role: :admin}
-  actor :author, %{role: :author, id: "author_001"}
-  actor :reader, %{role: :reader}
-  actor :guest, %{permissions: []}
+  actor :editor, %{role: :editor, id: "editor_001"}
+  actor :viewer, %{role: :viewer}
 
   describe "read access" do
-    test "author can read all posts" do
-      assert_can :author, :read
+    test "editor can read all posts" do
+      assert_can :editor, :read
     end
 
-    test "reader can read published posts" do
-      assert_can :reader, :read, %{status: :published}
+    test "viewer can read published posts" do
+      assert_can :viewer, :read, %{status: :published}
     end
 
-    test "reader cannot read drafts" do
-      assert_cannot :reader, :read, %{status: :draft}
-    end
-
-    test "guest cannot read" do
-      assert_cannot :guest, :read
+    test "viewer cannot read drafts" do
+      assert_cannot :viewer, :read, %{status: :draft}
     end
   end
 
   describe "write access" do
-    test "author can update own posts" do
-      assert_can :author, :update, %{author_id: "author_001"}
+    test "editor can update own posts" do
+      assert_can :editor, :update, %{author_id: "editor_001"}
     end
 
-    test "author cannot update others posts" do
-      assert_cannot :author, :update, %{author_id: "other_user"}
+    test "editor cannot update others posts" do
+      assert_cannot :editor, :update, %{author_id: "other_user"}
     end
 
-    test "author can destroy own posts" do
-      assert_can :author, :destroy, %{author_id: "author_001"}
-    end
-
-    test "author cannot destroy others posts" do
-      assert_cannot :author, :destroy, %{author_id: "other_user"}
-    end
-
-    test "reader cannot update any posts" do
-      assert_cannot :reader, :update
+    test "viewer cannot update any posts" do
+      assert_cannot :viewer, :update
     end
   end
 end
@@ -1101,42 +1088,42 @@ Policy tests can also be written in YAML for non-developers or interchange:
 resource: MyApp.Post
 
 actors:
-  author:
-    role: author
-    id: "author_001"
-  reader:
-    role: reader
+  editor:
+    role: editor
+    id: "editor_001"
+  viewer:
+    role: viewer
 
 tests:
-  - name: "author can read all posts"
+  - name: "editor can read all posts"
     assert_can:
-      actor: author
+      actor: editor
       action: read
 
-  - name: "reader can read published posts"
+  - name: "viewer can read published posts"
     assert_can:
-      actor: reader
+      actor: viewer
       action: read
       record:
         status: published
 
-  - name: "reader cannot read drafts"
+  - name: "viewer cannot read drafts"
     assert_cannot:
-      actor: reader
+      actor: viewer
       action: read
       record:
         status: draft
 
-  - name: "author can update own posts"
+  - name: "editor can update own posts"
     assert_can:
-      actor: author
+      actor: editor
       action: update
       record:
-        author_id: "author_001"
+        author_id: "editor_001"
 
-  - name: "author cannot update others posts"
+  - name: "editor cannot update others posts"
     assert_cannot:
-      actor: author
+      actor: editor
       action: update
       record:
         author_id: "other_user"

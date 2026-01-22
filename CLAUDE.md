@@ -38,6 +38,11 @@ mix docs
 # Database management (test only)
 mix ecto.setup    # Create and migrate
 mix ecto.reset    # Drop, create, and migrate
+
+# Policy configuration testing (NOT mix test)
+mix ash_grant.verify test/support/policy_test_fixtures.ex
+mix ash_grant.verify priv/policy_tests/           # Run all YAML tests
+mix ash_grant.verify path/to/test.yaml --verbose  # Verbose output
 ```
 
 ## Architecture
