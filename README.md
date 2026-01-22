@@ -16,24 +16,24 @@ on top of RBAC systems—just resolve roles to permissions in your resolver.
 ## Features
 
 ### Core Permission System
-- **Unified Permission Format**: `resource:instance_id:action:scope` syntax
-- **Deny-wins semantics**: Deny rules always override allow rules
-- **Wildcard matching**: `*` for resources/actions, `read*` for action prefixes
-- **Instance-level permissions**: Share specific resources (like Google Docs sharing)
+- [**Unified Permission Format**](#permission-format): `resource:instance_id:action:scope` syntax
+- [**Deny-wins semantics**](#deny-wins-pattern): Deny rules always override allow rules
+- [**Wildcard matching**](#wildcard-matching-rules): `*` for resources/actions, `read*` for action prefixes
+- [**Instance-level permissions**](#instance-permissions-specific-instance_id): Share specific resources (like Google Docs sharing)
 
 ### Scopes & Filtering (Ash-style Inline Expressions)
-- **Scope DSL**: Define scopes inline with `expr()` expressions
-- **Multi-tenancy Support**: Full support for `^tenant()` in scope expressions
+- [**Scope DSL**](#scope-dsl): Define scopes inline with `expr()` expressions
+- [**Multi-tenancy Support**](#multi-tenancy-support): Full support for `^tenant()` in scope expressions
 
 ### Ash Policy Authorizer Integration
-- **Two check types**: `filter_check/1` for reads, `check/1` for writes
-- **Default policies**: Auto-generate standard policies to reduce boilerplate
+- [**Check types**](#check-types): `filter_check/1` for reads, `check/1` for writes
+- [**Default policies**](#default-policies-options): Auto-generate standard policies to reduce boilerplate
 
 ### Developer Experience & Tooling
-- **Permission metadata**: Optional `description` and `source` fields for debugging
-- **Permissionable protocol**: Convert custom structs to permissions with zero boilerplate
-- **Permission introspection**: Runtime helpers for querying actor permissions and available actions
-- **Policy configuration testing**: DSL and YAML-based testing framework for verifying policy setup
+- [**Permission metadata**](#2b-permissions-with-metadata-for-debugging): Optional `description` and `source` fields for debugging
+- [**Permissionable protocol**](#2c-custom-structs-with-permissionable-protocol): Convert custom structs to permissions with zero boilerplate
+- [**Permission introspection**](#permission-introspection): Runtime helpers for querying actor permissions and available actions
+- [**Policy configuration testing**](#policy-configuration-testing): DSL and YAML-based testing framework for verifying policy setup
 
 ## Installation
 
