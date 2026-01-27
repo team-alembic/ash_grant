@@ -2,38 +2,22 @@
 
 Permission-based authorization extension for [Ash Framework](https://ash-hq.org/).
 
-AshGrant provides a flexible, Apache Shiro-inspired **permission string** system
-that integrates seamlessly with Ash's policy authorizer. It combines:
+AshGrant connects three Ash-native concepts — **resources**, **actions**, and
+**`expr()` scopes** — through a permission string (`[!]resource:instance_id:action:scope`).
+Permissions resolve to native Ash filters and policy checks, with deny-wins semantics.
 
-- **Permission-based access control** with `resource:instance:action:scope` matching
-- **Attribute-based scopes** for row-level filtering (ABAC-like)
-- **Instance-level permissions** for resource sharing (ReBAC-like)
-- **Deny-wins semantics** for intuitive permission overrides
+**Authorization:**
+- **Scope DSL** with `expr()` — row-level filters, scope inheritance, `^tenant()` support
+- **Instance permissions** — per-record sharing with optional scope conditions
+- **Deny-wins evaluation** — deny rules always override allows
 
-AshGrant focuses on permission evaluation, not role management. It works well
-on top of RBAC systems—just resolve roles to permissions in your resolver.
+**Verification & Tooling:**
+- **`explain/4`** — trace why authorization succeeded or failed
+- **`Introspect`** — query actor permissions, available actions at runtime
+- **Policy testing** — DSL and YAML-based config tests, no database required
 
-## Features
-
-### Core Permission System
-- [**Unified Permission Format**](#permission-format): `resource:instance_id:action:scope` syntax
-- [**Deny-wins semantics**](#deny-wins-pattern): Deny rules always override allow rules
-- [**Wildcard matching**](#wildcard-matching-rules): `*` for resources/actions, `read*` for action types
-- [**Instance-level permissions**](#instance-permissions-specific-instance_id): Share specific resources (like Google Docs sharing)
-
-### Scopes & Filtering (Ash-style Inline Expressions)
-- [**Scope DSL**](#scope-dsl): Define scopes inline with `expr()` expressions
-- [**Multi-tenancy Support**](#multi-tenancy-support): Full support for `^tenant()` in scope expressions
-
-### Ash Policy Authorizer Integration
-- [**Check types**](#check-types): `filter_check/1` for reads, `check/1` for writes
-- [**Default policies**](#default-policies-options): Auto-generate standard policies to reduce boilerplate
-
-### Developer Experience & Tooling
-- [**Permission metadata**](#2b-permissions-with-metadata-for-debugging): Optional `description` and `source` fields for debugging
-- [**Permissionable protocol**](#2c-custom-structs-with-permissionable-protocol): Convert custom structs to permissions with zero boilerplate
-- [**Permission introspection**](#permission-introspection): Runtime helpers for querying actor permissions and available actions
-- [**Policy configuration testing**](#policy-configuration-testing): DSL and YAML-based testing framework for verifying policy setup
+AshGrant handles permission evaluation, not role management. Resolve roles to
+permission strings in your resolver.
 
 ## Installation
 
@@ -209,7 +193,9 @@ defmodule MyApp.PermissionResolver do
 end
 ```
 
-### 2b. Permissions with Metadata (for debugging)
+## Resolver Patterns
+
+### Permissions with Metadata
 
 Return `AshGrant.PermissionInput` structs for enhanced debugging and `explain/4`:
 
@@ -234,7 +220,7 @@ defmodule MyApp.PermissionResolver do
 end
 ```
 
-### 2c. Custom Structs with Permissionable Protocol
+### Custom Structs with Permissionable Protocol
 
 Implement the `AshGrant.Permissionable` protocol for your custom structs:
 
@@ -266,7 +252,7 @@ end
 
 ## Permission Format
 
-### Unified 4-Part Format
+### Unified 4-Part Format (Apache Shiro-Inspired)
 
 ```
 [!]resource:instance_id:action:scope
@@ -412,6 +398,28 @@ For backward compatibility, shorter formats are supported but **use with caution
 "blog:post123:read:"    # Explicit instance permission (recommended)
 ```
 
+### Deny-Wins Pattern
+
+When both allow and deny rules match, deny always takes precedence:
+
+```elixir
+permissions = [
+  "blog:*:*:all",           # Allow all blog actions
+  "!blog:*:delete:all"      # Deny delete
+]
+
+# Result:
+# - blog:read   -> allowed
+# - blog:update -> allowed
+# - blog:delete -> DENIED (deny wins)
+```
+
+This pattern is useful for:
+
+- Revoking specific permissions from broad grants
+- Creating "except" rules (e.g., "all except delete")
+- Implementing inheritance with overrides
+
 ## Scope DSL
 
 Define scopes inline using the `scope` entity. The `expr` macro is automatically
@@ -442,120 +450,6 @@ Scopes can inherit from parent scopes:
 scope :base, expr(tenant_id == ^actor(:tenant_id))
 scope :active, [:base], expr(status == :active)
 # Result: tenant_id == actor.tenant_id AND status == :active
-```
-
-### Example: Date-Based Scopes
-
-You can use SQL fragments for temporal filtering:
-
-```elixir
-# Records created today only
-scope :today, expr(fragment("DATE(inserted_at) = CURRENT_DATE"))
-
-# Combined with ownership
-scope :own_today, [:own], expr(fragment("DATE(inserted_at) = CURRENT_DATE"))
-```
-
-## Deny-Wins Pattern
-
-When both allow and deny rules match, deny always takes precedence:
-
-```elixir
-permissions = [
-  "blog:*:*:all",           # Allow all blog actions
-  "!blog:*:delete:all"      # Deny delete
-]
-
-# Result:
-# - blog:read   -> allowed
-# - blog:update -> allowed
-# - blog:delete -> DENIED (deny wins)
-```
-
-This pattern is useful for:
-
-- Revoking specific permissions from broad grants
-- Creating "except" rules (e.g., "all except delete")
-- Implementing inheritance with overrides
-
-## Check Types
-
-### `filter_check/1` - For Read Actions
-
-Returns a filter expression that limits query results to accessible records:
-
-```elixir
-policy action_type(:read) do
-  authorize_if AshGrant.filter_check()
-end
-```
-
-### `check/1` - For Write Actions
-
-Returns `true` or `false` based on whether the actor has permission:
-
-```elixir
-policy action(:destroy) do
-  authorize_if AshGrant.check()
-end
-```
-
-## DSL Configuration
-
-```elixir
-ash_grant do
-  resolver MyApp.PermissionResolver       # Required
-  default_policies true                   # Optional: auto-generate policies
-  resource_name "custom_name"             # Optional: defaults to module name (e.g., MyApp.Blog.Post → "post")
-
-  # Inline scopes
-  scope :all, true
-  scope :own, expr(owner_id == ^actor(:id))
-end
-```
-
-| Option | Type | Description |
-|--------|------|-------------|
-| `resolver` | module or function | **Required.** Resolves permissions for actors |
-| `default_policies` | boolean or atom | Auto-generate policies: `true`, `:all`, `:read`, or `:write` |
-| `resource_name` | string | Resource name for permission matching. Default: derived from module name (last segment, snake_cased). `MyApp.Blog.Post` → `"post"`, `MyApp.CustomerOrder` → `"customer_order"` |
-
-### Default Policies Options
-
-The `default_policies` option controls automatic policy generation:
-
-| Value | Description |
-|-------|-------------|
-| `false` | No policies generated (default). You must define policies explicitly. |
-| `true` or `:all` | Generate both read and write policies |
-| `:read` | Only generate `filter_check()` policy for read actions |
-| `:write` | Only generate `check()` policy for write actions |
-
-**Generated policies when `default_policies: true`:**
-
-```elixir
-policies do
-  policy action_type(:read) do
-    authorize_if AshGrant.filter_check()
-  end
-
-  policy action_type([:create, :update, :destroy]) do
-    authorize_if AshGrant.check()
-  end
-end
-```
-
-## Advanced Usage
-
-### Action Override
-
-Map different Ash actions to the same permission:
-
-```elixir
-# Both :get_by_id and :list use "read" permission
-policy action([:read, :get_by_id, :list]) do
-  authorize_if AshGrant.filter_check(action: "read")
-end
 ```
 
 ### Scope Combination Rules
@@ -592,20 +486,16 @@ end
 > **Key difference:** Multiple permissions expand access (OR),
 > scope inheritance restricts access (AND).
 
-### Organization Hierarchy Scopes
+### Example: Date-Based Scopes
 
-For multi-tenant apps with org hierarchies:
+You can use SQL fragments for temporal filtering:
 
 ```elixir
-ash_grant do
-  resolver MyApp.PermissionResolver
+# Records created today only
+scope :today, expr(fragment("DATE(inserted_at) = CURRENT_DATE"))
 
-  scope :all, true
-
-  scope :org_self, expr(organization_unit_id == ^actor(:org_unit_id))
-
-  # For complex scopes requiring runtime data, use scope_resolver
-end
+# Combined with ownership
+scope :own_today, [:own], expr(fragment("DATE(inserted_at) = CURRENT_DATE"))
 ```
 
 ### Multi-Tenancy Support
@@ -699,11 +589,11 @@ Post |> Ash.read!(actor: actor)
 - Scope inheritance works with tenant scopes (e.g., `[:same_tenant]`)
 - Both `filter_check` (reads) and `check` (writes) properly evaluate tenant scopes
 
-## Business Scope Examples
+### Business Scope Examples
 
 AshGrant supports a wide variety of business scenarios. Here are common patterns:
 
-### Status-Based Workflow
+#### Status-Based Workflow
 
 ```elixir
 ash_grant do
@@ -715,7 +605,7 @@ ash_grant do
 end
 ```
 
-### Security Classification
+#### Security Classification
 
 Hierarchical access levels:
 
@@ -728,7 +618,7 @@ ash_grant do
 end
 ```
 
-### Transaction Limits
+#### Transaction Limits
 
 Numeric comparisons for amount-based authorization:
 
@@ -741,7 +631,7 @@ ash_grant do
 end
 ```
 
-### Multi-Tenant with Inheritance
+#### Multi-Tenant with Inheritance
 
 Combined scopes using inheritance:
 
@@ -753,7 +643,7 @@ ash_grant do
 end
 ```
 
-### Time/Period Based
+#### Time/Period Based
 
 Temporal filtering:
 
@@ -765,7 +655,7 @@ ash_grant do
 end
 ```
 
-### Geographic/Territory
+#### Geographic/Territory
 
 List membership for territory assignments:
 
@@ -777,39 +667,85 @@ ash_grant do
 end
 ```
 
-### Legacy ScopeResolver
+## Check Types
 
-For complex scopes that require runtime data fetching, you can still use
-a separate `ScopeResolver` module (deprecated, prefer inline scopes):
+### `filter_check/1` - For Read Actions
+
+Returns a filter expression that limits query results to accessible records:
 
 ```elixir
-ash_grant do
-  resolver MyApp.PermissionResolver
-  scope_resolver MyApp.ScopeResolver  # Deprecated
+policy action_type(:read) do
+  authorize_if AshGrant.filter_check()
 end
 ```
 
-#### Scope Resolution Priority
+### `check/1` - For Write Actions
 
-When both inline scopes and `scope_resolver` are configured:
+Returns `true` or `false` based on whether the actor has permission:
 
-1. **Inline scope DSL** is checked first
-2. **scope_resolver** is used as fallback for scopes not defined inline
-3. Error is raised if scope is found in neither
+```elixir
+policy action(:destroy) do
+  authorize_if AshGrant.check()
+end
+```
+
+## DSL Configuration
 
 ```elixir
 ash_grant do
-  resolver MyApp.PermissionResolver
-  scope_resolver MyApp.LegacyScopeResolver  # Fallback only
+  resolver MyApp.PermissionResolver       # Required
+  default_policies true                   # Optional: auto-generate policies
+  resource_name "custom_name"             # Optional: defaults to module name (e.g., MyApp.Blog.Post → "post")
 
-  # These take priority over scope_resolver
+  # Inline scopes
   scope :all, true
-  scope :own, expr(author_id == ^actor(:id))
-  # :legacy_scope will use scope_resolver
+  scope :own, expr(owner_id == ^actor(:id))
 end
 ```
 
-> **Note:** `scope_resolver` is deprecated. Migrate all scopes to inline definitions.
+| Option | Type | Description |
+|--------|------|-------------|
+| `resolver` | module or function | **Required.** Resolves permissions for actors |
+| `default_policies` | boolean or atom | Auto-generate policies: `true`, `:all`, `:read`, or `:write` |
+| `resource_name` | string | Resource name for permission matching. Default: derived from module name (last segment, snake_cased). `MyApp.Blog.Post` → `"post"`, `MyApp.CustomerOrder` → `"customer_order"` |
+
+### Default Policies Options
+
+The `default_policies` option controls automatic policy generation:
+
+| Value | Description |
+|-------|-------------|
+| `false` | No policies generated (default). You must define policies explicitly. |
+| `true` or `:all` | Generate both read and write policies |
+| `:read` | Only generate `filter_check()` policy for read actions |
+| `:write` | Only generate `check()` policy for write actions |
+
+**Generated policies when `default_policies: true`:**
+
+```elixir
+policies do
+  policy action_type(:read) do
+    authorize_if AshGrant.filter_check()
+  end
+
+  policy action_type([:create, :update, :destroy]) do
+    authorize_if AshGrant.check()
+  end
+end
+```
+
+## Advanced Usage
+
+### Action Override
+
+Map different Ash actions to the same permission:
+
+```elixir
+# Both :get_by_id and :list use "read" permission
+policy action([:read, :get_by_id, :list]) do
+  authorize_if AshGrant.filter_check(action: "read")
+end
+```
 
 ### Combining default_policies with Custom Policies
 
@@ -840,6 +776,22 @@ end
 1. Bypass policies (if any)
 2. Custom policies defined in `policies do`
 3. Default policies from `default_policies: true`
+
+### Legacy ScopeResolver
+
+The `scope_resolver` option is deprecated. If configured alongside inline scopes, inline scope DSL is checked first and `scope_resolver` acts as a fallback for scopes not defined inline. An error is raised if a scope is found in neither. Migrate all scopes to inline `scope` definitions.
+
+```elixir
+ash_grant do
+  resolver MyApp.PermissionResolver
+  scope_resolver MyApp.LegacyScopeResolver  # Deprecated fallback
+
+  # Inline scopes take priority
+  scope :all, true
+  scope :own, expr(author_id == ^actor(:id))
+  # :legacy_scope will fall back to scope_resolver
+end
+```
 
 ## Architecture
 
@@ -1026,62 +978,13 @@ in conditions, potentially short-circuiting evaluation before loading data.
 This provides a foundation for future optimizations while maintaining correct
 behavior with Ash's policy system.
 
-## API Reference
-
-### Modules
-
-| Module | Description |
-|--------|-------------|
-| `AshGrant` | Main extension module with `check/1`, `filter_check/1`, and `explain/4` |
-| `AshGrant.Introspect` | Runtime permission introspection for UIs and APIs |
-| `AshGrant.Explanation` | Authorization decision explanation struct |
-| `AshGrant.Explainer` | Builds detailed authorization explanations |
-| `AshGrant.Permission` | Permission parsing and matching |
-| `AshGrant.PermissionInput` | Permission input with metadata for debugging |
-| `AshGrant.Permissionable` | Protocol for converting custom structs to permissions |
-| `AshGrant.Evaluator` | Deny-wins permission evaluation |
-| `AshGrant.PermissionResolver` | Behaviour for resolving permissions |
-| `AshGrant.ScopeResolver` | Behaviour for scope resolution (legacy) |
-| `AshGrant.Check` | SimpleCheck for write actions (with SAT solver callbacks) |
-| `AshGrant.FilterCheck` | FilterCheck for read actions (with SAT solver callbacks) |
-| `AshGrant.Info` | DSL introspection helpers |
-| `AshGrant.PolicyTest` | Policy configuration testing DSL |
-| `AshGrant.PolicyTest.Runner` | Test runner for policy tests |
-| `AshGrant.PolicyExport` | Export policies to various formats |
-
 ## Policy Configuration Testing
 
 AshGrant provides a DSL-based testing framework for verifying policy configurations without requiring a database. This tests **policy configuration**, not data - no database records needed.
 
 ### Resource Setup
 
-Policy tests verify how your resolver converts roles to permissions. Here's an example resource:
-
-```elixir
-defmodule MyApp.Post do
-  use Ash.Resource,
-    authorizers: [Ash.Policy.Authorizer],
-    extensions: [AshGrant]
-
-  ash_grant do
-    # Resolver converts actor roles to permission strings
-    resolver fn actor, _context ->
-      case actor do
-        %{role: :admin} -> ["post:*:*:all"]
-        %{role: :editor} -> ["post:*:read:all", "post:*:update:own", "post:*:create:all"]
-        %{role: :viewer} -> ["post:*:read:published"]
-        _ -> []
-      end
-    end
-
-    default_policies true
-
-    scope :all, true
-    scope :own, expr(author_id == ^actor(:id))
-    scope :published, expr(status == :published)
-  end
-end
-```
+Policy tests verify how your resolver converts roles to permissions. Use the `Post` resource from the [Quick Start](#quick-start) section above, or any resource with an `ash_grant` block configured.
 
 ### DSL-Based Tests
 
@@ -1259,6 +1162,29 @@ def deps do
 end
 ```
 
+## API Reference
+
+### Modules
+
+| Module | Description |
+|--------|-------------|
+| `AshGrant` | Main extension module with `check/1`, `filter_check/1`, and `explain/4` |
+| `AshGrant.Introspect` | Runtime permission introspection for UIs and APIs |
+| `AshGrant.Explanation` | Authorization decision explanation struct |
+| `AshGrant.Explainer` | Builds detailed authorization explanations |
+| `AshGrant.Permission` | Permission parsing and matching |
+| `AshGrant.PermissionInput` | Permission input with metadata for debugging |
+| `AshGrant.Permissionable` | Protocol for converting custom structs to permissions |
+| `AshGrant.Evaluator` | Deny-wins permission evaluation |
+| `AshGrant.PermissionResolver` | Behaviour for resolving permissions |
+| `AshGrant.ScopeResolver` | Behaviour for scope resolution (legacy) |
+| `AshGrant.Check` | SimpleCheck for write actions (with SAT solver callbacks) |
+| `AshGrant.FilterCheck` | FilterCheck for read actions (with SAT solver callbacks) |
+| `AshGrant.Info` | DSL introspection helpers |
+| `AshGrant.PolicyTest` | Policy configuration testing DSL |
+| `AshGrant.PolicyTest.Runner` | Test runner for policy tests |
+| `AshGrant.PolicyExport` | Export policies to various formats |
+
 ## Testing
 
 AshGrant includes comprehensive tests using `Ash.Generator` for fixture generation:
@@ -1307,8 +1233,6 @@ plus deny-wins semantics and edge conditions.
 
   I'm deeply grateful to Zach for creating Ash Framework, the Ash Core Team, all the contributors, and the broader Elixir community. We have something special
   here.
-
-
 
 ## License
 
