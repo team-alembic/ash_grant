@@ -55,7 +55,8 @@ defmodule AshGrant.Explanation do
           description: String.t() | nil,
           source: String.t() | nil,
           scope_name: atom() | nil,
-          scope_description: String.t() | nil
+          scope_description: String.t() | nil,
+          field_group: String.t() | nil
         }
 
   @type t :: %__MODULE__{
@@ -67,7 +68,9 @@ defmodule AshGrant.Explanation do
           reason: atom() | nil,
           matching_permissions: [evaluated_permission()],
           evaluated_permissions: [evaluated_permission()],
-          scope_filter: term() | nil
+          scope_filter: term() | nil,
+          field_groups: [String.t()],
+          field_group_defs: [AshGrant.Dsl.FieldGroup.t()]
         }
 
   defstruct [
@@ -79,7 +82,9 @@ defmodule AshGrant.Explanation do
     :reason,
     :scope_filter,
     matching_permissions: [],
-    evaluated_permissions: []
+    evaluated_permissions: [],
+    field_groups: [],
+    field_group_defs: []
   ]
 
   @doc """
@@ -113,6 +118,7 @@ defmodule AshGrant.Explanation do
       matching_section(explanation, color),
       if(verbose, do: evaluated_section(explanation, color), else: nil),
       scope_section(explanation, color),
+      field_group_section(explanation, color),
       footer(color)
     ]
     |> Enum.reject(&is_nil/1)
@@ -183,9 +189,13 @@ defmodule AshGrant.Explanation do
       end
 
     source_info = if perm[:source], do: " (from: #{perm[:source]})", else: ""
+
+    field_group_info =
+      if perm[:field_group], do: " [field_group: #{perm[:field_group]}]", else: ""
+
     desc_info = if perm[:description], do: "\n    └─ #{perm[:description]}", else: ""
 
-    "  • #{maybe_color(perm[:permission], :yellow, color)}#{scope_info}#{source_info}#{desc_info}"
+    "  • #{maybe_color(perm[:permission], :yellow, color)}#{scope_info}#{field_group_info}#{source_info}#{desc_info}"
   end
 
   defp evaluated_section(%{evaluated_permissions: []} = _explanation, _color) do
@@ -214,6 +224,57 @@ defmodule AshGrant.Explanation do
     reason = if perm[:reason], do: " - #{perm[:reason]}", else: ""
 
     "  #{status} #{perm[:permission]}#{reason}"
+  end
+
+  defp field_group_section(%{field_groups: [], field_group_defs: []} = _explanation, _color),
+    do: nil
+
+  defp field_group_section(%{field_groups: [], field_group_defs: defs} = _explanation, color)
+       when defs != [] do
+    groups_info =
+      defs
+      |> Enum.map(fn fg ->
+        name = Atom.to_string(fg.name)
+
+        inherits =
+          if fg.inherits && fg.inherits != [],
+            do: " (inherits: #{inspect(fg.inherits)})",
+            else: ""
+
+        "  • #{maybe_color(name, :yellow, color)}: #{inspect(fg.fields)}#{inherits}"
+      end)
+      |> Enum.join("\n")
+
+    """
+
+    Field Groups (defined, but actor has no field_group restriction):
+    #{groups_info}
+    """
+  end
+
+  defp field_group_section(explanation, color) do
+    actor_groups = explanation.field_groups |> Enum.join(", ")
+
+    groups_info =
+      explanation.field_group_defs
+      |> Enum.map(fn fg ->
+        name = Atom.to_string(fg.name)
+
+        inherits =
+          if fg.inherits && fg.inherits != [],
+            do: " (inherits: #{inspect(fg.inherits)})",
+            else: ""
+
+        "  • #{maybe_color(name, :yellow, color)}: #{inspect(fg.fields)}#{inherits}"
+      end)
+      |> Enum.join("\n")
+
+    """
+
+    Field Groups:
+      Actor's groups: #{maybe_color(actor_groups, :bright, color)}
+    #{groups_info}
+    """
   end
 
   defp scope_section(%{scope_filter: nil} = _explanation, _color), do: nil

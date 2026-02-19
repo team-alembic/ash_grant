@@ -32,6 +32,7 @@ defmodule AshGrant.PolicyExport.Mermaid do
     resource_name = get_resource_name(resource)
     actions = get_actions(resource)
     scopes = get_scopes(resource)
+    field_groups = get_field_groups(resource)
 
     lines = [
       "flowchart TD",
@@ -41,7 +42,15 @@ defmodule AshGrant.PolicyExport.Mermaid do
       generate_action_connections(resource_name, actions),
       "",
       "  %% Action-Scope connections",
-      generate_action_scope_connections(actions, scopes)
+      generate_action_scope_connections(actions, scopes),
+      if(field_groups != [],
+        do: [
+          "",
+          "  %% Field Groups",
+          generate_field_group_connections(resource_name, field_groups)
+        ],
+        else: []
+      )
     ]
 
     lines
@@ -64,6 +73,13 @@ defmodule AshGrant.PolicyExport.Mermaid do
   defp get_scopes(resource) do
     AshGrant.Info.scopes(resource)
     |> Enum.map(fn scope -> %{name: scope.name, description: scope.description} end)
+  end
+
+  defp get_field_groups(resource) do
+    AshGrant.Info.field_groups(resource)
+    |> Enum.map(fn fg ->
+      %{name: fg.name, fields: fg.fields, inherits: fg.inherits || []}
+    end)
   end
 
   defp generate_action_connections(resource_name, actions) do
@@ -99,6 +115,29 @@ defmodule AshGrant.PolicyExport.Mermaid do
       end
 
     read_connections ++ write_connections
+  end
+
+  defp generate_field_group_connections(resource_name, field_groups) do
+    # Create field group nodes and inheritance connections
+    group_nodes =
+      field_groups
+      |> Enum.map(fn fg ->
+        fg_id = "fg_#{sanitize_id(fg.name)}"
+        fields_str = fg.fields |> Enum.map(&to_string/1) |> Enum.join(", ")
+        "  #{resource_name} -.-> #{fg_id}{{\"#{fg.name}: #{fields_str}\"}}"
+      end)
+
+    inheritance_connections =
+      field_groups
+      |> Enum.flat_map(fn fg ->
+        Enum.map(fg.inherits, fn parent ->
+          child_id = "fg_#{sanitize_id(fg.name)}"
+          parent_id = "fg_#{sanitize_id(parent)}"
+          "  #{parent_id} --> #{child_id}"
+        end)
+      end)
+
+    group_nodes ++ inheritance_connections
   end
 
   defp sanitize_id(name) when is_atom(name), do: sanitize_id(Atom.to_string(name))
