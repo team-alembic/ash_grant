@@ -282,7 +282,8 @@ defmodule AshGrant do
       AshGrant.Transformers.ValidateScopes,
       AshGrant.Transformers.ValidateFieldGroups,
       AshGrant.Transformers.AddDefaultPolicies,
-      AshGrant.Transformers.AddFieldPolicies
+      AshGrant.Transformers.AddFieldPolicies,
+      AshGrant.Transformers.AddMaskingPreparation
     ]
 
   @doc """

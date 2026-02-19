@@ -37,5 +37,8 @@ defmodule AshGrant.Test.Domain do
 
     # Field-group column-level authorization test resource
     resource(AshGrant.Test.SensitiveRecord)
+
+    # Field masking test resource
+    resource(AshGrant.Test.MaskedRecord)
   end
 end
