@@ -237,6 +237,65 @@ defmodule AshGrant.EvaluatorTest do
     end
   end
 
+  describe "field group evaluation" do
+    test "get_field_group returns field group from matching permission" do
+      permissions = ["employee:*:read:all:sensitive"]
+      assert Evaluator.get_field_group(permissions, "employee", "read") == "sensitive"
+    end
+
+    test "get_field_group returns nil when no field_group in permission" do
+      permissions = ["employee:*:read:all"]
+      assert Evaluator.get_field_group(permissions, "employee", "read") == nil
+    end
+
+    test "get_field_group returns nil when denied" do
+      permissions = ["employee:*:read:all:sensitive", "!employee:*:read:all"]
+      assert Evaluator.get_field_group(permissions, "employee", "read") == nil
+    end
+
+    test "get_field_group returns nil when no matching permission" do
+      permissions = ["employee:*:read:all:sensitive"]
+      assert Evaluator.get_field_group(permissions, "employee", "write") == nil
+    end
+
+    test "get_all_field_groups returns all field groups from matching permissions" do
+      permissions = ["employee:*:read:all:sensitive", "employee:*:read:all:billing"]
+
+      assert Evaluator.get_all_field_groups(permissions, "employee", "read") == [
+               "sensitive",
+               "billing"
+             ]
+    end
+
+    test "get_all_field_groups returns empty when denied" do
+      permissions = ["employee:*:read:all:sensitive", "!employee:*:read:all"]
+      assert Evaluator.get_all_field_groups(permissions, "employee", "read") == []
+    end
+
+    test "get_all_field_groups deduplicates" do
+      permissions = [
+        "employee:*:read:all:sensitive",
+        "employee:*:read:own:sensitive"
+      ]
+
+      assert Evaluator.get_all_field_groups(permissions, "employee", "read") == ["sensitive"]
+    end
+
+    test "get_all_field_groups returns empty when no matching permissions" do
+      permissions = ["employee:*:read:all:sensitive"]
+      assert Evaluator.get_all_field_groups(permissions, "employee", "write") == []
+    end
+
+    test "get_all_field_groups ignores permissions without field_group" do
+      permissions = [
+        "employee:*:read:all:sensitive",
+        "employee:*:read:own"
+      ]
+
+      assert Evaluator.get_all_field_groups(permissions, "employee", "read") == ["sensitive"]
+    end
+  end
+
   describe "combine/1" do
     test "combines multiple permission lists" do
       role_perms = ["blog:*:read:all"]

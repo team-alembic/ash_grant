@@ -358,6 +358,86 @@ defmodule AshGrant.Evaluator do
   end
 
   @doc """
+  Gets the field group from the first matching permission.
+
+  Returns the field_group string from the first matching allow permission.
+  Returns nil if no matching permission, if denied, or if no field_group is set.
+
+  ## Examples
+
+      iex> permissions = ["employee:*:read:all:sensitive"]
+      iex> AshGrant.Evaluator.get_field_group(permissions, "employee", "read")
+      "sensitive"
+
+      iex> permissions = ["employee:*:read:all"]
+      iex> AshGrant.Evaluator.get_field_group(permissions, "employee", "read")
+      nil
+
+  """
+  @spec get_field_group(permissions(), String.t(), String.t()) :: String.t() | nil
+  def get_field_group(permissions, resource, action) do
+    permissions = normalize_permissions(permissions)
+
+    has_deny =
+      Enum.any?(permissions, fn perm ->
+        Permission.deny?(perm) and Permission.matches?(perm, resource, action)
+      end)
+
+    if has_deny do
+      nil
+    else
+      permissions
+      |> Enum.find(fn perm ->
+        not Permission.deny?(perm) and Permission.matches?(perm, resource, action)
+      end)
+      |> case do
+        nil -> nil
+        perm -> perm.field_group
+      end
+    end
+  end
+
+  @doc """
+  Gets all field groups from matching permissions.
+
+  Returns a deduplicated list of field group names from all matching allow permissions.
+  When an actor has multiple permissions with different field groups, these are merged
+  as a union to determine the combined set of accessible fields.
+
+  ## Examples
+
+      iex> permissions = ["employee:*:read:all:sensitive", "employee:*:read:all:billing"]
+      iex> AshGrant.Evaluator.get_all_field_groups(permissions, "employee", "read")
+      ["sensitive", "billing"]
+
+      iex> permissions = ["employee:*:read:all:sensitive", "!employee:*:read:all"]
+      iex> AshGrant.Evaluator.get_all_field_groups(permissions, "employee", "read")
+      []
+
+  """
+  @spec get_all_field_groups(permissions(), String.t(), String.t()) :: [String.t()]
+  def get_all_field_groups(permissions, resource, action) do
+    permissions = normalize_permissions(permissions)
+
+    has_deny =
+      Enum.any?(permissions, fn perm ->
+        Permission.deny?(perm) and Permission.matches?(perm, resource, action)
+      end)
+
+    if has_deny do
+      []
+    else
+      permissions
+      |> Enum.filter(fn perm ->
+        not Permission.deny?(perm) and Permission.matches?(perm, resource, action)
+      end)
+      |> Enum.map(& &1.field_group)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+    end
+  end
+
+  @doc """
   Finds all matching permissions (both allow and deny).
 
   ## Examples
