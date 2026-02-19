@@ -49,9 +49,17 @@ defmodule AshGrant.FieldGroupPropertyTest do
     ])
   end
 
+  defp instance_id_gen do
+    one_of([
+      constant("*"),
+      string(:alphanumeric, min_length: 3, max_length: 15) |> map(&("inst_" <> &1))
+    ])
+  end
+
   defp permission_5part_gen do
     gen all(
           resource <- resource_gen(),
+          instance_id <- instance_id_gen(),
           action <- action_gen(),
           scope <- scope_gen(),
           field_group <- field_group_gen(),
@@ -59,7 +67,7 @@ defmodule AshGrant.FieldGroupPropertyTest do
         ) do
       %Permission{
         resource: resource,
-        instance_id: "*",
+        instance_id: instance_id,
         action: action,
         scope: scope,
         field_group: field_group,
@@ -250,6 +258,156 @@ defmodule AshGrant.FieldGroupPropertyTest do
         permissions = ["#{resource}:*:#{action}:#{scope}"]
         groups = Evaluator.get_all_field_groups(permissions, resource, action)
         assert groups == []
+      end
+    end
+  end
+
+  # ============================================
+  # 5-Part with Instance ID Properties
+  # ============================================
+
+  describe "5-part with instance_id" do
+    property "roundtrip preserves instance_id in 5-part" do
+      check all(perm <- permission_5part_gen()) do
+        str = Permission.to_string(perm)
+        {:ok, parsed} = Permission.parse(str)
+
+        assert parsed.instance_id == perm.instance_id
+        assert parsed.field_group == perm.field_group
+      end
+    end
+
+    property "5-part instance permission matches_instance? when instance_id != *" do
+      check all(
+              resource <- resource_gen(),
+              instance_id <-
+                string(:alphanumeric, min_length: 3, max_length: 15) |> map(&("inst_" <> &1)),
+              action <- action_gen(),
+              scope <- scope_gen(),
+              field_group <- non_nil_field_group_gen()
+            ) do
+        perm =
+          Permission.parse!("#{resource}:#{instance_id}:#{action}:#{scope}:#{field_group}")
+
+        assert Permission.matches_instance?(perm, instance_id, action)
+        refute Permission.matches_instance?(perm, "other_id", action)
+      end
+    end
+
+    property "5-part RBAC does not match instance query" do
+      check all(
+              resource <- resource_gen(),
+              action <- action_gen(),
+              scope <- scope_gen(),
+              field_group <- non_nil_field_group_gen()
+            ) do
+        perm = Permission.parse!("#{resource}:*:#{action}:#{scope}:#{field_group}")
+        refute Permission.matches_instance?(perm, "some_instance", action)
+      end
+    end
+  end
+
+  # ============================================
+  # 5-Part Deny Properties
+  # ============================================
+
+  describe "5-part deny semantics" do
+    property "5-part deny blocks has_access?" do
+      check all(
+              resource <- resource_gen(),
+              action <- action_gen(),
+              scope <- scope_gen(),
+              field_group <- non_nil_field_group_gen()
+            ) do
+        permissions = [
+          "#{resource}:*:#{action}:#{scope}:#{field_group}",
+          "!#{resource}:*:#{action}:#{scope}:#{field_group}"
+        ]
+
+        refute Evaluator.has_access?(permissions, resource, action)
+      end
+    end
+
+    property "5-part deny blocks get_field_group" do
+      check all(
+              resource <- resource_gen(),
+              action <- action_gen(),
+              scope <- scope_gen(),
+              field_group <- non_nil_field_group_gen()
+            ) do
+        permissions = [
+          "#{resource}:*:#{action}:#{scope}:#{field_group}",
+          "!#{resource}:*:#{action}:all"
+        ]
+
+        assert Evaluator.get_field_group(permissions, resource, action) == nil
+      end
+    end
+
+    property "5-part deny on different action does not block" do
+      check all(
+              resource <- resource_gen(),
+              action <- action_gen(),
+              other_action <- action_gen() |> filter(&(&1 != action)),
+              scope <- scope_gen(),
+              field_group <- non_nil_field_group_gen()
+            ) do
+        permissions = [
+          "#{resource}:*:#{action}:#{scope}:#{field_group}",
+          "!#{resource}:*:#{other_action}:all:#{field_group}"
+        ]
+
+        assert Evaluator.has_access?(permissions, resource, action)
+      end
+    end
+  end
+
+  # ============================================
+  # 5-Part Wildcard Properties
+  # ============================================
+
+  describe "5-part wildcard evaluation" do
+    property "5-part with action wildcard matches any action" do
+      check all(
+              resource <- resource_gen(),
+              action <- action_gen(),
+              scope <- scope_gen(),
+              field_group <- non_nil_field_group_gen()
+            ) do
+        permissions = ["#{resource}:*:*:#{scope}:#{field_group}"]
+        assert Evaluator.has_access?(permissions, resource, action)
+        assert Evaluator.get_field_group(permissions, resource, action) == field_group
+      end
+    end
+
+    property "5-part with resource wildcard matches any resource" do
+      check all(
+              resource <- resource_gen(),
+              action <- action_gen(),
+              scope <- scope_gen(),
+              field_group <- non_nil_field_group_gen()
+            ) do
+        permissions = ["*:*:#{action}:#{scope}:#{field_group}"]
+        assert Evaluator.has_access?(permissions, resource, action)
+        assert Evaluator.get_field_group(permissions, resource, action) == field_group
+      end
+    end
+
+    property "5-part with action prefix wildcard matches prefixed actions" do
+      check all(
+              resource <- resource_gen(),
+              prefix <-
+                string(:alphanumeric, min_length: 1, max_length: 5) |> map(&String.downcase/1),
+              suffix <-
+                string(:alphanumeric, min_length: 1, max_length: 5) |> map(&String.downcase/1),
+              scope <- scope_gen(),
+              field_group <- non_nil_field_group_gen()
+            ) do
+        permissions = ["#{resource}:*:#{prefix}*:#{scope}:#{field_group}"]
+        # prefix + suffix should match prefix*
+        assert Evaluator.has_access?(permissions, resource, prefix <> suffix)
+        # exact prefix should also match
+        assert Evaluator.has_access?(permissions, resource, prefix)
       end
     end
   end

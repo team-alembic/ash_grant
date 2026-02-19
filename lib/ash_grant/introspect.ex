@@ -46,14 +46,16 @@ defmodule AshGrant.Introspect do
           allowed: boolean(),
           denied: boolean(),
           scope: String.t() | nil,
-          instance_ids: [String.t()] | nil
+          instance_ids: [String.t()] | nil,
+          field_groups: [String.t()]
         }
 
   @type available_permission :: %{
           permission_string: String.t(),
           action: String.t(),
           scope: String.t(),
-          scope_description: String.t() | nil
+          scope_description: String.t() | nil,
+          field_group: String.t() | nil
         }
 
   @doc """
@@ -94,6 +96,9 @@ defmodule AshGrant.Introspect do
       # Check instance permissions
       instance_ids = Evaluator.get_matching_instance_ids(permissions, resource_name, action_name)
 
+      # Check field groups
+      field_groups = Evaluator.get_all_field_groups(permissions, resource_name, action_name)
+
       # Determine status
       allowed = (scopes != [] or instance_ids != []) and not has_deny
       scope = if scopes != [], do: hd(scopes), else: nil
@@ -103,7 +108,8 @@ defmodule AshGrant.Introspect do
         allowed: allowed,
         denied: has_deny,
         scope: scope,
-        instance_ids: if(instance_ids != [], do: instance_ids, else: nil)
+        instance_ids: if(instance_ids != [], do: instance_ids, else: nil),
+        field_groups: field_groups
       }
     end)
   end
@@ -128,19 +134,45 @@ defmodule AshGrant.Introspect do
     resource_name = Info.resource_name(resource)
     actions = get_resource_actions(resource)
     scopes = Info.scopes(resource)
+    field_groups = Info.field_groups(resource)
 
-    # Generate permission for each action + scope combination
-    for action <- actions,
-        scope <- scopes do
-      scope_name = to_string(scope.name)
+    # Generate base permission for each action + scope combination (4-part)
+    base_permissions =
+      for action <- actions,
+          scope <- scopes do
+        scope_name = to_string(scope.name)
 
-      %{
-        permission_string: "#{resource_name}:*:#{action.name}:#{scope_name}",
-        action: to_string(action.name),
-        scope: scope_name,
-        scope_description: scope.description
-      }
-    end
+        %{
+          permission_string: "#{resource_name}:*:#{action.name}:#{scope_name}",
+          action: to_string(action.name),
+          scope: scope_name,
+          scope_description: scope.description,
+          field_group: nil
+        }
+      end
+
+    # Generate field_group permissions for each action + scope + field_group (5-part)
+    field_group_permissions =
+      if field_groups != [] do
+        for action <- actions,
+            scope <- scopes,
+            fg <- field_groups do
+          scope_name = to_string(scope.name)
+          fg_name = to_string(fg.name)
+
+          %{
+            permission_string: "#{resource_name}:*:#{action.name}:#{scope_name}:#{fg_name}",
+            action: to_string(action.name),
+            scope: scope_name,
+            scope_description: scope.description,
+            field_group: fg_name
+          }
+        end
+      else
+        []
+      end
+
+    base_permissions ++ field_group_permissions
   end
 
   @doc """
@@ -188,12 +220,15 @@ defmodule AshGrant.Introspect do
         instance_ids =
           Evaluator.get_matching_instance_ids(permissions, resource_name, action_name)
 
+        # Check field groups
+        field_groups = Evaluator.get_all_field_groups(permissions, resource_name, action_name)
+
         cond do
           scopes != [] ->
-            {:allow, %{scope: hd(scopes), instance_ids: nil}}
+            {:allow, %{scope: hd(scopes), instance_ids: nil, field_groups: field_groups}}
 
           instance_ids != [] ->
-            {:allow, %{scope: nil, instance_ids: instance_ids}}
+            {:allow, %{scope: nil, instance_ids: instance_ids, field_groups: field_groups}}
 
           true ->
             {:deny, %{reason: :no_permission}}
@@ -240,7 +275,8 @@ defmodule AshGrant.Introspect do
           %{
             action: String.to_atom(p.action),
             scope: p.scope,
-            instance_ids: p.instance_ids
+            instance_ids: p.instance_ids,
+            field_groups: p.field_groups
           }
         end)
       else

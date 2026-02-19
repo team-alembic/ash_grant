@@ -256,6 +256,122 @@ defmodule AshGrant.PermissionableTest do
       assert Evaluator.has_access?(permissions, "post", "update")
       assert Evaluator.has_access?(permissions, "post", "create")
     end
+
+    test "custom struct with 5-part permission works with Evaluator" do
+      permissions = [
+        %RolePermission{
+          permission_string: "employee:*:read:all:sensitive",
+          label: "Read sensitive employee data",
+          role_name: "hr"
+        }
+      ]
+
+      assert Evaluator.has_access?(permissions, "employee", "read")
+      assert Evaluator.get_field_group(permissions, "employee", "read") == "sensitive"
+    end
+
+    test "custom struct 5-part metadata preserved through normalization" do
+      role_perm = %RolePermission{
+        permission_string: "employee:*:read:all:confidential",
+        label: "Read confidential",
+        role_name: "director"
+      }
+
+      input = Permissionable.to_permission_input(role_perm)
+      permission = Permission.from_input(input)
+
+      assert permission.field_group == "confidential"
+      assert permission.description == "Read confidential"
+      assert permission.source == "role:director"
+    end
+  end
+
+  describe "5-part PermissionInput" do
+    test "converts 5-part string to PermissionInput" do
+      input = Permissionable.to_permission_input("employee:*:read:all:sensitive")
+
+      assert %PermissionInput{} = input
+      assert input.string == "employee:*:read:all:sensitive"
+    end
+
+    test "Permission.from_input preserves field_group from 5-part string" do
+      input = %PermissionInput{
+        string: "employee:*:read:all:sensitive",
+        description: "Read sensitive fields",
+        source: "hr_role"
+      }
+
+      permission = Permission.from_input(input)
+
+      assert permission.resource == "employee"
+      assert permission.action == "read"
+      assert permission.scope == "all"
+      assert permission.field_group == "sensitive"
+      assert permission.description == "Read sensitive fields"
+      assert permission.source == "hr_role"
+    end
+
+    test "Permission.from_input handles 5-part deny" do
+      input = %PermissionInput{
+        string: "!employee:*:read:all:confidential",
+        description: "Cannot read confidential"
+      }
+
+      permission = Permission.from_input(input)
+
+      assert permission.deny == true
+      assert permission.field_group == "confidential"
+      assert permission.description == "Cannot read confidential"
+    end
+
+    test "Permission.from_input handles 5-part instance permission" do
+      input = %PermissionInput{
+        string: "employee:emp_123:read:draft:sensitive",
+        source: "direct_grant"
+      }
+
+      permission = Permission.from_input(input)
+
+      assert permission.instance_id == "emp_123"
+      assert permission.scope == "draft"
+      assert permission.field_group == "sensitive"
+      assert permission.source == "direct_grant"
+    end
+
+    test "Evaluator works with 5-part PermissionInput" do
+      permissions = [
+        %PermissionInput{
+          string: "employee:*:read:all:sensitive",
+          description: "Read sensitive"
+        }
+      ]
+
+      assert Evaluator.has_access?(permissions, "employee", "read")
+      assert Evaluator.get_field_group(permissions, "employee", "read") == "sensitive"
+    end
+
+    test "Evaluator deny-wins with 5-part PermissionInput" do
+      permissions = [
+        %PermissionInput{string: "employee:*:read:all:sensitive"},
+        %PermissionInput{string: "!employee:*:read:all"}
+      ]
+
+      refute Evaluator.has_access?(permissions, "employee", "read")
+      assert Evaluator.get_all_field_groups(permissions, "employee", "read") == []
+    end
+
+    test "mixed 4-part and 5-part PermissionInput" do
+      permissions = [
+        %PermissionInput{string: "employee:*:read:all:sensitive"},
+        %PermissionInput{string: "employee:*:update:own"},
+        "employee:*:create:all"
+      ]
+
+      assert Evaluator.has_access?(permissions, "employee", "read")
+      assert Evaluator.get_field_group(permissions, "employee", "read") == "sensitive"
+      assert Evaluator.get_field_group(permissions, "employee", "update") == nil
+      assert Evaluator.has_access?(permissions, "employee", "create")
+    end
   end
 
   describe "Permission struct with metadata" do

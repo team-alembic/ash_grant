@@ -316,6 +316,62 @@ defmodule AshGrant.PermissionTest do
       assert {:ok, perm} = Permission.parse("employee:*:read:all:")
       assert perm.field_group == nil
     end
+
+    test "5-part with action wildcard" do
+      assert {:ok, perm} = Permission.parse("employee:*:*:all:sensitive")
+      assert perm.resource == "employee"
+      assert perm.action == "*"
+      assert perm.scope == "all"
+      assert perm.field_group == "sensitive"
+    end
+
+    test "5-part with action prefix wildcard" do
+      assert {:ok, perm} = Permission.parse("employee:*:read*:all:sensitive")
+      assert perm.action == "read*"
+      assert perm.field_group == "sensitive"
+      assert Permission.matches?(perm, "employee", "read")
+      assert Permission.matches?(perm, "employee", "read_all")
+      refute Permission.matches?(perm, "employee", "write")
+    end
+
+    test "5-part with resource wildcard" do
+      assert {:ok, perm} = Permission.parse("*:*:read:all:sensitive")
+      assert perm.resource == "*"
+      assert perm.field_group == "sensitive"
+      assert Permission.matches?(perm, "employee", "read")
+      assert Permission.matches?(perm, "blog", "read")
+    end
+
+    test "5-part deny matches? returns true (deny flag is separate from matching)" do
+      perm = Permission.parse!("!employee:*:read:all:sensitive")
+      assert Permission.matches?(perm, "employee", "read")
+      assert Permission.deny?(perm)
+    end
+
+    test "5-part instance permission roundtrip with scope" do
+      {:ok, original} = Permission.parse("employee:emp_123:read:draft:sensitive")
+      assert original.instance_id == "emp_123"
+      assert original.scope == "draft"
+      assert original.field_group == "sensitive"
+
+      round_tripped = Permission.to_string(original)
+      assert round_tripped == "employee:emp_123:read:draft:sensitive"
+
+      {:ok, reparsed} = Permission.parse(round_tripped)
+      assert reparsed.instance_id == original.instance_id
+      assert reparsed.scope == original.scope
+      assert reparsed.field_group == original.field_group
+    end
+
+    test "5-part instance permission with empty scope roundtrip" do
+      {:ok, original} = Permission.parse("employee:emp_123:read::sensitive")
+      str = Permission.to_string(original)
+      {:ok, reparsed} = Permission.parse(str)
+
+      assert reparsed.instance_id == "emp_123"
+      assert reparsed.scope == nil
+      assert reparsed.field_group == "sensitive"
+    end
   end
 
   describe "String.Chars protocol" do

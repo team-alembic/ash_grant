@@ -205,4 +205,141 @@ defmodule AshGrant.IntrospectTest do
       assert result == []
     end
   end
+
+  # ============================================
+  # 5-part field_group tests
+  # ============================================
+
+  describe "actor_permissions/3 with field_groups" do
+    test "returns field_groups for actor with 5-part permissions" do
+      actor = %{permissions: ["sensitiverecord:*:read:all:sensitive"]}
+
+      result = Introspect.actor_permissions(AshGrant.Test.SensitiveRecord, actor)
+
+      read_perm = Enum.find(result, &(&1.action == "read"))
+      assert read_perm.allowed == true
+      assert "sensitive" in read_perm.field_groups
+    end
+
+    test "returns multiple field_groups from multiple 5-part permissions" do
+      actor = %{
+        permissions: [
+          "sensitiverecord:*:read:all:sensitive",
+          "sensitiverecord:*:read:all:confidential"
+        ]
+      }
+
+      result = Introspect.actor_permissions(AshGrant.Test.SensitiveRecord, actor)
+
+      read_perm = Enum.find(result, &(&1.action == "read"))
+      assert read_perm.allowed == true
+      assert "sensitive" in read_perm.field_groups
+      assert "confidential" in read_perm.field_groups
+    end
+
+    test "returns empty field_groups for 4-part permissions" do
+      actor = %{permissions: ["sensitiverecord:*:read:all"]}
+
+      result = Introspect.actor_permissions(AshGrant.Test.SensitiveRecord, actor)
+
+      read_perm = Enum.find(result, &(&1.action == "read"))
+      assert read_perm.allowed == true
+      assert read_perm.field_groups == []
+    end
+
+    test "returns empty field_groups when denied" do
+      actor = %{
+        permissions: [
+          "sensitiverecord:*:read:all:sensitive",
+          "!sensitiverecord:*:read:all"
+        ]
+      }
+
+      result = Introspect.actor_permissions(AshGrant.Test.SensitiveRecord, actor)
+
+      read_perm = Enum.find(result, &(&1.action == "read"))
+      assert read_perm.allowed == false
+      assert read_perm.field_groups == []
+    end
+  end
+
+  describe "available_permissions/1 with field_groups" do
+    test "includes 5-part permissions for resources with field_groups" do
+      result = Introspect.available_permissions(AshGrant.Test.SensitiveRecord)
+
+      # Should have both 4-part (base) and 5-part (field_group) permissions
+      base_perms = Enum.filter(result, &is_nil(&1.field_group))
+      fg_perms = Enum.filter(result, &(not is_nil(&1.field_group)))
+
+      assert length(base_perms) > 0
+      assert length(fg_perms) > 0
+
+      # Field group names should include public, sensitive, confidential
+      fg_names = fg_perms |> Enum.map(& &1.field_group) |> Enum.uniq()
+      assert "public" in fg_names
+      assert "sensitive" in fg_names
+      assert "confidential" in fg_names
+    end
+
+    test "5-part permission strings have correct format" do
+      result = Introspect.available_permissions(AshGrant.Test.SensitiveRecord)
+
+      fg_perms = Enum.filter(result, &(not is_nil(&1.field_group)))
+
+      for perm <- fg_perms do
+        parts = String.split(perm.permission_string, ":")
+        assert length(parts) == 5, "Expected 5 parts in #{perm.permission_string}"
+        assert List.last(parts) == perm.field_group
+      end
+    end
+
+    test "resources without field_groups have no 5-part permissions" do
+      result = Introspect.available_permissions(Post)
+
+      fg_perms = Enum.filter(result, &(not is_nil(&1.field_group)))
+      assert fg_perms == []
+    end
+  end
+
+  describe "can?/4 with field_groups" do
+    test "returns field_groups in allow response" do
+      actor = %{permissions: ["sensitiverecord:*:read:all:sensitive"]}
+
+      assert {:allow, info} = Introspect.can?(AshGrant.Test.SensitiveRecord, :read, actor)
+      assert "sensitive" in info.field_groups
+    end
+
+    test "returns empty field_groups for 4-part permissions" do
+      actor = %{permissions: ["sensitiverecord:*:read:all"]}
+
+      assert {:allow, info} = Introspect.can?(AshGrant.Test.SensitiveRecord, :read, actor)
+      assert info.field_groups == []
+    end
+
+    test "returns multiple field_groups" do
+      actor = %{
+        permissions: [
+          "sensitiverecord:*:read:all:public",
+          "sensitiverecord:*:read:all:sensitive"
+        ]
+      }
+
+      assert {:allow, info} = Introspect.can?(AshGrant.Test.SensitiveRecord, :read, actor)
+      assert "public" in info.field_groups
+      assert "sensitive" in info.field_groups
+    end
+  end
+
+  describe "allowed_actions/3 with field_groups" do
+    test "detailed mode includes field_groups" do
+      actor = %{permissions: ["sensitiverecord:*:read:all:confidential"]}
+
+      result =
+        Introspect.allowed_actions(AshGrant.Test.SensitiveRecord, actor, detailed: true)
+
+      read_action = Enum.find(result, &(&1.action == :read))
+      assert read_action != nil
+      assert "confidential" in read_action.field_groups
+    end
+  end
 end

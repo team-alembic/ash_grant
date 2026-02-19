@@ -136,5 +136,38 @@ defmodule AshGrant.FieldCheckTest do
       # :sensitive does NOT include :confidential
       refute AshGrant.FieldCheck.match?(actor, authorizer, field_group: :confidential)
     end
+
+    test "5-part deny on field_group blocks access" do
+      actor = %{
+        permissions: [
+          "sensitiverecord:*:read:all:confidential",
+          "!sensitiverecord:*:read:all:sensitive"
+        ]
+      }
+
+      authorizer = build_authorizer()
+
+      # deny-wins: deny matches resource+action, blocks all field access
+      refute AshGrant.FieldCheck.match?(actor, authorizer, field_group: :confidential)
+      refute AshGrant.FieldCheck.match?(actor, authorizer, field_group: :public)
+    end
+
+    test "5-part with action wildcard grants field access" do
+      actor = %{permissions: ["sensitiverecord:*:*:all:confidential"]}
+      authorizer = build_authorizer()
+
+      assert AshGrant.FieldCheck.match?(actor, authorizer, field_group: :confidential)
+      assert AshGrant.FieldCheck.match?(actor, authorizer, field_group: :sensitive)
+      assert AshGrant.FieldCheck.match?(actor, authorizer, field_group: :public)
+    end
+
+    test "5-part with resource wildcard grants field access" do
+      actor = %{permissions: ["*:*:read:all:sensitive"]}
+      authorizer = build_authorizer()
+
+      assert AshGrant.FieldCheck.match?(actor, authorizer, field_group: :sensitive)
+      assert AshGrant.FieldCheck.match?(actor, authorizer, field_group: :public)
+      refute AshGrant.FieldCheck.match?(actor, authorizer, field_group: :confidential)
+    end
   end
 end

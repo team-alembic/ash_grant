@@ -83,6 +83,37 @@ defmodule AshGrant.InstanceScopeTest do
       assert Evaluator.has_instance_access?(permissions, "doc_123", "read")
       refute Evaluator.has_instance_access?(permissions, "doc_123", "delete")
     end
+
+    test "deny with specific scope blocks same instance and action" do
+      permissions = [
+        "doc:doc_123:update:draft",
+        "!doc:doc_123:update:archived"
+      ]
+
+      # Both match instance_id+action, deny-wins blocks access
+      refute Evaluator.has_instance_access?(permissions, "doc_123", "update")
+    end
+
+    test "deny with instance scope does not affect different instance" do
+      permissions = [
+        "doc:doc_123:update:draft",
+        "doc:doc_456:update:draft",
+        "!doc:doc_456:update:draft"
+      ]
+
+      assert Evaluator.has_instance_access?(permissions, "doc_123", "update")
+      refute Evaluator.has_instance_access?(permissions, "doc_456", "update")
+    end
+
+    test "deny with instance scope does not affect different action" do
+      permissions = [
+        "doc:doc_123:read:draft",
+        "!doc:doc_123:delete:archived"
+      ]
+
+      assert Evaluator.has_instance_access?(permissions, "doc_123", "read")
+      refute Evaluator.has_instance_access?(permissions, "doc_123", "delete")
+    end
   end
 
   describe "Evaluator.get_instance_scope/3" do
