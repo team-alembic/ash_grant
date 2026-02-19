@@ -16,6 +16,8 @@ defmodule AshGrant.Explanation do
   - `:matching_permissions` - List of permissions that matched and granted access
   - `:evaluated_permissions` - All permissions that were evaluated with match status
   - `:scope_filter` - The resolved scope filter expression (for reads)
+  - `:field_groups` - List of field group names the actor has access to (from 5-part permissions)
+  - `:field_group_defs` - Field group definitions from the resource DSL
 
   ## Example
 
@@ -30,9 +32,12 @@ defmodule AshGrant.Explanation do
             description: "Read all posts",
             source: "editor_role",
             scope_name: :all,
-            scope_description: "All records without restriction"
+            scope_description: "All records without restriction",
+            field_group: nil
           }
         ],
+        field_groups: [],
+        field_group_defs: [],
         ...
       }
 

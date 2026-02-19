@@ -3,14 +3,15 @@ defmodule AshGrant.Info do
   Introspection helpers for AshGrant DSL configuration.
 
   This module provides functions to query AshGrant configuration at runtime,
-  including resolvers, scopes, and the new `default_policies` setting.
+  including resolvers, scopes, field groups, and policy settings.
 
   ## Common Functions
 
   | Function | Description |
   |----------|-------------|
   | `resolver/1` | Get the permission resolver for a resource |
-  | `default_policies/1` | Get the default_policies setting (new in v0.2.0) |
+  | `default_policies/1` | Get the default_policies setting |
+  | `default_field_policies/1` | Get the default_field_policies setting |
   | `resource_name/1` | Get the resource name for permission matching |
   | `scopes/1` | Get all scope definitions |
   | `get_scope/2` | Get a specific scope by name |

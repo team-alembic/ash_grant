@@ -3,8 +3,9 @@ defmodule AshGrant.Permission do
   Permission struct with parsing and matching capabilities.
 
   This module provides the core permission representation for AshGrant.
-  Permissions follow an Apache Shiro-inspired string format with a unified
-  four-part syntax that handles both role-based (RBAC) and instance-level access.
+  Permissions follow an Apache Shiro-inspired string format that handles both
+  role-based (RBAC) and instance-level access, with an optional field group
+  for column-level restrictions.
 
   ## Permission Struct
 
@@ -14,13 +15,12 @@ defmodule AshGrant.Permission do
   - `instance_id` - The specific resource ID or `"*"` for all instances
   - `action` - The action (e.g., "read", "update") or wildcard patterns
   - `scope` - The access scope (e.g., "all", "own") for filtering
+  - `field_group` - Optional field group for column-level access (e.g., "sensitive")
   - `deny` - Whether this is a deny rule (takes precedence over allow)
 
   ## Permission Format
 
-  All permissions use a unified four-part format:
-
-      [!]resource:instance_id:action:scope
+      [!]resource:instance_id:action:scope[:field_group]
 
   | Component | Description | Valid Values |
   |-----------|-------------|--------------|
@@ -29,6 +29,7 @@ defmodule AshGrant.Permission do
   | instance_id | Resource instance or `*` | prefixed_id, UUID, `*` |
   | action | Action name | identifier, `*`, `prefix*` |
   | scope | Access scope | `all`, `own`, custom, or empty |
+  | field_group | Column-level group (optional) | `public`, `sensitive`, custom |
 
   ## Wildcard Patterns
 
@@ -137,31 +138,28 @@ defmodule AshGrant.Permission do
   @doc """
   Parses a permission string into a Permission struct.
 
-  Supports both the new four-part format and legacy formats for backward compatibility.
+  Supports 4-part, 5-part (with field_group), and legacy formats.
 
-  ## New Format (preferred)
+  ## Formats
 
-      "resource:instance_id:action:scope"
-
-  ## Legacy Formats (still supported)
-
-      "resource:action:scope"  →  resource:*:action:scope
-      "resource:action"        →  resource:*:action:
+      "resource:instance_id:action:scope"                # 4-part
+      "resource:instance_id:action:scope:field_group"    # 5-part (with field group)
+      "resource:action:scope"                            # Legacy 3-part → resource:*:action:scope
+      "resource:action"                                  # Legacy 2-part → resource:*:action:
 
   ## Examples
 
       iex> AshGrant.Permission.parse("blog:*:read:all")
       {:ok, %AshGrant.Permission{resource: "blog", instance_id: "*", action: "read", scope: "all", deny: false}}
 
-      iex> AshGrant.Permission.parse("blog:post_abc123xyz789ab:read:")
-      {:ok, %AshGrant.Permission{resource: "blog", instance_id: "post_abc123xyz789ab", action: "read", scope: nil, deny: false}}
+      iex> AshGrant.Permission.parse("employee:*:read:all:sensitive")
+      {:ok, %AshGrant.Permission{resource: "employee", instance_id: "*", action: "read", scope: "all", field_group: "sensitive", deny: false}}
 
       iex> AshGrant.Permission.parse("!blog:*:delete:all")
       {:ok, %AshGrant.Permission{resource: "blog", instance_id: "*", action: "delete", scope: "all", deny: true}}
 
-      # Legacy format
-      iex> AshGrant.Permission.parse("blog:read:all")
-      {:ok, %AshGrant.Permission{resource: "blog", instance_id: "*", action: "read", scope: "all", deny: false}}
+      iex> AshGrant.Permission.parse("blog:post_abc123xyz789ab:read:")
+      {:ok, %AshGrant.Permission{resource: "blog", instance_id: "post_abc123xyz789ab", action: "read", scope: nil, deny: false}}
 
   """
   @spec parse(String.t()) :: {:ok, t()} | {:error, String.t()}
@@ -281,7 +279,7 @@ defmodule AshGrant.Permission do
   @doc """
   Converts a Permission struct back to string format.
 
-  Always uses the new four-part format.
+  Produces a 4-part string, or 5-part when `field_group` is set.
 
   ## Examples
 
@@ -289,9 +287,9 @@ defmodule AshGrant.Permission do
       iex> AshGrant.Permission.to_string(perm)
       "blog:*:read:all"
 
-      iex> perm = %AshGrant.Permission{resource: "blog", instance_id: "post_abc123", action: "read", scope: nil}
+      iex> perm = %AshGrant.Permission{resource: "employee", instance_id: "*", action: "read", scope: "all", field_group: "sensitive"}
       iex> AshGrant.Permission.to_string(perm)
-      "blog:post_abc123:read:"
+      "employee:*:read:all:sensitive"
 
       iex> perm = %AshGrant.Permission{resource: "blog", instance_id: "*", action: "delete", scope: "all", deny: true}
       iex> AshGrant.Permission.to_string(perm)

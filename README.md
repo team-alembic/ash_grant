@@ -994,9 +994,9 @@ Add descriptions to scopes for better debugging output:
 ash_grant do
   resolver MyApp.PermissionResolver
 
-  scope :all, [], true, description: "All records without restriction"
-  scope :own, [], expr(author_id == ^actor(:id)), description: "Records owned by the current user"
-  scope :published, [], expr(status == :published), description: "Published records visible to everyone"
+  scope :all, true, description: "All records without restriction"
+  scope :own, expr(author_id == ^actor(:id)), description: "Records owned by the current user"
+  scope :published, expr(status == :published), description: "Published records visible to everyone"
 end
 ```
 
@@ -1016,9 +1016,9 @@ The `AshGrant.Introspect` module provides runtime helpers for querying permissio
 ```elixir
 AshGrant.Introspect.actor_permissions(Post, current_user)
 # => [
-#   %{action: "read", allowed: true, scope: "all", denied: false, instance_ids: nil},
-#   %{action: "update", allowed: true, scope: "own", denied: false, instance_ids: nil},
-#   %{action: "destroy", allowed: false, scope: nil, denied: false, instance_ids: nil}
+#   %{action: "read", allowed: true, scope: "all", denied: false, instance_ids: nil, field_groups: []},
+#   %{action: "update", allowed: true, scope: "own", denied: false, instance_ids: nil, field_groups: []},
+#   %{action: "destroy", allowed: false, scope: nil, denied: false, instance_ids: nil, field_groups: []}
 # ]
 ```
 
@@ -1027,8 +1027,8 @@ AshGrant.Introspect.actor_permissions(Post, current_user)
 ```elixir
 AshGrant.Introspect.available_permissions(Post)
 # => [
-#   %{permission_string: "post:*:read:all", action: "read", scope: "all", scope_description: "All records"},
-#   %{permission_string: "post:*:read:own", action: "read", scope: "own", scope_description: "Own records"},
+#   %{permission_string: "post:*:read:all", action: "read", scope: "all", scope_description: "All records", field_group: nil},
+#   %{permission_string: "post:*:read:own", action: "read", scope: "own", scope_description: "Own records", field_group: nil},
 #   ...
 # ]
 ```
@@ -1040,7 +1040,7 @@ AshGrant.Introspect.available_permissions(Post)
 
 ```elixir
 AshGrant.Introspect.can?(Post, :read, user)
-# => {:allow, %{scope: "all", instance_ids: nil}}
+# => {:allow, %{scope: "all", instance_ids: nil, field_groups: []}}
 
 AshGrant.Introspect.can?(Post, :destroy, user)
 # => {:deny, %{reason: :no_permission}}
@@ -1056,9 +1056,9 @@ AshGrant.Introspect.allowed_actions(Post, user)
 # With details
 AshGrant.Introspect.allowed_actions(Post, user, detailed: true)
 # => [
-#   %{action: :read, scope: "all", instance_ids: nil},
-#   %{action: :create, scope: "all", instance_ids: nil},
-#   %{action: :update, scope: "own", instance_ids: nil}
+#   %{action: :read, scope: "all", instance_ids: nil, field_groups: []},
+#   %{action: :create, scope: "all", instance_ids: nil, field_groups: []},
+#   %{action: :update, scope: "own", instance_ids: nil, field_groups: []}
 # ]
 ```
 

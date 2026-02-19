@@ -12,6 +12,7 @@ defmodule AshGrant.Dsl do
   | `resolver` | module or function | **Yes** | Resolves permissions for actors |
   | `resource_name` | string | No | Resource name for permission matching |
   | `default_policies` | boolean or atom | No | Auto-generate policies (`true`, `:all`, `:read`, `:write`) |
+  | `default_field_policies` | boolean | No | Auto-generate `field_policies` from `field_group` definitions |
   | `owner_field` | atom | No | **Deprecated.** Use `scope :own, expr(...)` instead |
 
   ## Scope Entity

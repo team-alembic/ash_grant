@@ -15,7 +15,8 @@ defmodule AshGrant do
 
   ## Key Features
 
-  - **Unified Permission Format**: `resource:instance_id:action:scope` syntax
+  - **Unified Permission Format**: `resource:instance_id:action:scope[:field_group]` syntax (4-part or 5-part)
+  - **Field-level permissions**: Column-level read access via field groups with inheritance and masking
   - **Instance-level permissions**: Share specific resources (like Google Docs sharing)
   - **Instance permissions with scopes (ABAC)**: Conditional instance access (`doc:doc_123:update:draft`)
   - **Deny-wins semantics**: Deny rules always override allow rules
@@ -23,7 +24,7 @@ defmodule AshGrant do
   - **Scope DSL**: Define scopes inline with `expr()` expressions
   - **Context injection**: Use `^context(:key)` for injectable/testable scopes
   - **Multi-tenancy Support**: Full support for `^tenant()` in scope expressions
-  - **Two check types**: `filter_check/1` for reads, `check/1` for writes
+  - **Three check types**: `filter_check/1` for reads, `check/1` for writes, `field_check/1` for field-level access
   - **Default policies**: Auto-generate standard policies to reduce boilerplate
 
   ## Installation
@@ -160,9 +161,9 @@ defmodule AshGrant do
 
   ## Permission Format
 
-  ### Unified 4-Part Format
+  ### Permission String Format
 
-      [!]resource:instance_id:action:scope
+      [!]resource:instance_id:action:scope[:field_group]
 
   | Component | Description | Examples |
   |-----------|-------------|----------|
@@ -171,6 +172,9 @@ defmodule AshGrant do
   | instance_id | Resource instance or `*` | `*`, `post_abc123xyz789ab` |
   | action | Action name or wildcard | `read`, `*`, `read*` |
   | scope | Access scope | `all`, `own`, `published`, or empty |
+  | field_group | Optional column-level group | `public`, `sensitive`, `confidential` |
+
+  The 5th part (`field_group`) is optional. When omitted (4-part format), all fields are visible.
 
   ### RBAC Permissions (instance_id = `*`)
 
@@ -265,14 +269,17 @@ defmodule AshGrant do
 
   ## Related Modules
 
-  - `AshGrant.Permission` - Permission parsing and matching
+  - `AshGrant.Permission` - Permission parsing and matching (4-part and 5-part formats)
   - `AshGrant.PermissionInput` - Permission input with metadata for debugging
   - `AshGrant.Permissionable` - Protocol for converting custom structs to permissions
-  - `AshGrant.Evaluator` - Deny-wins permission evaluation
+  - `AshGrant.Evaluator` - Deny-wins permission evaluation with field group support
   - `AshGrant.PermissionResolver` - Behaviour for resolving permissions
   - `AshGrant.Check` - SimpleCheck for write actions
   - `AshGrant.FilterCheck` - FilterCheck for read actions
-  - `AshGrant.Info` - DSL introspection helpers
+  - `AshGrant.FieldCheck` - SimpleCheck for field-level authorization in `field_policies`
+  - `AshGrant.Info` - DSL introspection helpers (scopes, field groups, configuration)
+  - `AshGrant.Introspect` - Runtime permission introspection for UIs and APIs
+  - `AshGrant.Explanation` - Authorization decision explanation struct
   - `AshGrant.Transformers.AddDefaultPolicies` - Policy generation transformer
   """
 

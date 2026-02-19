@@ -31,9 +31,10 @@ defmodule AshGrant.Evaluator do
 
   The evaluator accepts permissions in multiple formats:
 
-  - **Strings**: `"blog:read:all"`, `"!blog:delete:all"`
+  - **Strings**: `"blog:*:read:all"`, `"!blog:*:delete:all"`, `"employee:*:read:all:sensitive"` (5-part)
   - **Permission structs**: `%AshGrant.Permission{...}`
-  - **Maps**: `%{resource: "blog", action: "read", scope: "all", deny: false}`
+  - **PermissionInput structs**: `%AshGrant.PermissionInput{string: "blog:*:read:all", ...}`
+  - **Custom structs**: Any struct implementing the `AshGrant.Permissionable` protocol
 
   All formats are automatically normalized internally.
 
@@ -107,8 +108,11 @@ defmodule AshGrant.Evaluator do
   | `has_instance_access?/3` | Check if actor can perform action on specific instance |
   | `get_scope/3` | Get first matching scope (for SimpleCheck) |
   | `get_all_scopes/3` | Get all matching scopes (for FilterCheck) |
+  | `get_field_group/3` | Get first matching field group from 5-part permissions |
+  | `get_all_field_groups/3` | Get all matching field groups (union for field access) |
   | `get_instance_scope/3` | Get scope from instance permission (for ABAC conditions) |
   | `get_all_instance_scopes/3` | Get all scopes from instance permissions |
+  | `get_matching_instance_ids/3` | Get all instance IDs for a resource/action |
   | `find_matching/3` | Get all matching permissions (debug/introspection) |
   | `combine/1` | Merge multiple permission lists |
   """
