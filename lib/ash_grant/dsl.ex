@@ -285,3 +285,34 @@ defmodule AshGrant.Dsl.Scope do
           __spark_metadata__: map() | nil
         }
 end
+
+defmodule AshGrant.Dsl.FieldGroup do
+  @moduledoc """
+  Represents a field group definition in the AshGrant DSL.
+
+  Field groups define named sets of fields for column-level read authorization.
+  They allow fine-grained control over which fields an actor can see, with
+  support for inheritance, masking, and hierarchical field visibility.
+
+  ## Fields
+
+  - `:name` - The atom name of the field group (e.g., `:public`, `:sensitive`)
+  - `:fields` - List of field atoms included in this group
+  - `:inherits` - Optional list of parent field group names to inherit fields from
+  - `:mask` - Optional list of fields to mask (return masked values instead of hiding)
+  - `:mask_with` - Optional 2-arity function `(value, field_name) -> masked_value`
+  - `:description` - Optional human-readable description
+  """
+
+  defstruct [:name, :fields, :inherits, :mask, :mask_with, :description, :__spark_metadata__]
+
+  @type t :: %__MODULE__{
+          name: atom(),
+          fields: [atom()],
+          inherits: [atom()] | nil,
+          mask: [atom()] | nil,
+          mask_with: (any(), atom() -> any()) | nil,
+          description: String.t() | nil,
+          __spark_metadata__: map() | nil
+        }
+end
