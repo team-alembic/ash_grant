@@ -231,6 +231,93 @@ defmodule AshGrant.PermissionTest do
     end
   end
 
+  describe "5-part format (field groups)" do
+    test "parses 5-part permission string" do
+      assert {:ok, perm} = Permission.parse("employee:*:read:all:sensitive")
+      assert perm.resource == "employee"
+      assert perm.instance_id == "*"
+      assert perm.action == "read"
+      assert perm.scope == "all"
+      assert perm.field_group == "sensitive"
+      assert perm.deny == false
+    end
+
+    test "parses 5-part with deny" do
+      assert {:ok, perm} = Permission.parse("!employee:*:read:all:confidential")
+      assert perm.deny == true
+      assert perm.field_group == "confidential"
+      assert perm.resource == "employee"
+      assert perm.instance_id == "*"
+      assert perm.action == "read"
+      assert perm.scope == "all"
+    end
+
+    test "parses 4-part without field_group (backward compatible)" do
+      assert {:ok, perm} = Permission.parse("employee:*:read:all")
+      assert perm.field_group == nil
+      assert perm.resource == "employee"
+      assert perm.instance_id == "*"
+      assert perm.action == "read"
+      assert perm.scope == "all"
+    end
+
+    test "to_string includes field_group when present" do
+      perm = %Permission{
+        resource: "employee",
+        instance_id: "*",
+        action: "read",
+        scope: "all",
+        field_group: "sensitive"
+      }
+
+      assert Permission.to_string(perm) == "employee:*:read:all:sensitive"
+    end
+
+    test "to_string omits field_group when nil" do
+      perm = %Permission{
+        resource: "employee",
+        instance_id: "*",
+        action: "read",
+        scope: "all",
+        field_group: nil
+      }
+
+      assert Permission.to_string(perm) == "employee:*:read:all"
+    end
+
+    test "matches? works with 5-part permission" do
+      perm = Permission.parse!("employee:*:read:all:sensitive")
+      assert Permission.matches?(perm, "employee", "read")
+    end
+
+    test "parse round-trip with field_group" do
+      {:ok, original} = Permission.parse("employee:*:read:all:sensitive")
+      round_tripped = Permission.to_string(original)
+      {:ok, reparsed} = Permission.parse(round_tripped)
+
+      assert original.resource == reparsed.resource
+      assert original.instance_id == reparsed.instance_id
+      assert original.action == reparsed.action
+      assert original.scope == reparsed.scope
+      assert original.field_group == reparsed.field_group
+      assert original.deny == reparsed.deny
+    end
+
+    test "5-part with instance permission" do
+      assert {:ok, perm} = Permission.parse("employee:emp_123:read::sensitive")
+      assert perm.resource == "employee"
+      assert perm.instance_id == "emp_123"
+      assert perm.action == "read"
+      assert perm.scope == nil
+      assert perm.field_group == "sensitive"
+    end
+
+    test "5-part with empty field_group" do
+      assert {:ok, perm} = Permission.parse("employee:*:read:all:")
+      assert perm.field_group == nil
+    end
+  end
+
   describe "String.Chars protocol" do
     test "converts to string" do
       perm = Permission.parse!("blog:*:read:all")

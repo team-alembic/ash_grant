@@ -114,6 +114,7 @@ defmodule AshGrant.Permission do
           instance_id: String.t(),
           action: String.t(),
           scope: String.t() | nil,
+          field_group: String.t() | nil,
           deny: boolean(),
           # Metadata fields (optional, for debugging/explain)
           description: String.t() | nil,
@@ -125,6 +126,7 @@ defmodule AshGrant.Permission do
     :resource,
     :action,
     :scope,
+    :field_group,
     :description,
     :source,
     :metadata,
@@ -167,7 +169,19 @@ defmodule AshGrant.Permission do
     {deny, rest} = parse_deny_prefix(permission_string)
 
     case String.split(rest, ":") do
-      # New four-part format: resource:instance_id:action:scope
+      # Five-part format: resource:instance_id:action:scope:field_group
+      [resource, instance_id, action, scope, field_group] ->
+        {:ok,
+         %__MODULE__{
+           resource: resource,
+           instance_id: instance_id,
+           action: action,
+           scope: normalize_scope(scope),
+           field_group: normalize_field_group(field_group),
+           deny: deny
+         }}
+
+      # Four-part format: resource:instance_id:action:scope
       [resource, instance_id, action, scope] ->
         {:ok,
          %__MODULE__{
@@ -289,8 +303,12 @@ defmodule AshGrant.Permission do
     prefix = if perm.deny, do: "!", else: ""
     scope = perm.scope || ""
     instance_id = perm.instance_id || "*"
+    base = "#{prefix}#{perm.resource}:#{instance_id}:#{perm.action}:#{scope}"
 
-    "#{prefix}#{perm.resource}:#{instance_id}:#{perm.action}:#{scope}"
+    case perm.field_group do
+      nil -> base
+      fg -> "#{base}:#{fg}"
+    end
   end
 
   @doc """
@@ -428,6 +446,9 @@ defmodule AshGrant.Permission do
 
   defp normalize_scope(""), do: nil
   defp normalize_scope(scope), do: scope
+
+  defp normalize_field_group(""), do: nil
+  defp normalize_field_group(fg), do: fg
 
   # Warns when a 3-part permission format might be ambiguous.
   # For example, "blog:post123:read" could be mistaken for an instance permission
