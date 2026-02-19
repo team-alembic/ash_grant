@@ -15,6 +15,9 @@ defmodule AshGrant.Info do
   | `scopes/1` | Get all scope definitions |
   | `get_scope/2` | Get a specific scope by name |
   | `resolve_scope_filter/3` | Resolve a scope to its filter expression |
+  | `field_groups/1` | Get all field group definitions |
+  | `get_field_group/2` | Get a specific field group by name |
+  | `resolve_field_group/2` | Resolve a field group with inheritance |
   | `owner_field/1` | **Deprecated.** Use explicit scope expressions instead |
 
   ## Example
@@ -103,6 +106,17 @@ defmodule AshGrant.Info do
   end
 
   @doc """
+  Gets the default_field_policies setting.
+
+  Returns `true` if field policies should be auto-generated from field_group definitions,
+  or `false` (default) if field policies should be manually defined.
+  """
+  @spec default_field_policies(Ash.Resource.t()) :: boolean()
+  def default_field_policies(resource) do
+    Spark.Dsl.Extension.get_opt(resource, [:ash_grant], :default_field_policies, false)
+  end
+
+  @doc """
   Checks if AshGrant is configured for a resource.
   """
   @spec configured?(Ash.Resource.t()) :: boolean()
@@ -125,6 +139,24 @@ defmodule AshGrant.Info do
   @spec get_scope(Ash.Resource.t(), atom()) :: AshGrant.Dsl.Scope.t() | nil
   def get_scope(resource, name) do
     scopes(resource)
+    |> Enum.find(&(&1.name == name))
+  end
+
+  @doc """
+  Gets all field group definitions for a resource.
+  """
+  @spec field_groups(Ash.Resource.t()) :: [AshGrant.Dsl.FieldGroup.t()]
+  def field_groups(resource) do
+    Spark.Dsl.Extension.get_entities(resource, [:ash_grant])
+    |> Enum.filter(&match?(%AshGrant.Dsl.FieldGroup{}, &1))
+  end
+
+  @doc """
+  Gets a specific field group by name.
+  """
+  @spec get_field_group(Ash.Resource.t(), atom()) :: AshGrant.Dsl.FieldGroup.t() | nil
+  def get_field_group(resource, name) do
+    field_groups(resource)
     |> Enum.find(&(&1.name == name))
   end
 
@@ -170,7 +202,66 @@ defmodule AshGrant.Info do
     end
   end
 
+  @doc """
+  Resolves a field group to its complete field set including inherited fields.
+
+  Returns a map with:
+  - `:fields` - Complete list of accessible field atoms (union of own + inherited)
+  - `:masked_fields` - Map of field_name => mask_function for fields masked at THIS level only
+
+  Masking is NOT inherited. A higher-level field group sees original values
+  unless it explicitly declares its own masking.
+
+  Returns nil if the field group does not exist.
+  """
+  @spec resolve_field_group(Ash.Resource.t(), atom()) ::
+          %{fields: [atom()], masked_fields: map()} | nil
+  def resolve_field_group(resource, field_group_name) do
+    case get_field_group(resource, field_group_name) do
+      nil -> nil
+      fg -> do_resolve_field_group(resource, fg)
+    end
+  end
+
   # Private functions
+
+  defp do_resolve_field_group(resource, fg) do
+    inherited_fields =
+      case fg.inherits do
+        nil ->
+          []
+
+        [] ->
+          []
+
+        parents ->
+          parents
+          |> Enum.flat_map(fn parent_name ->
+            case resolve_field_group(resource, parent_name) do
+              nil -> []
+              resolved -> resolved.fields
+            end
+          end)
+      end
+
+    all_fields = Enum.uniq(inherited_fields ++ (fg.fields || []))
+
+    masked_fields =
+      case {fg.mask, fg.mask_with} do
+        {nil, _} ->
+          %{}
+
+        {_, nil} ->
+          %{}
+
+        {mask_fields, mask_fn} ->
+          mask_fields
+          |> Enum.filter(&(&1 in all_fields))
+          |> Map.new(&{&1, mask_fn})
+      end
+
+    %{fields: all_fields, masked_fields: masked_fields}
+  end
 
   defp derive_resource_name(resource) do
     resource

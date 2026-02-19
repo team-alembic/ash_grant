@@ -34,5 +34,8 @@ defmodule AshGrant.Test.Domain do
 
     # Instance permission read test resource
     resource(AshGrant.Test.SharedDoc)
+
+    # Field-group column-level authorization test resource
+    resource(AshGrant.Test.SensitiveRecord)
   end
 end

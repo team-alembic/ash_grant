@@ -90,4 +90,49 @@ defmodule AshGrant.FieldGroupDslTest do
       assert fg.__spark_metadata__ == %{line: 42}
     end
   end
+
+  describe "field_group in DSL" do
+    alias AshGrant.Test.SensitiveRecord
+
+    test "SensitiveRecord compiles with field_group definitions" do
+      assert Code.ensure_loaded?(SensitiveRecord)
+    end
+
+    test "field_groups/1 returns all 3 field groups" do
+      groups = AshGrant.Info.field_groups(SensitiveRecord)
+      assert length(groups) == 3
+      names = Enum.map(groups, & &1.name)
+      assert :public in names
+      assert :sensitive in names
+      assert :confidential in names
+    end
+
+    test "get_field_group/2 returns the correct field group" do
+      fg = AshGrant.Info.get_field_group(SensitiveRecord, :public)
+      assert %FieldGroup{} = fg
+      assert fg.name == :public
+      assert fg.fields == [:name, :department, :position]
+    end
+
+    test "get_field_group/2 returns nil for unknown group" do
+      assert AshGrant.Info.get_field_group(SensitiveRecord, :nonexistent) == nil
+    end
+
+    test "field group with inheritance has correct inherits value" do
+      fg = AshGrant.Info.get_field_group(SensitiveRecord, :sensitive)
+      assert fg.inherits == [:public]
+      assert fg.fields == [:phone, :address]
+    end
+
+    test "field group with nested inheritance has correct inherits value" do
+      fg = AshGrant.Info.get_field_group(SensitiveRecord, :confidential)
+      assert fg.inherits == [:sensitive]
+      assert fg.fields == [:salary, :email]
+    end
+
+    test "field group without inheritance has nil inherits" do
+      fg = AshGrant.Info.get_field_group(SensitiveRecord, :public)
+      assert fg.inherits == nil
+    end
+  end
 end

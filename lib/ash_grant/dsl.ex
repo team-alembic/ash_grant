@@ -156,6 +156,65 @@ defmodule AshGrant.Dsl do
     ]
   }
 
+  @field_group %Spark.Dsl.Entity{
+    name: :field_group,
+    describe: """
+    Defines a named field group for column-level read authorization.
+
+    Field groups control which fields are visible to actors based on their permissions.
+    The 5th part of the permission string references a field group name:
+    `resource:instance:action:scope:field_group`
+
+    ## Examples
+
+        # Root group — no inheritance
+        field_group :public, [:name, :department, :position]
+
+        # Inherits from :public, adds more fields
+        field_group :sensitive, [:public], [:phone, :address]
+
+        # With masking
+        field_group :sensitive, [:public], [:phone, :address] do
+          mask [:phone, :address], with: &MyApp.Masker.mask/2
+        end
+    """,
+    examples: [
+      "field_group :public, [:name, :department]",
+      "field_group :sensitive, [:public], [:phone, :address]"
+    ],
+    target: AshGrant.Dsl.FieldGroup,
+    args: [:name, {:optional, :inherits}, :fields],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "The name of the field group"
+      ],
+      inherits: [
+        type: {:list, :atom},
+        doc: "List of parent field groups to inherit from"
+      ],
+      fields: [
+        type: {:list, :atom},
+        required: true,
+        doc: "List of field atoms accessible at this level"
+      ],
+      mask: [
+        type: {:list, :atom},
+        doc: "List of fields to mask at this level"
+      ],
+      mask_with: [
+        type: {:fun, 2},
+        doc: "2-arity masking function: (value, field_name) -> masked_value"
+      ],
+      description: [
+        type: :string,
+        required: false,
+        doc: "Human-readable description of this field group"
+      ]
+    ]
+  }
+
   @ash_grant %Spark.Dsl.Section{
     name: :ash_grant,
     top_level?: false,
@@ -178,7 +237,7 @@ defmodule AshGrant.Dsl do
       end
       """
     ],
-    entities: [@scope],
+    entities: [@scope, @field_group],
     schema: [
       resolver: [
         type: {:or, [{:behaviour, AshGrant.PermissionResolver}, {:fun, 2}]},
@@ -250,6 +309,19 @@ defmodule AshGrant.Dsl do
 
         Note: When using `default_policies`, you should still add
         `authorizers: [Ash.Policy.Authorizer]` to your resource options.
+        """
+      ],
+      default_field_policies: [
+        type: :boolean,
+        default: false,
+        doc: """
+        Automatically generate Ash `field_policies` from `field_group` definitions.
+
+        When `true`, AshGrant generates field policies that use `AshGrant.FieldCheck`
+        to authorize field access based on the 5th part of permission strings.
+
+        When `false` (default), you can manually write `field_policies` using
+        `AshGrant.field_check/1` (Mode A).
         """
       ]
     ]
