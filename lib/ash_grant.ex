@@ -280,7 +280,9 @@ defmodule AshGrant do
     sections: AshGrant.Dsl.sections(),
     transformers: [
       AshGrant.Transformers.ValidateScopes,
-      AshGrant.Transformers.AddDefaultPolicies
+      AshGrant.Transformers.ValidateFieldGroups,
+      AshGrant.Transformers.AddDefaultPolicies,
+      AshGrant.Transformers.AddFieldPolicies
     ]
 
   @doc """
@@ -327,6 +329,24 @@ defmodule AshGrant do
 
   """
   defdelegate filter_check(opts \\ []), to: AshGrant.FilterCheck
+
+  @doc """
+  Creates a field check for use in Ash's `field_policies`.
+
+  The check passes if the actor's permission includes the specified field group
+  or a field group that inherits from it. If the actor's permissions use the
+  4-part format (no field_group), all fields are visible.
+
+  ## Example
+
+      field_policies do
+        field_policy [:salary, :ssn] do
+          authorize_if AshGrant.field_check(:confidential)
+        end
+      end
+
+  """
+  defdelegate field_check(field_group), to: AshGrant.FieldCheck
 
   @doc """
   Explains an authorization decision for debugging.
