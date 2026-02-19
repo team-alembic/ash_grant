@@ -3,11 +3,12 @@
 Permission-based authorization extension for [Ash Framework](https://ash-hq.org/).
 
 AshGrant connects three Ash-native concepts — **resources**, **actions**, and
-**`expr()` scopes** — through a permission string (`[!]resource:instance_id:action:scope`).
+**`expr()` scopes** — through a permission string (`[!]resource:instance_id:action:scope[:field_group]`).
 Permissions resolve to native Ash filters and policy checks, with deny-wins semantics.
 
 **Authorization:**
 - **Scope DSL** with `expr()` — row-level filters, scope inheritance, `^tenant()` support
+- **Field groups** — column-level read access with inheritance and masking
 - **Instance permissions** — per-record sharing with optional scope conditions
 - **Deny-wins evaluation** — deny rules always override allows
 
@@ -252,10 +253,10 @@ end
 
 ## Permission Format
 
-### Unified 4-Part Format (Apache Shiro-Inspired)
+### Permission String Format (Apache Shiro-Inspired)
 
 ```
-[!]resource:instance_id:action:scope
+[!]resource:instance_id:action:scope[:field_group]
 ```
 
 | Component | Description | Examples |
@@ -265,6 +266,10 @@ end
 | instance_id | Resource instance or `*` | `*`, `post_abc123xyz789ab` |
 | action | Action name or wildcard | `read`, `*`, `read*` |
 | scope | Access scope | `all`, `own`, `published`, or empty |
+| field_group | Optional column-level group | `public`, `sensitive`, `confidential` |
+
+The 5th part (`field_group`) is optional. When omitted (4-part format), all fields are visible.
+When present, only fields in the named group (and its inherited parents) are accessible.
 
 ### Wildcard Matching Rules
 
@@ -667,6 +672,122 @@ ash_grant do
 end
 ```
 
+## Field-Level Permissions
+
+AshGrant supports column-level read authorization through **field groups**. Field groups control which fields are visible based on the actor's permissions, using Ash's native `field_policies` system.
+
+### Field Group DSL
+
+Define field groups with optional inheritance:
+
+```elixir
+ash_grant do
+  resolver MyApp.PermissionResolver
+
+  scope :all, true
+
+  # Root group — no inheritance
+  field_group :public, [:name, :department, :position]
+
+  # Inherits all fields from :public, adds phone and address
+  field_group :sensitive, [:public], [:phone, :address]
+
+  # Inherits all fields from :sensitive (which includes :public)
+  field_group :confidential, [:sensitive], [:salary, :email]
+end
+```
+
+### Permission Strings with Field Groups
+
+The 5th part of the permission string specifies the field group:
+
+```elixir
+"employee:*:read:all:public"         # See name, department, position only
+"employee:*:read:all:sensitive"      # See public + phone, address
+"employee:*:read:all:confidential"   # See all fields
+"employee:*:read:all"               # No field_group → all fields visible
+```
+
+Fields not in the actor's field group are replaced with `%Ash.ForbiddenField{}`.
+
+### Mode A: Manual Field Policies
+
+Write Ash `field_policies` using `AshGrant.field_check/1`:
+
+```elixir
+field_policies do
+  field_policy [:salary, :email] do
+    authorize_if AshGrant.field_check(:confidential)
+  end
+
+  field_policy [:phone, :address] do
+    authorize_if AshGrant.field_check(:sensitive)
+  end
+
+  field_policy :* do
+    authorize_if always()
+  end
+end
+```
+
+### Mode B: Auto-Generated Field Policies
+
+Set `default_field_policies: true` to auto-generate field policies from field group definitions:
+
+```elixir
+ash_grant do
+  resolver MyApp.PermissionResolver
+  default_policies true
+  default_field_policies true  # Auto-generates field_policies from field_groups
+
+  scope :all, true
+
+  field_group :public, [:name, :department, :position]
+  field_group :sensitive, [:public], [:phone, :address]
+  field_group :confidential, [:sensitive], [:salary, :email]
+end
+```
+
+This auto-generates equivalent field policies with a catch-all `field_policy :*` that allows non-grouped fields.
+
+### Field Group Inheritance
+
+Inheritance follows a DAG (directed acyclic graph) — a child group includes all parent fields:
+
+```
+:public       → [:name, :department, :position]
+:sensitive    → [:name, :department, :position, :phone, :address]
+:confidential → [:name, :department, :position, :phone, :address, :salary, :email]
+```
+
+An actor with `confidential` permission can see everything that `sensitive` and `public` can see, plus their own fields.
+
+### Field Masking
+
+Instead of hiding fields entirely, you can show masked values:
+
+```elixir
+field_group :sensitive, [:public], [:phone, :address],
+  mask: [:phone, :address],
+  mask_with: fn value, _field ->
+    if is_binary(value), do: String.replace(value, ~r/./, "*"), else: "***"
+  end
+```
+
+**Masking rules:**
+- Masking is **not inherited** — a higher-level group sees original values
+- **Allow-wins**: if an actor has both a masking group and a non-masking group for the same field, the field is unmasked
+- Actors with 4-part permissions (no field_group) see all fields unmasked
+
+**Example behavior:**
+
+| Actor Permission | phone | salary |
+|-----------------|-------|--------|
+| `...:public` | `%Ash.ForbiddenField{}` | `%Ash.ForbiddenField{}` |
+| `...:sensitive` (with masking) | `"*************"` | `%Ash.ForbiddenField{}` |
+| `...:confidential` | `"010-1234-5678"` | `80000` |
+| `...` (4-part, no field_group) | `"010-1234-5678"` | `80000` |
+
 ## Check Types
 
 ### `filter_check/1` - For Read Actions
@@ -707,6 +828,7 @@ end
 |--------|------|-------------|
 | `resolver` | module or function | **Required.** Resolves permissions for actors |
 | `default_policies` | boolean or atom | Auto-generate policies: `true`, `:all`, `:read`, or `:write` |
+| `default_field_policies` | boolean | Auto-generate `field_policies` from `field_group` definitions |
 | `resource_name` | string | Resource name for permission matching. Default: derived from module name (last segment, snake_cased). `MyApp.Blog.Post` → `"post"`, `MyApp.CustomerOrder` → `"customer_order"` |
 
 ### Default Policies Options
@@ -798,14 +920,14 @@ end
 ```
                     Ash Policy Check
                           |
-            +-------------+-------------+
-            |                           |
-      +-----v-----+              +------v------+
-      |  Check    |              | FilterCheck |
-      | (writes)  |              |  (reads)    |
-      +-----+-----+              +------+------+
-            |                           |
-            +-----------+---------------+
+            +-------------+-------------+-------------+
+            |                           |             |
+      +-----v-----+              +------v------+  +--v----------+
+      |  Check    |              | FilterCheck |  | FieldCheck  |
+      | (writes)  |              |  (reads)    |  | (fields)    |
+      +-----+-----+              +------+------+  +--+----------+
+            |                           |             |
+            +-----------+---------------+-------------+
                         |
             +-----------v-----------+
             | PermissionResolver    |
@@ -818,8 +940,8 @@ end
             +-----------+-----------+
                         |
             +-----------v-----------+
-            | Scope DSL / Resolver  |
-            | (scope -> filter)     |
+            | Scope DSL / Field     |
+            | Groups / Resolver     |
             +-----------------------+
 ```
 
@@ -1168,19 +1290,20 @@ end
 
 | Module | Description |
 |--------|-------------|
-| `AshGrant` | Main extension module with `check/1`, `filter_check/1`, and `explain/4` |
+| `AshGrant` | Main extension module with `check/1`, `filter_check/1`, `field_check/1`, and `explain/4` |
 | `AshGrant.Introspect` | Runtime permission introspection for UIs and APIs |
 | `AshGrant.Explanation` | Authorization decision explanation struct |
 | `AshGrant.Explainer` | Builds detailed authorization explanations |
-| `AshGrant.Permission` | Permission parsing and matching |
+| `AshGrant.Permission` | Permission parsing and matching (4-part and 5-part formats) |
 | `AshGrant.PermissionInput` | Permission input with metadata for debugging |
 | `AshGrant.Permissionable` | Protocol for converting custom structs to permissions |
-| `AshGrant.Evaluator` | Deny-wins permission evaluation |
+| `AshGrant.Evaluator` | Deny-wins permission evaluation with field group support |
 | `AshGrant.PermissionResolver` | Behaviour for resolving permissions |
 | `AshGrant.ScopeResolver` | Behaviour for scope resolution (legacy) |
 | `AshGrant.Check` | SimpleCheck for write actions (with SAT solver callbacks) |
 | `AshGrant.FilterCheck` | FilterCheck for read actions (with SAT solver callbacks) |
-| `AshGrant.Info` | DSL introspection helpers |
+| `AshGrant.FieldCheck` | SimpleCheck for field-level authorization in `field_policies` |
+| `AshGrant.Info` | DSL introspection helpers (scopes, field groups, configuration) |
 | `AshGrant.PolicyTest` | Policy configuration testing DSL |
 | `AshGrant.PolicyTest.Runner` | Test runner for policy tests |
 | `AshGrant.PolicyExport` | Export policies to various formats |
@@ -1195,8 +1318,9 @@ mix test
 
 The test suite covers:
 
-- **Permission parsing** - All format variants and edge cases
+- **Permission parsing** - All format variants (4-part and 5-part) and edge cases
 - **Evaluator** - Deny-wins semantics with property-based tests
+- **Field groups** - Column-level authorization, inheritance, masking, integration
 - **DB Integration** - Real database queries with scope filtering
 - **Business scenarios** - 8 different authorization patterns:
   - Status-based workflow (Document)
