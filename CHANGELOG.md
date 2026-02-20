@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-02-19
+
+### Added
+
+- **Field-Level Permissions**: Column-level read authorization via field groups
+  - `field_group` DSL entity with inheritance (DAG-based) and masking support
+  - 5-part permission format: `resource:instance:action:scope:field_group` (backward compatible with 4-part)
+  - `AshGrant.FieldCheck` - SimpleCheck for Ash `field_policies` integration
+  - `AshGrant.field_check/1` - Public API for use in manual `field_policies` (Mode A)
+  - `default_field_policies: true` - Auto-generate `field_policies` from `field_group` definitions (Mode B)
+  - Field group inheritance: child groups include all parent fields
+  - Field masking with allow-wins semantics via `mask` and `mask_with` options
+
+- **New Modules**:
+  - `AshGrant.Dsl.FieldGroup` - Struct and DSL entity for field group definitions
+  - `AshGrant.FieldCheck` - SimpleCheck for field-level authorization
+  - `AshGrant.Preparations.ApplyMasking` - Runtime masking via `after_action` hook
+  - `AshGrant.Transformers.AddFieldPolicies` - Auto-generates `field_policies` from field groups
+  - `AshGrant.Transformers.AddMaskingPreparation` - Auto-registers masking preparation
+  - `AshGrant.Transformers.ValidateFieldGroups` - Compile-time validation (duplicates, cycles, missing parents)
+
+- **New Evaluator Functions**:
+  - `get_field_group/3` - Get first matching field group from permissions
+  - `get_all_field_groups/3` - Get all matching field groups (union for field access)
+
+- **New Info Functions**:
+  - `field_groups/1` - Get all field group definitions for a resource
+  - `get_field_group/2` - Get a specific field group by name
+  - `resolve_field_group/2` - Resolve a field group with inheritance
+  - `default_field_policies/1` - Get the `default_field_policies` setting
+  - `fetch_permissions/3` - Shared permission resolution helper
+
+- **Introspect Updates**: `actor_permissions`, `available_permissions`, `can?`, and `allowed_actions` now include `field_groups` / `field_group` in their responses
+
+- **Explainer & PolicyExport**: Field group information in `explain/4` output, Markdown tables, and Mermaid diagrams
+
+### Changed
+
+- **Permission format**: Extended from 4-part to optional 5-part with `field_group`
+- **Transformer ordering**: `ValidateFieldGroups` now explicitly runs before `AddFieldPolicies` and `AddMaskingPreparation`
+
 ## [0.5.0] - 2026-01-21
 
 ### Added
@@ -254,6 +295,8 @@ end
 | `AshGrant.Check` | SimpleCheck for write actions |
 | `AshGrant.FilterCheck` | FilterCheck for read actions |
 
+[0.6.0]: https://github.com/jhlee111/ash_grant/releases/tag/v0.6.0
+[0.5.0]: https://github.com/jhlee111/ash_grant/releases/tag/v0.5.0
 [0.4.1]: https://github.com/jhlee111/ash_grant/releases/tag/v0.4.1
 [0.4.0]: https://github.com/jhlee111/ash_grant/releases/tag/v0.4.0
 [0.3.1]: https://github.com/jhlee111/ash_grant/releases/tag/v0.3.1
