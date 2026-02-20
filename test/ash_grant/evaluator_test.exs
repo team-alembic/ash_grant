@@ -237,6 +237,189 @@ defmodule AshGrant.EvaluatorTest do
     end
   end
 
+  describe "field group evaluation" do
+    test "get_field_group returns field group from matching permission" do
+      permissions = ["employee:*:read:all:sensitive"]
+      assert Evaluator.get_field_group(permissions, "employee", "read") == "sensitive"
+    end
+
+    test "get_field_group returns nil when no field_group in permission" do
+      permissions = ["employee:*:read:all"]
+      assert Evaluator.get_field_group(permissions, "employee", "read") == nil
+    end
+
+    test "get_field_group returns nil when denied" do
+      permissions = ["employee:*:read:all:sensitive", "!employee:*:read:all"]
+      assert Evaluator.get_field_group(permissions, "employee", "read") == nil
+    end
+
+    test "get_field_group returns nil when no matching permission" do
+      permissions = ["employee:*:read:all:sensitive"]
+      assert Evaluator.get_field_group(permissions, "employee", "write") == nil
+    end
+
+    test "get_all_field_groups returns all field groups from matching permissions" do
+      permissions = ["employee:*:read:all:sensitive", "employee:*:read:all:billing"]
+
+      assert Evaluator.get_all_field_groups(permissions, "employee", "read") == [
+               "sensitive",
+               "billing"
+             ]
+    end
+
+    test "get_all_field_groups returns empty when denied" do
+      permissions = ["employee:*:read:all:sensitive", "!employee:*:read:all"]
+      assert Evaluator.get_all_field_groups(permissions, "employee", "read") == []
+    end
+
+    test "get_all_field_groups deduplicates" do
+      permissions = [
+        "employee:*:read:all:sensitive",
+        "employee:*:read:own:sensitive"
+      ]
+
+      assert Evaluator.get_all_field_groups(permissions, "employee", "read") == ["sensitive"]
+    end
+
+    test "get_all_field_groups returns empty when no matching permissions" do
+      permissions = ["employee:*:read:all:sensitive"]
+      assert Evaluator.get_all_field_groups(permissions, "employee", "write") == []
+    end
+
+    test "get_all_field_groups ignores permissions without field_group" do
+      permissions = [
+        "employee:*:read:all:sensitive",
+        "employee:*:read:own"
+      ]
+
+      assert Evaluator.get_all_field_groups(permissions, "employee", "read") == ["sensitive"]
+    end
+  end
+
+  describe "5-part with deny field_group" do
+    test "5-part deny blocks access even when field_group matches" do
+      permissions = [
+        "employee:*:read:all:sensitive",
+        "!employee:*:read:all:sensitive"
+      ]
+
+      refute Evaluator.has_access?(permissions, "employee", "read")
+      assert Evaluator.get_field_group(permissions, "employee", "read") == nil
+      assert Evaluator.get_all_field_groups(permissions, "employee", "read") == []
+    end
+
+    test "5-part deny on specific field_group blocks that field_group" do
+      # Deny with field_group still matches resource:action, so deny-wins blocks everything
+      permissions = [
+        "employee:*:read:all:billing",
+        "!employee:*:read:all:sensitive"
+      ]
+
+      # deny-wins: the deny matches resource+action, so all access is denied
+      refute Evaluator.has_access?(permissions, "employee", "read")
+    end
+
+    test "5-part deny does not affect different resource" do
+      permissions = [
+        "employee:*:read:all:sensitive",
+        "!blog:*:read:all:sensitive"
+      ]
+
+      assert Evaluator.has_access?(permissions, "employee", "read")
+      assert Evaluator.get_field_group(permissions, "employee", "read") == "sensitive"
+    end
+
+    test "5-part deny does not affect different action" do
+      permissions = [
+        "employee:*:read:all:sensitive",
+        "!employee:*:write:all:sensitive"
+      ]
+
+      assert Evaluator.has_access?(permissions, "employee", "read")
+      assert Evaluator.get_field_group(permissions, "employee", "read") == "sensitive"
+    end
+  end
+
+  describe "5-part with wildcards" do
+    test "5-part with action wildcard grants access" do
+      permissions = ["employee:*:*:all:sensitive"]
+      assert Evaluator.has_access?(permissions, "employee", "read")
+      assert Evaluator.has_access?(permissions, "employee", "write")
+      assert Evaluator.get_field_group(permissions, "employee", "read") == "sensitive"
+    end
+
+    test "5-part with action prefix wildcard grants access" do
+      permissions = ["employee:*:read*:all:sensitive"]
+      assert Evaluator.has_access?(permissions, "employee", "read")
+      assert Evaluator.has_access?(permissions, "employee", "read_all")
+      refute Evaluator.has_access?(permissions, "employee", "write")
+      assert Evaluator.get_field_group(permissions, "employee", "read") == "sensitive"
+    end
+
+    test "5-part with resource wildcard grants access" do
+      permissions = ["*:*:read:all:sensitive"]
+      assert Evaluator.has_access?(permissions, "employee", "read")
+      assert Evaluator.has_access?(permissions, "blog", "read")
+      assert Evaluator.get_field_group(permissions, "employee", "read") == "sensitive"
+    end
+
+    test "deny 5-part with action wildcard blocks specific actions" do
+      permissions = [
+        "employee:*:*:all:sensitive",
+        "!employee:*:delete:all:sensitive"
+      ]
+
+      assert Evaluator.has_access?(permissions, "employee", "read")
+      refute Evaluator.has_access?(permissions, "employee", "delete")
+    end
+  end
+
+  describe "5-part instance permissions in evaluator" do
+    test "5-part instance permission grants access" do
+      permissions = ["employee:emp_123:read:draft:sensitive"]
+      assert Evaluator.has_instance_access?(permissions, "emp_123", "read")
+    end
+
+    test "5-part instance permission denies different instance" do
+      permissions = ["employee:emp_123:read:draft:sensitive"]
+      refute Evaluator.has_instance_access?(permissions, "emp_456", "read")
+    end
+
+    test "5-part instance deny blocks instance access" do
+      permissions = [
+        "employee:emp_123:read::sensitive",
+        "!employee:emp_123:read:"
+      ]
+
+      refute Evaluator.has_instance_access?(permissions, "emp_123", "read")
+    end
+
+    test "get_instance_scope works with 5-part" do
+      permissions = ["employee:emp_123:read:draft:sensitive"]
+      assert Evaluator.get_instance_scope(permissions, "emp_123", "read") == "draft"
+    end
+
+    test "get_instance_scope returns nil when 5-part instance is denied" do
+      permissions = [
+        "employee:emp_123:read:draft:sensitive",
+        "!employee:emp_123:read:draft"
+      ]
+
+      assert Evaluator.get_instance_scope(permissions, "emp_123", "read") == nil
+    end
+
+    test "get_all_instance_scopes works with 5-part" do
+      permissions = [
+        "employee:emp_123:read:draft:sensitive",
+        "employee:emp_123:read:pending:billing"
+      ]
+
+      scopes = Evaluator.get_all_instance_scopes(permissions, "emp_123", "read")
+      assert "draft" in scopes
+      assert "pending" in scopes
+    end
+  end
+
   describe "combine/1" do
     test "combines multiple permission lists" do
       role_perms = ["blog:*:read:all"]

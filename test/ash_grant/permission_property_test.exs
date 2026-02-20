@@ -46,6 +46,16 @@ defmodule AshGrant.PermissionPropertyTest do
     ])
   end
 
+  defp field_group_gen do
+    one_of([
+      constant(nil),
+      constant("public"),
+      constant("sensitive"),
+      constant("confidential"),
+      string(:alphanumeric, min_length: 1, max_length: 10) |> map(&String.downcase/1)
+    ])
+  end
+
   defp deny_gen do
     boolean()
   end
@@ -56,6 +66,7 @@ defmodule AshGrant.PermissionPropertyTest do
           instance_id <- instance_id_gen(),
           action <- action_gen(),
           scope <- scope_gen(),
+          field_group <- field_group_gen(),
           deny <- deny_gen()
         ) do
       %Permission{
@@ -63,6 +74,7 @@ defmodule AshGrant.PermissionPropertyTest do
         instance_id: instance_id,
         action: action,
         scope: scope,
+        field_group: field_group,
         deny: deny
       }
     end
@@ -81,6 +93,7 @@ defmodule AshGrant.PermissionPropertyTest do
         assert parsed.instance_id == (perm.instance_id || "*")
         assert parsed.action == perm.action
         assert parsed.scope == perm.scope
+        assert parsed.field_group == perm.field_group
         assert parsed.deny == perm.deny
       end
     end
@@ -96,6 +109,7 @@ defmodule AshGrant.PermissionPropertyTest do
         assert parsed1.instance_id == parsed2.instance_id
         assert parsed1.action == parsed2.action
         assert parsed1.scope == parsed2.scope
+        assert parsed1.field_group == parsed2.field_group
         assert parsed1.deny == parsed2.deny
       end
     end

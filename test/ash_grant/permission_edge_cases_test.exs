@@ -11,11 +11,17 @@ defmodule AshGrant.PermissionEdgeCasesTest do
 
   describe "parse/1 - edge cases" do
     test "handles colons in instance_id (UUID format)" do
-      # Some systems might have IDs with special chars
-      # Currently our format doesn't support this, so it should handle gracefully
+      # 5-part format is now valid: resource:instance_id:action:scope:field_group
       result = Permission.parse("blog:abc:def:read:all")
-      # 5 parts - should fail or handle gracefully
-      assert {:error, _} = result
+      assert {:ok, perm} = result
+      assert perm.resource == "blog"
+      assert perm.instance_id == "abc"
+      assert perm.action == "def"
+      assert perm.scope == "read"
+      assert perm.field_group == "all"
+
+      # 6 parts should still fail
+      assert {:error, _} = Permission.parse("a:b:c:d:e:f")
     end
 
     test "handles empty parts" do

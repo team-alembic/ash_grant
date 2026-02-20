@@ -69,7 +69,8 @@ defmodule AshGrant.Explainer do
           description: input.description,
           source: input.source,
           scope_name: scope_name,
-          scope_description: scope_description
+          scope_description: scope_description,
+          field_group: perm.field_group
         }
       end)
 
@@ -113,6 +114,16 @@ defmodule AshGrant.Explainer do
         nil
       end
 
+    # Get field groups from matching permissions
+    field_groups =
+      matching_allows
+      |> Enum.map(& &1[:field_group])
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+
+    # Get field group definitions from resource DSL
+    field_group_defs = Info.field_groups(resource)
+
     %Explanation{
       resource: resource,
       action: action,
@@ -122,7 +133,9 @@ defmodule AshGrant.Explainer do
       reason: reason,
       matching_permissions: matching_allows,
       evaluated_permissions: evaluated,
-      scope_filter: scope_filter
+      scope_filter: scope_filter,
+      field_groups: field_groups,
+      field_group_defs: field_group_defs
     }
   end
 

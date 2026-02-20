@@ -31,6 +31,15 @@ defmodule AshGrant.EvaluatorPropertyTest do
     |> map(fn {prefix, suffix} -> "#{prefix}_#{suffix}" end)
   end
 
+  defp field_group_gen do
+    one_of([
+      constant("public"),
+      constant("sensitive"),
+      constant("confidential"),
+      string(:alphanumeric, min_length: 1, max_length: 10) |> map(&String.downcase/1)
+    ])
+  end
+
   # Property Tests
 
   describe "has_access?/3 deny-wins semantics" do
@@ -249,6 +258,98 @@ defmodule AshGrant.EvaluatorPropertyTest do
         action = "#{prefix}#{suffix}"
 
         assert Evaluator.has_access?(permissions, resource, action)
+      end
+    end
+  end
+
+  describe "5-part field_group evaluation" do
+    property "get_field_group returns field_group from 5-part permission" do
+      check all(
+              resource <- resource_gen(),
+              action <- action_gen(),
+              scope <- scope_gen(),
+              field_group <- field_group_gen()
+            ) do
+        permissions = ["#{resource}:*:#{action}:#{scope}:#{field_group}"]
+        assert Evaluator.get_field_group(permissions, resource, action) == field_group
+      end
+    end
+
+    property "get_field_group returns nil for 4-part permission" do
+      check all(
+              resource <- resource_gen(),
+              action <- action_gen(),
+              scope <- scope_gen()
+            ) do
+        permissions = ["#{resource}:*:#{action}:#{scope}"]
+        assert Evaluator.get_field_group(permissions, resource, action) == nil
+      end
+    end
+
+    property "5-part deny blocks get_all_field_groups" do
+      check all(
+              resource <- resource_gen(),
+              action <- action_gen(),
+              scope <- scope_gen(),
+              field_group <- field_group_gen()
+            ) do
+        permissions = [
+          "#{resource}:*:#{action}:#{scope}:#{field_group}",
+          "!#{resource}:*:#{action}:all"
+        ]
+
+        assert Evaluator.get_all_field_groups(permissions, resource, action) == []
+      end
+    end
+
+    property "get_all_field_groups returns unique groups" do
+      check all(
+              resource <- resource_gen(),
+              action <- action_gen(),
+              scope <- scope_gen(),
+              fg1 <- field_group_gen(),
+              fg2 <- field_group_gen() |> filter(&(&1 != fg1))
+            ) do
+        permissions = [
+          "#{resource}:*:#{action}:#{scope}:#{fg1}",
+          "#{resource}:*:#{action}:#{scope}:#{fg2}"
+        ]
+
+        groups = Evaluator.get_all_field_groups(permissions, resource, action)
+        assert fg1 in groups
+        assert fg2 in groups
+        assert groups == Enum.uniq(groups)
+      end
+    end
+
+    property "5-part has_access? works like 4-part (field_group is ignored for access)" do
+      check all(
+              resource <- resource_gen(),
+              action <- action_gen(),
+              scope <- scope_gen(),
+              field_group <- field_group_gen()
+            ) do
+        perm_5 = ["#{resource}:*:#{action}:#{scope}:#{field_group}"]
+        perm_4 = ["#{resource}:*:#{action}:#{scope}"]
+
+        assert Evaluator.has_access?(perm_5, resource, action) ==
+                 Evaluator.has_access?(perm_4, resource, action)
+      end
+    end
+
+    property "5-part deny-wins blocks access" do
+      check all(
+              resource <- resource_gen(),
+              action <- action_gen(),
+              scope <- scope_gen(),
+              field_group <- field_group_gen()
+            ) do
+        permissions = [
+          "#{resource}:*:#{action}:#{scope}:#{field_group}",
+          "!#{resource}:*:#{action}:#{scope}:#{field_group}"
+        ]
+
+        refute Evaluator.has_access?(permissions, resource, action)
       end
     end
   end

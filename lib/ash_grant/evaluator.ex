@@ -31,9 +31,10 @@ defmodule AshGrant.Evaluator do
 
   The evaluator accepts permissions in multiple formats:
 
-  - **Strings**: `"blog:read:all"`, `"!blog:delete:all"`
+  - **Strings**: `"blog:*:read:all"`, `"!blog:*:delete:all"`, `"employee:*:read:all:sensitive"` (5-part)
   - **Permission structs**: `%AshGrant.Permission{...}`
-  - **Maps**: `%{resource: "blog", action: "read", scope: "all", deny: false}`
+  - **PermissionInput structs**: `%AshGrant.PermissionInput{string: "blog:*:read:all", ...}`
+  - **Custom structs**: Any struct implementing the `AshGrant.Permissionable` protocol
 
   All formats are automatically normalized internally.
 
@@ -107,8 +108,11 @@ defmodule AshGrant.Evaluator do
   | `has_instance_access?/3` | Check if actor can perform action on specific instance |
   | `get_scope/3` | Get first matching scope (for SimpleCheck) |
   | `get_all_scopes/3` | Get all matching scopes (for FilterCheck) |
+  | `get_field_group/3` | Get first matching field group from 5-part permissions |
+  | `get_all_field_groups/3` | Get all matching field groups (union for field access) |
   | `get_instance_scope/3` | Get scope from instance permission (for ABAC conditions) |
   | `get_all_instance_scopes/3` | Get all scopes from instance permissions |
+  | `get_matching_instance_ids/3` | Get all instance IDs for a resource/action |
   | `find_matching/3` | Get all matching permissions (debug/introspection) |
   | `combine/1` | Merge multiple permission lists |
   """
@@ -352,6 +356,86 @@ defmodule AshGrant.Evaluator do
         not Permission.deny?(perm) and Permission.matches?(perm, resource, action)
       end)
       |> Enum.map(& &1.scope)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+    end
+  end
+
+  @doc """
+  Gets the field group from the first matching permission.
+
+  Returns the field_group string from the first matching allow permission.
+  Returns nil if no matching permission, if denied, or if no field_group is set.
+
+  ## Examples
+
+      iex> permissions = ["employee:*:read:all:sensitive"]
+      iex> AshGrant.Evaluator.get_field_group(permissions, "employee", "read")
+      "sensitive"
+
+      iex> permissions = ["employee:*:read:all"]
+      iex> AshGrant.Evaluator.get_field_group(permissions, "employee", "read")
+      nil
+
+  """
+  @spec get_field_group(permissions(), String.t(), String.t()) :: String.t() | nil
+  def get_field_group(permissions, resource, action) do
+    permissions = normalize_permissions(permissions)
+
+    has_deny =
+      Enum.any?(permissions, fn perm ->
+        Permission.deny?(perm) and Permission.matches?(perm, resource, action)
+      end)
+
+    if has_deny do
+      nil
+    else
+      permissions
+      |> Enum.find(fn perm ->
+        not Permission.deny?(perm) and Permission.matches?(perm, resource, action)
+      end)
+      |> case do
+        nil -> nil
+        perm -> perm.field_group
+      end
+    end
+  end
+
+  @doc """
+  Gets all field groups from matching permissions.
+
+  Returns a deduplicated list of field group names from all matching allow permissions.
+  When an actor has multiple permissions with different field groups, these are merged
+  as a union to determine the combined set of accessible fields.
+
+  ## Examples
+
+      iex> permissions = ["employee:*:read:all:sensitive", "employee:*:read:all:billing"]
+      iex> AshGrant.Evaluator.get_all_field_groups(permissions, "employee", "read")
+      ["sensitive", "billing"]
+
+      iex> permissions = ["employee:*:read:all:sensitive", "!employee:*:read:all"]
+      iex> AshGrant.Evaluator.get_all_field_groups(permissions, "employee", "read")
+      []
+
+  """
+  @spec get_all_field_groups(permissions(), String.t(), String.t()) :: [String.t()]
+  def get_all_field_groups(permissions, resource, action) do
+    permissions = normalize_permissions(permissions)
+
+    has_deny =
+      Enum.any?(permissions, fn perm ->
+        Permission.deny?(perm) and Permission.matches?(perm, resource, action)
+      end)
+
+    if has_deny do
+      []
+    else
+      permissions
+      |> Enum.filter(fn perm ->
+        not Permission.deny?(perm) and Permission.matches?(perm, resource, action)
+      end)
+      |> Enum.map(& &1.field_group)
       |> Enum.reject(&is_nil/1)
       |> Enum.uniq()
     end
