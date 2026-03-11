@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-03-11
+
 ### Added
 
 - **Dual read/write scope (`write:` option)**: Scopes can now provide a separate expression for write actions via the `write:` option. This solves the authorization bypass where `exists()` and dot-path scopes were silently replaced with `true` during in-memory evaluation for write actions. (#26)

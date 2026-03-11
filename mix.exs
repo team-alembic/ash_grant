@@ -1,7 +1,7 @@
 defmodule AshGrant.MixProject do
   use Mix.Project
 
-  @version "0.6.1"
+  @version "0.7.0"
   @source_url "https://github.com/jhlee111/ash_grant"
 
   def project do
@@ -71,7 +71,7 @@ defmodule AshGrant.MixProject do
       links: %{
         "GitHub" => @source_url
       },
-      files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md)
+      files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md usage-rules.md)
     ]
   end
 
