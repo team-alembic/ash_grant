@@ -14,6 +14,7 @@ defmodule AshGrant.Test.BulkItem do
   | :own | author_id == ^actor(:id) |
   | :team_member | exists(team.memberships, user_id == ^actor(:id)) |
   | :own_in_team | author_id == ^actor(:id) AND exists(team.memberships, ...) |
+  | :named_team | team.name == ^actor(:team_name) (dot-path) |
   """
   use Ash.Resource,
     domain: AshGrant.Test.Domain,
@@ -47,6 +48,8 @@ defmodule AshGrant.Test.BulkItem do
       [],
       expr(author_id == ^actor(:id) and exists(team.memberships, user_id == ^actor(:id)))
     )
+
+    scope(:named_team, [], expr(team.name == ^actor(:team_name)))
   end
 
   attributes do

@@ -375,4 +375,108 @@ defmodule AshGrant.DbQueryWriteTest do
       assert updated.title == "Updated"
     end
   end
+
+  # ============================================================
+  # DB query fallback for dot-path expressions (Ash.Query.Call)
+  # ============================================================
+
+  describe "DB query fallback for dot-path expressions" do
+    test "update with dot-path scope and matching team name succeeds" do
+      actor_id = Ash.UUID.generate()
+
+      actor =
+        actor_with_perms(["item:*:update:named_team", "item:*:read:all"], actor_id)
+        |> Map.put(:team_name, "Alpha")
+
+      team = create_team!("Alpha")
+      item = create_item!(%{title: "Dot Path Item", author_id: actor_id, team_id: team.id})
+
+      result =
+        item
+        |> Ash.Changeset.for_update(:update, %{title: "Updated"})
+        |> Ash.update(actor: actor)
+
+      assert {:ok, updated} = result
+      assert updated.title == "Updated"
+    end
+
+    test "update with dot-path scope and non-matching team name is forbidden" do
+      actor_id = Ash.UUID.generate()
+
+      actor =
+        actor_with_perms(["item:*:update:named_team", "item:*:read:all"], actor_id)
+        |> Map.put(:team_name, "Beta")
+
+      team = create_team!("Alpha")
+      item = create_item!(%{title: "Dot Path Item", author_id: actor_id, team_id: team.id})
+
+      result =
+        item
+        |> Ash.Changeset.for_update(:update, %{title: "Should Fail"})
+        |> Ash.update(actor: actor)
+
+      assert {:error, %Ash.Error.Forbidden{}} = result
+    end
+
+    test "create with dot-path scope and matching team name succeeds" do
+      actor_id = Ash.UUID.generate()
+
+      actor =
+        actor_with_perms(["item:*:create:named_team"], actor_id)
+        |> Map.put(:team_name, "Gamma")
+
+      team = create_team!("Gamma")
+
+      result =
+        BulkItem
+        |> Ash.Changeset.for_create(:create, %{
+          title: "Dot Path Create",
+          author_id: actor_id,
+          team_id: team.id
+        })
+        |> Ash.create(actor: actor)
+
+      assert {:ok, item} = result
+      assert item.title == "Dot Path Create"
+    end
+
+    test "create with dot-path scope and non-matching team name is forbidden" do
+      actor_id = Ash.UUID.generate()
+
+      actor =
+        actor_with_perms(["item:*:create:named_team"], actor_id)
+        |> Map.put(:team_name, "Delta")
+
+      team = create_team!("Epsilon")
+
+      result =
+        BulkItem
+        |> Ash.Changeset.for_create(:create, %{
+          title: "Should Fail",
+          author_id: actor_id,
+          team_id: team.id
+        })
+        |> Ash.create(actor: actor)
+
+      assert {:error, %Ash.Error.Forbidden{}} = result
+    end
+
+    test "destroy with dot-path scope and matching team name succeeds" do
+      actor_id = Ash.UUID.generate()
+
+      actor =
+        actor_with_perms(["item:*:destroy:named_team", "item:*:read:all"], actor_id)
+        |> Map.put(:team_name, "Zeta")
+
+      team = create_team!("Zeta")
+      item = create_item!(%{title: "Delete Me", author_id: actor_id, team_id: team.id})
+
+      result =
+        item
+        |> Ash.Changeset.for_destroy(:destroy)
+        |> Ash.destroy(actor: actor)
+
+      assert :ok = result
+    end
+  end
 end
