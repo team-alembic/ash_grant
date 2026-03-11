@@ -76,8 +76,8 @@ defmodule AshGrant.Check do
   which checks the scope's `write:` option first, falling back to `filter` if not set.
   This allows scopes to provide separate expressions for reads and writes.
 
-  For scopes using relationship traversal (`exists()` or dot-paths), provide a
-  `write:` option with a direct-field expression that can be evaluated in-memory:
+  The `write:` option is an explicit override. When omitted, the check automatically
+  chooses the best strategy for the scope expression (see "DB Query Fallback" below).
 
       scope :team_member, expr(exists(team.members, user_id == ^actor(:id))),
         write: expr(team_id in ^actor(:team_ids))
@@ -87,29 +87,29 @@ defmodule AshGrant.Check do
       scope :readonly, expr(exists(org.users, id == ^actor(:id))),
         write: false
 
-  ## Relational Scopes (`exists()`) Limitation
+  ## Relational Scopes and DB Query Fallback
 
-  Scopes using `exists()` (e.g., `expr(exists(team.memberships, user_id == ^actor(:id)))`)
-  cannot be fully evaluated in-memory for write actions. The `exists()` condition
-  requires database queries (SQL EXISTS subquery) which are not available during
-  in-memory evaluation.
+  Scopes using `exists()` or dot-path references cannot be evaluated in-memory.
+  When such a scope has no explicit `write:` option and the resource has a data layer,
+  the check automatically uses a **DB query** to verify the scope instead:
 
-  **Recommended:** Use the `write:` option on the scope to provide a direct-field
-  expression for write actions. See "Dual Read/Write Scope" above.
+  | `write:` value | Strategy | Behavior |
+  |---|---|---|
+  | `write: false` | Deny | Returns false immediately |
+  | `write: true` | Allow | Returns true immediately |
+  | `write: expr(...)` | In-memory | Evaluate custom expression |
+  | _(omitted, no relationships)_ | In-memory | Current behavior |
+  | _(omitted, has relationships)_ | **DB query** | Query DB with read scope |
 
-  **Fallback behavior** (when no `write:` option is set):
-  - `exists()` nodes are replaced with `true` before in-memory evaluation
-  - Attribute-based conditions in the same scope are still enforced
-  - A compile-time warning is emitted when relationship traversal is detected
-    without a `write:` option (see `AshGrant.Transformers.ValidateScopes`)
+  **For update/destroy**: Queries the DB to check if the existing record matches
+  the read scope expression.
 
-  **Example:** For a mixed scope like
-  `expr(author_id == ^actor(:id) and exists(team.memberships, user_id == ^actor(:id)))`:
-  - The `author_id == ^actor(:id)` check is preserved and enforced
-  - The `exists(...)` condition is treated as `true` (not enforced)
+  **For create**: Splits the filter into direct-attribute parts (evaluated in-memory)
+  and relationship parts. Relationship parts are verified by extracting the FK from
+  the changeset and querying the parent resource.
 
-  For read actions, `exists()` works correctly via `AshGrant.FilterCheck`,
-  which converts it to a SQL EXISTS subquery in the database query.
+  This means scopes like `exists(team.memberships, user_id == ^actor(:id))` now work
+  correctly for all action types without requiring a `write:` option.
 
   ## Examples
 
@@ -137,6 +137,7 @@ defmodule AshGrant.Check do
   """
 
   require Ash.Expr
+  require Ash.Query
 
   @doc """
   Creates a check tuple for use in policies.
@@ -301,31 +302,47 @@ defmodule AshGrant.Check do
     resource = context.resource
     action_type = get_action_type(context[:action])
 
-    case action_type do
-      :create ->
-        check_create_scope(scope, resource, scope_resolver, context, opts)
+    # Resolve the write scope filter (uses write: if set, else filter)
+    scope_filter = resolve_scope(resource, scope_resolver, scope, context)
 
-      _ ->
-        record = get_target_record(authorizer)
+    case scope_filter do
+      true ->
+        true
 
-        case record do
-          nil ->
-            false
+      false ->
+        false
 
-          rec ->
-            filter = resolve_scope(resource, scope_resolver, scope, context)
-            record_matches_filter?(rec, filter, context, opts)
-        end
+      filter ->
+        check_scope_with_strategy(scope, filter, resource, action_type, context, authorizer, opts)
     end
+  end
+
+  # Decide between DB query and in-memory evaluation, then execute.
+  defp check_scope_with_strategy(scope, filter, resource, action_type, context, authorizer, opts) do
+    scope_def = get_scope_def(resource, scope)
+
+    if should_use_db_query?(scope_def, filter, resource) do
+      read_filter = resolve_read_scope(resource, scope, context)
+      db_query_scope_check(resource, action_type, authorizer, read_filter, context)
+    else
+      check_scope_in_memory(action_type, filter, context, authorizer, opts)
+    end
+  end
+
+  defp check_scope_in_memory(:create, filter, context, _authorizer, opts) do
+    check_create_scope_in_memory(context, filter, opts)
+  end
+
+  defp check_scope_in_memory(_action_type, filter, context, authorizer, opts) do
+    record = get_target_record(authorizer)
+    if record, do: record_matches_filter?(record, filter, context, opts), else: false
   end
 
   defp get_action_type(%{type: type}), do: type
   defp get_action_type(_), do: nil
 
-  defp check_create_scope("all", _resource, _scope_resolver, _context, _opts), do: true
-  defp check_create_scope("global", _resource, _scope_resolver, _context, _opts), do: true
-
-  defp check_create_scope(scope, resource, scope_resolver, context, opts) do
+  # In-memory evaluation for create actions (no DB query needed)
+  defp check_create_scope_in_memory(context, filter, opts) do
     changeset = context[:changeset]
 
     case changeset do
@@ -334,9 +351,237 @@ defmodule AshGrant.Check do
 
       cs ->
         virtual_record = build_virtual_record(cs)
-        filter = resolve_scope(resource, scope_resolver, scope, context)
         record_matches_filter?(virtual_record, filter, context, opts)
     end
+  end
+
+  # ============================================================
+  # DB Query Strategy
+  # ============================================================
+
+  # Determine if we should use a DB query instead of in-memory evaluation.
+  # Used when: scope has relationship references, no explicit write: option, and resource has a data layer.
+  defp should_use_db_query?(nil, _filter, _resource), do: false
+
+  defp should_use_db_query?(scope_def, _filter, resource) do
+    is_nil(scope_def.write) and
+      has_data_layer?(resource) and
+      contains_relationship_reference?(scope_def.filter)
+  end
+
+  defp has_data_layer?(resource) do
+    Ash.DataLayer.data_layer(resource) != nil
+  rescue
+    _ -> false
+  end
+
+  # Check if an Ash expression contains relationship references (exists() or dot-paths)
+  defp contains_relationship_reference?(true), do: false
+  defp contains_relationship_reference?(false), do: false
+  defp contains_relationship_reference?(%Ash.Query.Exists{}), do: true
+
+  defp contains_relationship_reference?(%Ash.Query.Ref{relationship_path: p}) when p != [],
+    do: true
+
+  defp contains_relationship_reference?(%Ash.Query.BooleanExpression{left: l, right: r}) do
+    contains_relationship_reference?(l) or contains_relationship_reference?(r)
+  end
+
+  defp contains_relationship_reference?(%Ash.Query.Not{expression: e}),
+    do: contains_relationship_reference?(e)
+
+  defp contains_relationship_reference?(%{__struct__: _, left: l, right: r}) do
+    contains_relationship_reference?(l) or contains_relationship_reference?(r)
+  end
+
+  defp contains_relationship_reference?(_), do: false
+
+  # Get a scope definition from the DSL
+  defp get_scope_def(resource, scope) do
+    scope_atom = if is_binary(scope), do: String.to_existing_atom(scope), else: scope
+    AshGrant.Info.get_scope(resource, scope_atom)
+  rescue
+    ArgumentError -> nil
+  end
+
+  # Resolve the READ scope filter (ignoring write: option)
+  defp resolve_read_scope(resource, scope, context) do
+    scope_atom = if is_binary(scope), do: String.to_existing_atom(scope), else: scope
+    AshGrant.Info.resolve_scope_filter(resource, scope_atom, context)
+  rescue
+    ArgumentError -> false
+  end
+
+  # Route to the correct DB query strategy based on action type
+  defp db_query_scope_check(resource, :create, _authorizer, read_filter, context) do
+    changeset = context[:changeset]
+
+    if changeset,
+      do: db_query_create_check(resource, changeset, read_filter, context),
+      else: false
+  end
+
+  defp db_query_scope_check(resource, _action_type, authorizer, read_filter, context) do
+    record = get_target_record(authorizer)
+
+    if record,
+      do: db_query_record_check(resource, record, read_filter, context),
+      else: false
+  end
+
+  # DB query for update/destroy: "does this record match the read scope?"
+  defp db_query_record_check(resource, record, scope_filter, context) do
+    pk_fields = Ash.Resource.Info.primary_key(resource)
+    pk_filter = Enum.map(pk_fields, fn field -> {field, Map.get(record, field)} end)
+
+    # Resolve actor/tenant templates before passing to query
+    resolved_filter = resolve_templates(scope_filter, context)
+
+    resource
+    |> Ash.Query.for_read(:read, %{})
+    |> Ash.Query.filter(^resolved_filter)
+    |> Ash.Query.filter(^pk_filter)
+    |> Ash.exists?(authorize?: false)
+  rescue
+    _ -> false
+  end
+
+  # DB query for create: record doesn't exist yet, so we split the filter
+  # into direct-attribute parts (eval in-memory) and relationship parts (query DB).
+  defp db_query_create_check(resource, changeset, scope_filter, context) do
+    {direct_filter, relationship_parts} = split_filter_for_create(scope_filter)
+
+    # Check direct-attribute conditions in-memory
+    direct_ok =
+      case direct_filter do
+        true ->
+          true
+
+        false ->
+          false
+
+        filter ->
+          virtual_record = build_virtual_record(changeset)
+          record_matches_filter?(virtual_record, filter, context, [])
+      end
+
+    # Check relationship conditions via DB
+    relationship_ok =
+      Enum.all?(relationship_parts, fn part ->
+        check_relationship_via_db(resource, changeset, part, context)
+      end)
+
+    direct_ok and relationship_ok
+  end
+
+  # Split a filter expression into direct-attribute parts and relationship parts.
+  defp split_filter_for_create(%Ash.Query.Exists{} = exists) do
+    {true, [exists]}
+  end
+
+  defp split_filter_for_create(%Ash.Query.BooleanExpression{op: :and, left: left, right: right}) do
+    {left_direct, left_rels} = split_filter_for_create(left)
+    {right_direct, right_rels} = split_filter_for_create(right)
+    direct = combine_and(left_direct, right_direct)
+    {direct, left_rels ++ right_rels}
+  end
+
+  defp split_filter_for_create(other) do
+    if contains_relationship_reference?(other) do
+      {true, [other]}
+    else
+      {other, []}
+    end
+  end
+
+  defp combine_and(true, right), do: right
+  defp combine_and(left, true), do: left
+  defp combine_and(false, _), do: false
+  defp combine_and(_, false), do: false
+  defp combine_and(left, right), do: Ash.Expr.expr(^left and ^right)
+
+  # Handle exists() by extracting FK from changeset and querying the parent resource.
+  defp check_relationship_via_db(
+         resource,
+         changeset,
+         %Ash.Query.Exists{path: [rel | rest], expr: inner},
+         context
+       ) do
+    target_filter =
+      if rest == [], do: inner, else: %Ash.Query.Exists{path: rest, expr: inner, at_path: []}
+
+    query_relationship_from_changeset(resource, changeset, rel, target_filter, context)
+  rescue
+    _ -> false
+  end
+
+  # Handle expressions containing dot-path refs (e.g., order.center_id in ^actor(:ids))
+  defp check_relationship_via_db(resource, changeset, expr, context) do
+    case extract_first_relationship(expr) do
+      nil ->
+        false
+
+      rel_name ->
+        transformed = transform_refs_for_target(expr, rel_name)
+        query_relationship_from_changeset(resource, changeset, rel_name, transformed, context)
+    end
+  rescue
+    _ -> false
+  end
+
+  # Query a parent resource via FK from changeset to check if the filter matches.
+  defp query_relationship_from_changeset(resource, changeset, rel_name, target_filter, context) do
+    with relationship when not is_nil(relationship) <-
+           Ash.Resource.Info.relationship(resource, rel_name),
+         fk_value when not is_nil(fk_value) <- get_fk_from_changeset(changeset, relationship) do
+      resolved = resolve_templates(target_filter, context)
+
+      relationship.destination
+      |> Ash.Query.for_read(:read, %{})
+      |> Ash.Query.filter(^[{relationship.destination_attribute, fk_value}])
+      |> Ash.Query.filter(^resolved)
+      |> Ash.exists?(authorize?: false)
+    else
+      _ -> false
+    end
+  end
+
+  # Resolve actor/tenant/context templates in an expression
+  defp resolve_templates(filter, context) do
+    Ash.Expr.fill_template(filter,
+      actor: context[:actor],
+      tenant: context[:tenant],
+      context: context[:query_context] || %{}
+    )
+  end
+
+  # For belongs_to: source_attribute is the FK (e.g., :team_id)
+  defp get_fk_from_changeset(changeset, relationship) do
+    Ash.Changeset.get_attribute(changeset, relationship.source_attribute)
+  end
+
+  # Extract first relationship name from an expression containing dot-path refs
+  defp extract_first_relationship(%Ash.Query.Ref{relationship_path: [rel | _]}), do: rel
+
+  defp extract_first_relationship(%Ash.Query.BooleanExpression{left: l, right: r}) do
+    extract_first_relationship(l) || extract_first_relationship(r)
+  end
+
+  defp extract_first_relationship(%{__struct__: _, left: l, right: r}) do
+    extract_first_relationship(l) || extract_first_relationship(r)
+  end
+
+  defp extract_first_relationship(_), do: nil
+
+  # Transform dot-path refs: remove the first relationship from relationship_path
+  defp transform_refs_for_target(expr, rel_name) do
+    Ash.Filter.map(expr, fn
+      %Ash.Query.Ref{relationship_path: [^rel_name | rest]} = ref ->
+        %{ref | relationship_path: rest}
+
+      other ->
+        other
+    end)
   end
 
   defp build_virtual_record(changeset) do

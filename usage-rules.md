@@ -171,33 +171,39 @@ end
 
 ### Dual read/write scope (`write:` option)
 
-Scopes using relationship traversal (`exists()` or dot-paths) work for reads
-(converted to SQL) but cannot be evaluated in-memory for writes. Use the `write:`
-option to provide a direct-field expression for write actions:
+Scopes with `exists()` or dot-paths work automatically for both reads and writes.
+For reads, they are converted to SQL. For writes, a **DB query fallback** verifies
+the scope by querying the database with the read scope expression.
+
+You can optionally use the `write:` option to explicitly control write behavior:
 
 ```elixir
 ash_grant do
   resolver MyApp.PermissionResolver
 
-  # Read: SQL EXISTS subquery. Write: direct field check.
-  scope :team_member, expr(exists(team.members, user_id == ^actor(:id))),
+  # No write: needed — DB query fallback handles it automatically
+  scope :team_member, expr(exists(team.members, user_id == ^actor(:id)))
+
+  # Explicit override: use in-memory expression for writes (avoids DB query)
+  scope :team_visible, expr(exists(team.members, user_id == ^actor(:id))),
     write: expr(team_id in ^actor(:team_ids))
 
-  # Read: relational filter. Write: explicitly denied.
+  # Explicitly deny writes with this scope
   scope :readonly, expr(exists(org.users, id == ^actor(:id))),
     write: false
 
-  # No write: option — filter is used for both reads and writes (backward compatible)
+  # No write: option — simple scopes use in-memory evaluation (no DB needed)
   scope :own, expr(author_id == ^actor(:id))
 end
 ```
 
-| `write:` value | Behavior for write actions |
-|----------------|---------------------------|
-| omitted (`nil`) | Falls back to `filter` expression |
-| `expr(...)` | Uses the provided expression for in-memory evaluation |
-| `false` | Denies all write actions with this scope |
-| `true` | Allows all write actions with this scope (no filtering) |
+| `write:` value | Strategy | Behavior for write actions |
+|----------------|----------|---------------------------|
+| omitted, no relationships | In-memory | Evaluates filter expression in-memory |
+| omitted, has relationships | DB query | Queries DB with read scope expression |
+| `expr(...)` | In-memory | Uses the provided expression |
+| `false` | Deny | Denies all write actions with this scope |
+| `true` | Allow | Allows all write actions (no filtering) |
 
 Inheritance works with `write:`: child scopes inherit the parent's `write:`
 expression (or parent's `filter` if parent has no `write:`). If any parent
@@ -335,33 +341,29 @@ end
 - `filter_check` returns filter expressions — meaningless for writes.
 - `check` returns true/false — doesn't filter read results.
 
-### DO: Use `write:` when scopes have `exists()` or dot-paths
+### DO: Use `exists()` scopes freely — DB query fallback handles writes
 
-Scopes using relationship traversal cannot be evaluated in-memory for writes.
-Use `write:` to provide a direct-field alternative:
-
-```elixir
-# DO — provides write-safe expression
-scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id))),
-  write: expr(team_id in ^actor(:team_ids))
-
-# DO — explicitly denies writes
-scope :readonly, expr(exists(org.users, id == ^actor(:id))),
-  write: false
-```
-
-### DON'T: Use `exists()` scopes without `write:` and expect writes to be enforced
-
-Without `write:`, the `exists()` condition is replaced with `true` during in-memory
-evaluation for write actions, creating an authorization bypass.
+Scopes with `exists()` or dot-paths work automatically for all action types.
+For writes, a DB query verifies the scope when no `write:` option is set.
 
 ```elixir
-# DON'T — exists() is silently replaced with true for writes
+# DO — works for both reads and writes automatically
 scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id)))
 ```
 
-A compile-time warning is emitted when relationship traversal is detected without
-a `write:` option.
+### DO: Use `write:` when you want explicit control
+
+Use `write:` to override the automatic DB query strategy:
+
+```elixir
+# Explicit in-memory expression (avoids DB query overhead)
+scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id))),
+  write: expr(team_id in ^actor(:team_ids))
+
+# Explicitly deny writes
+scope :readonly, expr(exists(org.users, id == ^actor(:id))),
+  write: false
+```
 
 ## Deny-Wins Semantics
 
@@ -669,19 +671,16 @@ ash_grant do
 end
 ```
 
-### Expecting `exists()` to work with writes without `write:`
+### Using `exists()` scopes without a data layer
+
+The DB query fallback requires a data layer (e.g., AshPostgres). For resources
+without a data layer, `exists()` conditions are replaced with `true` during
+in-memory evaluation. Use `write:` to provide a direct-field expression:
 
 ```elixir
-# WRONG — exists() is replaced with true for writes, creating a bypass
-scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id)))
-
-# CORRECT — provide a write-safe expression
+# For resources WITHOUT a data layer, use write: to provide an alternative
 scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id))),
   write: expr(team_id in ^actor(:team_ids))
-
-# CORRECT — explicitly deny writes if not needed
-scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id))),
-  write: false
 ```
 
 ### Forgetting that deny-wins means no order dependency

@@ -598,7 +598,8 @@ Post |> Ash.read!(actor: actor)
 
 ### Relational Scopes (`exists()` and Dot-Paths)
 
-You can use `exists()` and dot-path references in scope expressions for relationship-based filtering:
+You can use `exists()` and dot-path references in scope expressions for relationship-based filtering.
+These work for both **read** and **write** actions:
 
 ```elixir
 ash_grant do
@@ -608,39 +609,29 @@ ash_grant do
 end
 ```
 
-> **Important: Relationship traversal and write actions**
+For **read** actions, `FilterCheck` converts these to SQL (EXISTS subquery or JOIN).
+For **write** actions, `Check` automatically uses a **DB query fallback** when the
+scope contains relationship references — the read scope expression is used as a DB
+query to verify the record matches the scope.
+
+> **Optional: `write:` override**
 >
-> `exists()` and dot-path references (e.g., `order.center_id`) are only fully enforced
-> for **read** actions, where `FilterCheck` converts them to SQL. For **write** actions
-> (create, update, destroy), `Check` evaluates scopes in-memory and cannot resolve
-> relationship traversals.
->
-> Use the `write:` option to provide a direct-field expression for write actions:
+> You can use the `write:` option to explicitly control write behavior:
 
 ```elixir
 ash_grant do
-  # Read: SQL EXISTS subquery | Write: check team_id directly
+  # Explicit in-memory expression for writes (avoids DB query)
   scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id))),
     write: expr(team_id in ^actor(:team_ids))
 
-  # Read: SQL join | Write: check center_id on the record
-  scope :same_center, expr(order.center_id == ^actor(:center_id)),
-    write: expr(center_id == ^actor(:center_id))
-
-  # Read: SQL EXISTS | Write: deny (no in-memory equivalent)
+  # Explicitly deny writes with this scope
   scope :org_member, expr(exists(org.users, id == ^actor(:id))),
     write: false
-
-  # Mixed: exists() simplified for writes, author_id still checked
-  scope :own_in_team, [:own],
-    expr(exists(team.memberships, user_id == ^actor(:id))),
-    write: expr(author_id == ^actor(:id))
 end
 ```
 
-> A compile-time warning is emitted when scopes use `exists()` or dot-paths without
-> a `write:` option. See [Dual Read/Write Scope](#dual-readwrite-scope-write-option)
-> for full details.
+> See [Dual Read/Write Scope](#dual-readwrite-scope-write-option) for full details
+> on the `write:` option.
 
 ### Business Scope Examples
 
@@ -852,11 +843,8 @@ end
 ### `check/1` - For Write Actions
 
 Returns `true` or `false` based on whether the actor has permission.
-Scopes are evaluated in-memory against the target record or changeset attributes.
-
-> **Note:** Scopes using `exists()` cannot be evaluated in-memory — the relational
-> condition is replaced with `true`. Attribute-based conditions are still enforced.
-> See [Relational Scopes](#relational-scopes-exists) for details.
+Simple scopes are evaluated in-memory. Scopes with relationship references
+(`exists()` or dot-paths) automatically use a DB query to verify the scope.
 
 ```elixir
 policy action(:destroy) do

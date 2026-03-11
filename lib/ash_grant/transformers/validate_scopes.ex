@@ -5,27 +5,13 @@ defmodule AshGrant.Transformers.ValidateScopes do
   This transformer provides helpful warnings for common scope configuration issues:
 
   - Warns if `:all` scope is commonly expected but not defined
-  - Warns about deprecated `owner_field` usage
-  - Warns when scopes use relationship traversal (`exists()` or dot-paths)
-    without a `write:` option
-
-  ## Relationship Traversal Warning
-
-  When a scope uses `exists()` or dot-path references (e.g., `order.center_id`)
-  and does not have a `write:` option set, a warning is emitted. These expressions
-  cannot be evaluated in-memory for write actions (create, update, destroy).
-
-  The warning is suppressed when the scope has a `write:` option, since the user
-  has explicitly provided a write-safe expression (or `write: false` to deny writes).
-
-  This warning is emitted regardless of `default_policies` setting, since explicit
-  policies using `AshGrant.check()` have the same limitation.
+  - Warns about deprecated `owner_field` and `scope_resolver` usage
 
   ## See Also
 
   - `AshGrant.Dsl` - DSL definition with scope entity and `write:` option
   - `AshGrant.Info` - Runtime introspection for scopes
-  - `AshGrant.Check` - Write action check that uses write scope resolution
+  - `AshGrant.Check` - Write action check with DB query fallback for relational scopes
   """
 
   use Spark.Dsl.Transformer
@@ -48,7 +34,6 @@ defmodule AshGrant.Transformers.ValidateScopes do
     if resolver do
       validate_common_scopes(dsl_state, resource)
       validate_deprecated_options(dsl_state, resource)
-      validate_exists_in_write_scopes(dsl_state, resource)
     end
 
     {:ok, dsl_state}
@@ -110,71 +95,6 @@ defmodule AshGrant.Transformers.ValidateScopes do
       )
     end
   end
-
-  defp validate_exists_in_write_scopes(dsl_state, resource) do
-    scopes = get_scope_entities(dsl_state)
-
-    for scope <- scopes,
-        is_nil(scope.write),
-        contains_relationship_reference?(scope.filter) do
-      IO.warn(
-        """
-        AshGrant: scope :#{scope.name} in #{inspect(resource)} uses relationship traversal \
-        (exists() or dot-path) which cannot be evaluated in-memory for write actions.
-
-        Add a `write:` option with a direct-field expression, or `write: false` to \
-        explicitly deny writes with this scope:
-
-            scope :#{scope.name}, #{inspect_filter_brief(scope.filter)},
-              write: expr(direct_field in ^actor(:accessible_ids))
-            # or
-            scope :#{scope.name}, #{inspect_filter_brief(scope.filter)},
-              write: false
-        """,
-        []
-      )
-    end
-  end
-
-  defp contains_relationship_reference?(filter) do
-    contains_exists?(filter) or contains_dot_path?(filter)
-  end
-
-  # Recursively check if an Ash expression contains %Ash.Query.Exists{} nodes
-  defp contains_exists?(true), do: false
-  defp contains_exists?(false), do: false
-  defp contains_exists?(%Ash.Query.Exists{}), do: true
-
-  defp contains_exists?(%Ash.Query.BooleanExpression{left: left, right: right}) do
-    contains_exists?(left) or contains_exists?(right)
-  end
-
-  defp contains_exists?(%Ash.Query.Not{expression: expr}), do: contains_exists?(expr)
-  defp contains_exists?(_), do: false
-
-  # Check if an Ash expression contains dot-path references (relationship traversal)
-  defp contains_dot_path?(true), do: false
-  defp contains_dot_path?(false), do: false
-
-  defp contains_dot_path?(%Ash.Query.Ref{relationship_path: path}) when path != [] do
-    true
-  end
-
-  defp contains_dot_path?(%Ash.Query.BooleanExpression{left: left, right: right}) do
-    contains_dot_path?(left) or contains_dot_path?(right)
-  end
-
-  defp contains_dot_path?(%Ash.Query.Not{expression: expr}), do: contains_dot_path?(expr)
-
-  defp contains_dot_path?(%{__struct__: _, left: left, right: right}) do
-    contains_dot_path?(left) or contains_dot_path?(right)
-  end
-
-  defp contains_dot_path?(_), do: false
-
-  defp inspect_filter_brief(true), do: "true"
-  defp inspect_filter_brief(false), do: "false"
-  defp inspect_filter_brief(_filter), do: "expr(...)"
 
   defp get_scope_entities(dsl_state) do
     Transformer.get_entities(dsl_state, [:ash_grant])

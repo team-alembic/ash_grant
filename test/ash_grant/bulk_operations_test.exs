@@ -98,7 +98,7 @@ defmodule AshGrant.BulkOperationsTest do
       assert {:error, %Ash.Error.Forbidden{}} = result
     end
 
-    test "with exists() scope (team_member, write: false) is forbidden without crash" do
+    test "with exists() scope (team_member) succeeds via DB query" do
       actor_id = Ash.UUID.generate()
       actor = actor_with_perms(["item:*:create:team_member"], actor_id)
 
@@ -110,9 +110,7 @@ defmodule AshGrant.BulkOperationsTest do
         %{title: "Team Item 2", author_id: actor_id, team_id: team.id}
       ]
 
-      # Before the exists() fix, this would crash with:
-      # nil.persisted(:relationships_by_name)
-      # Now team_member has write: false, so writes are cleanly denied
+      # DB query fallback: checks parent team membership via DB query
       result =
         Ash.bulk_create(inputs, BulkItem, :create,
           actor: actor,
@@ -120,7 +118,8 @@ defmodule AshGrant.BulkOperationsTest do
           return_errors?: true
         )
 
-      assert result.status == :error
+      assert result.status == :success
+      assert length(result.records) == 2
     end
 
     test "without any permission is forbidden" do
@@ -151,15 +150,14 @@ defmodule AshGrant.BulkOperationsTest do
       assert result.status == :error
     end
 
-    test "with mixed scope (own + exists) only evaluates attribute checks" do
+    test "with mixed scope (own + exists) evaluates both via DB query" do
       actor_id = Ash.UUID.generate()
       actor = actor_with_perms(["item:*:create:own_in_team"], actor_id)
 
       team = create_team!("Mixed Scope Team")
       create_membership!(team, actor_id)
 
-      # author_id matches actor - should succeed
-      # exists() is simplified to true for create actions
+      # author_id matches actor AND exists() verified via DB query
       inputs = [
         %{title: "Mixed Item", author_id: actor_id, team_id: team.id}
       ]
@@ -202,7 +200,7 @@ defmodule AshGrant.BulkOperationsTest do
   # === Single create + exists() regression ===
 
   describe "single create with exists() scope" do
-    test "does not crash with team_member scope (write: false denies cleanly)" do
+    test "with team_member scope succeeds via DB query" do
       actor_id = Ash.UUID.generate()
       actor = actor_with_perms(["item:*:create:team_member"], actor_id)
 
@@ -218,8 +216,9 @@ defmodule AshGrant.BulkOperationsTest do
         })
         |> Ash.create(actor: actor)
 
-      # team_member scope has write: false, so writes are denied without crash
-      assert {:error, %Ash.Error.Forbidden{}} = result
+      # DB query fallback: checks parent team membership via DB query
+      assert {:ok, item} = result
+      assert item.title == "Single Item"
     end
 
     test "with exists-only scope and no permission is forbidden" do
@@ -299,7 +298,7 @@ defmodule AshGrant.BulkOperationsTest do
       assert result.error_count > 0
     end
 
-    test "with exists() scope (team_member) does not crash" do
+    test "with exists() scope (team_member) succeeds via DB query" do
       actor_id = Ash.UUID.generate()
       actor = actor_with_perms(["item:*:update:team_member", "item:*:read:all"], actor_id)
 
@@ -307,7 +306,7 @@ defmodule AshGrant.BulkOperationsTest do
       create_membership!(team, actor_id)
       _item = create_item!(%{title: "Team Update Item", author_id: actor_id, team_id: team.id})
 
-      # exists() scope on update should not crash
+      # DB query fallback: checks record matches read scope via DB
       result =
         BulkItem
         |> Ash.Query.for_read(:read)
@@ -318,9 +317,9 @@ defmodule AshGrant.BulkOperationsTest do
           return_errors?: true
         )
 
-      # Verify no crash - result depends on whether Ash.Expr.eval can resolve
-      # exists() on a persisted record (may succeed or fall through to fallback)
-      assert result.status in [:success, :partial_success, :error]
+      assert result.status == :success
+      assert length(result.records) == 1
+      assert hd(result.records).title == "Updated Team Item"
     end
   end
 
@@ -389,7 +388,7 @@ defmodule AshGrant.BulkOperationsTest do
       assert result.error_count > 0
     end
 
-    test "with exists() scope (team_member) does not crash" do
+    test "with exists() scope (team_member) succeeds via DB query" do
       actor_id = Ash.UUID.generate()
       actor = actor_with_perms(["item:*:destroy:team_member", "item:*:read:all"], actor_id)
 
@@ -397,7 +396,7 @@ defmodule AshGrant.BulkOperationsTest do
       create_membership!(team, actor_id)
       _item = create_item!(%{title: "Team Delete Item", author_id: actor_id, team_id: team.id})
 
-      # exists() scope on destroy should not crash
+      # DB query fallback: checks record matches read scope via DB
       result =
         BulkItem
         |> Ash.Query.for_read(:read)
@@ -409,9 +408,8 @@ defmodule AshGrant.BulkOperationsTest do
           return_errors?: true
         )
 
-      # Verify no crash - result depends on whether Ash.Expr.eval can resolve
-      # exists() on a persisted record (may succeed or fall through to fallback)
-      assert result.status in [:success, :partial_success, :error]
+      assert result.status == :success
+      assert length(result.records) == 1
     end
   end
 end
