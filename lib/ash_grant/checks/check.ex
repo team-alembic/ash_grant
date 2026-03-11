@@ -70,6 +70,23 @@ defmodule AshGrant.Check do
   - A "virtual record" is built from the changeset attributes
   - The scope filter is evaluated against this virtual record
 
+  ## Dual Read/Write Scope
+
+  This check uses `AshGrant.Info.resolve_write_scope_filter/3` for scope resolution,
+  which checks the scope's `write:` option first, falling back to `filter` if not set.
+  This allows scopes to provide separate expressions for reads and writes.
+
+  For scopes using relationship traversal (`exists()` or dot-paths), provide a
+  `write:` option with a direct-field expression that can be evaluated in-memory:
+
+      scope :team_member, expr(exists(team.members, user_id == ^actor(:id))),
+        write: expr(team_id in ^actor(:team_ids))
+
+  Set `write: false` to explicitly deny writes with a scope:
+
+      scope :readonly, expr(exists(org.users, id == ^actor(:id))),
+        write: false
+
   ## Relational Scopes (`exists()`) Limitation
 
   Scopes using `exists()` (e.g., `expr(exists(team.memberships, user_id == ^actor(:id)))`)
@@ -77,11 +94,14 @@ defmodule AshGrant.Check do
   requires database queries (SQL EXISTS subquery) which are not available during
   in-memory evaluation.
 
-  **Behavior:**
+  **Recommended:** Use the `write:` option on the scope to provide a direct-field
+  expression for write actions. See "Dual Read/Write Scope" above.
+
+  **Fallback behavior** (when no `write:` option is set):
   - `exists()` nodes are replaced with `true` before in-memory evaluation
   - Attribute-based conditions in the same scope are still enforced
-  - A compile-time warning is emitted when `exists()` scopes are detected
-    with write policies (see `AshGrant.Transformers.ValidateScopes`)
+  - A compile-time warning is emitted when relationship traversal is detected
+    without a `write:` option (see `AshGrant.Transformers.ValidateScopes`)
 
   **Example:** For a mixed scope like
   `expr(author_id == ^actor(:id) and exists(team.memberships, user_id == ^actor(:id)))`:
@@ -90,10 +110,6 @@ defmodule AshGrant.Check do
 
   For read actions, `exists()` works correctly via `AshGrant.FilterCheck`,
   which converts it to a SQL EXISTS subquery in the database query.
-
-  If you need relational authorization for write actions, consider:
-  - Using a custom `Ash.Policy.Check` that queries the database
-  - Moving the relational check to a change or validation on the action
 
   ## Examples
 
@@ -337,7 +353,8 @@ defmodule AshGrant.Check do
     _ -> %{}
   end
 
-  # First try inline scope DSL, then fall back to scope_resolver
+  # First try inline scope DSL (using write scope resolution), then fall back to scope_resolver.
+  # Write scope resolution uses the scope's `write:` option if set, otherwise falls back to `filter`.
   defp resolve_scope(resource, scope_resolver, scope, context) do
     scope_atom = if is_binary(scope), do: String.to_existing_atom(scope), else: scope
 
@@ -348,8 +365,8 @@ defmodule AshGrant.Check do
         resolve_with_scope_resolver(scope_resolver, scope, context)
 
       _scope_def ->
-        # Use inline scope DSL
-        AshGrant.Info.resolve_scope_filter(resource, scope_atom, context)
+        # Use write scope resolution for write actions (in-memory evaluation)
+        AshGrant.Info.resolve_write_scope_filter(resource, scope_atom, context)
     end
   rescue
     ArgumentError ->

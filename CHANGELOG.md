@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Dual read/write scope (`write:` option)**: Scopes can now provide a separate expression for write actions via the `write:` option. This solves the authorization bypass where `exists()` and dot-path scopes were silently replaced with `true` during in-memory evaluation for write actions. (#26)
+  - `write: expr(...)` — direct-field expression for in-memory evaluation
+  - `write: false` — explicitly deny writes with this scope
+  - `write: true` — allow all writes with this scope (no filtering)
+  - Falls back to `filter` when `write:` is omitted (backward compatible)
+  - Inheritance support: child scopes inherit parent's `write:` expression; `write: false` propagates to children
+  - New `AshGrant.Info.resolve_write_scope_filter/3` function for write scope resolution
+
+### Changed
+
+- **Compile-time warning for relationship scopes**: The warning for `exists()`/dot-path scopes now fires regardless of `default_policies` setting and also detects dot-path references (not just `exists()`). The warning is suppressed when a `write:` option is provided. (#26)
+- **`AshGrant.Check` uses write scope resolution**: Write actions now resolve scopes via `resolve_write_scope_filter/3` instead of `resolve_scope_filter/3`, using the `write:` expression when available. (#26)
+
 ## [0.6.1] - 2026-03-01
 
 ### Fixed
