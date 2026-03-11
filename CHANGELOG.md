@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-03-11
+
+### Fixed
+
+- **DB query fallback now handles `Ash.Query.Call` (dot-path expressions)**: Expressions like `expr(order.center_id in ^actor(:ids))` are now correctly detected as relationship references and trigger the DB query fallback for write actions. Previously only `exists()` expressions were detected. (#33)
+- **Pass `tenant:` to `Ash.exists?/2` calls**: Multitenanted resources no longer fail silently during DB query fallback write checks. (#33)
+
 ## [0.8.0] - 2026-03-11
 
 ### Added
@@ -337,7 +344,8 @@ end
 | `AshGrant.Check` | SimpleCheck for write actions |
 | `AshGrant.FilterCheck` | FilterCheck for read actions |
 
-[Unreleased]: https://github.com/jhlee111/ash_grant/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/jhlee111/ash_grant/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/jhlee111/ash_grant/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/jhlee111/ash_grant/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/jhlee111/ash_grant/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/jhlee111/ash_grant/compare/v0.6.0...v0.6.1
