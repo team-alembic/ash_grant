@@ -15,7 +15,8 @@ defmodule AshGrant.Info do
   | `resource_name/1` | Get the resource name for permission matching |
   | `scopes/1` | Get all scope definitions |
   | `get_scope/2` | Get a specific scope by name |
-  | `resolve_scope_filter/3` | Resolve a scope to its filter expression |
+  | `resolve_scope_filter/3` | Resolve a scope to its read filter expression |
+  | `resolve_write_scope_filter/3` | Resolve a scope to its write filter expression |
   | `field_groups/1` | Get all field group definitions |
   | `get_field_group/2` | Get a specific field group by name |
   | `resolve_field_group/2` | Resolve a field group with inheritance |
@@ -183,10 +184,13 @@ defmodule AshGrant.Info do
   end
 
   @doc """
-  Resolves a scope to its filter expression.
+  Resolves a scope to its read filter expression.
 
+  Uses the scope's `filter` field (ignoring any `write:` option).
   If the scope has inheritance, the parent scopes are combined with AND.
   Returns `false` for unknown scopes.
+
+  For write action scope resolution, use `resolve_write_scope_filter/3` instead.
   """
   @spec resolve_scope_filter(Ash.Resource.t(), atom(), map()) :: boolean() | Ash.Expr.t()
   def resolve_scope_filter(resource, scope_name, context) do
@@ -200,6 +204,50 @@ defmodule AshGrant.Info do
 
       scope ->
         resolve_scope_with_inheritance(resource, scope, context)
+    end
+  end
+
+  @doc """
+  Resolves a scope's write filter expression.
+
+  If the scope has a `write` field set, uses that value. Otherwise falls back
+  to the regular `filter`. This ensures write actions use a direct-field expression
+  when relationship traversal (exists/dot-paths) cannot be evaluated in-memory.
+
+  Returns `false` for unknown scopes, or when `write: false` is explicitly set.
+
+  ## Resolution Order
+
+  1. If scope has `write:` set → use `write` value (`false`, `true`, or expression)
+  2. If scope has no `write:` → fall back to `scope.filter` (backward compatible)
+  3. Inheritance: parent `write:` values are resolved recursively and combined with AND
+  4. If any parent returns `false` → short-circuit to `false` (deny propagation)
+
+  ## Examples
+
+      # Scope with write: expr(...) → returns the write expression
+      resolve_write_scope_filter(Resource, :team_member, context)
+      # => expr(team_id in ^actor(:team_ids))
+
+      # Scope with write: false → returns false
+      resolve_write_scope_filter(Resource, :readonly, context)
+      # => false
+
+      # Scope without write: → falls back to filter
+      resolve_write_scope_filter(Resource, :own, context)
+      # => expr(author_id == ^actor(:id))
+  """
+  @spec resolve_write_scope_filter(Ash.Resource.t(), atom(), map()) :: boolean() | Ash.Expr.t()
+  def resolve_write_scope_filter(resource, scope_name, context) do
+    case get_scope(resource, scope_name) do
+      nil ->
+        case scope_resolver(resource) do
+          nil -> false
+          resolver -> resolve_with_legacy_resolver(resolver, to_string(scope_name), context)
+        end
+
+      scope ->
+        resolve_write_scope_with_inheritance(resource, scope, context)
     end
   end
 
@@ -307,6 +355,51 @@ defmodule AshGrant.Info do
           {filters, filter} ->
             combine_filters_with_and(filters ++ [filter])
         end
+    end
+  end
+
+  defp resolve_write_scope_with_inheritance(resource, scope, context) do
+    # Get write-specific filter, falling back to the regular filter
+    base_filter =
+      case scope.write do
+        nil -> scope.filter
+        write_filter -> write_filter
+      end
+
+    # Short-circuit if base is false
+    if base_filter == false do
+      false
+    else
+      case scope.inherits do
+        nil ->
+          base_filter
+
+        [] ->
+          base_filter
+
+        parent_names when is_list(parent_names) ->
+          parent_filters =
+            parent_names
+            |> Enum.map(&resolve_write_scope_filter(resource, &1, context))
+
+          # If any parent returns false, propagate denial
+          if Enum.any?(parent_filters, &(&1 == false)) do
+            false
+          else
+            non_true_filters = Enum.reject(parent_filters, &(&1 == true))
+
+            case {non_true_filters, base_filter} do
+              {[], filter} ->
+                filter
+
+              {filters, true} ->
+                combine_filters_with_and(filters)
+
+              {filters, filter} ->
+                combine_filters_with_and(filters ++ [filter])
+            end
+          end
+      end
     end
   end
 

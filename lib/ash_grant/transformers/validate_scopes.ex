@@ -6,20 +6,26 @@ defmodule AshGrant.Transformers.ValidateScopes do
 
   - Warns if `:all` scope is commonly expected but not defined
   - Warns about deprecated `owner_field` usage
-  - Warns when `exists()` scopes are used with write policies
+  - Warns when scopes use relationship traversal (`exists()` or dot-paths)
+    without a `write:` option
 
-  ## exists() Scope Warning
+  ## Relationship Traversal Warning
 
-  When a scope uses `exists()` and the resource has `default_policies` configured
-  for write actions, a warning is emitted because `exists()` cannot be evaluated
-  in-memory for write actions (create, update, destroy). The relational condition
-  is replaced with `true` at runtime, meaning only attribute-based checks in the
-  scope are enforced for writes.
+  When a scope uses `exists()` or dot-path references (e.g., `order.center_id`)
+  and does not have a `write:` option set, a warning is emitted. These expressions
+  cannot be evaluated in-memory for write actions (create, update, destroy).
+
+  The warning is suppressed when the scope has a `write:` option, since the user
+  has explicitly provided a write-safe expression (or `write: false` to deny writes).
+
+  This warning is emitted regardless of `default_policies` setting, since explicit
+  policies using `AshGrant.check()` have the same limitation.
 
   ## See Also
 
-  - `AshGrant.Dsl` - DSL definition with scope entity
+  - `AshGrant.Dsl` - DSL definition with scope entity and `write:` option
   - `AshGrant.Info` - Runtime introspection for scopes
+  - `AshGrant.Check` - Write action check that uses write scope resolution
   """
 
   use Spark.Dsl.Transformer
@@ -106,33 +112,32 @@ defmodule AshGrant.Transformers.ValidateScopes do
   end
 
   defp validate_exists_in_write_scopes(dsl_state, resource) do
-    default_policies = Transformer.get_option(dsl_state, [:ash_grant], :default_policies, false)
-    has_write_policies = default_policies in [true, :all, :write]
+    scopes = get_scope_entities(dsl_state)
 
-    unless has_write_policies do
-      :ok
-    else
-      scopes = get_scope_entities(dsl_state)
+    for scope <- scopes,
+        is_nil(scope.write),
+        contains_relationship_reference?(scope.filter) do
+      IO.warn(
+        """
+        AshGrant: scope :#{scope.name} in #{inspect(resource)} uses relationship traversal \
+        (exists() or dot-path) which cannot be evaluated in-memory for write actions.
 
-      for scope <- scopes, contains_exists?(scope.filter) do
-        IO.warn(
-          """
-          AshGrant: scope :#{scope.name} in #{inspect(resource)} uses exists() which \
-          cannot be fully evaluated for write actions (create, update, destroy).
+        Add a `write:` option with a direct-field expression, or `write: false` to \
+        explicitly deny writes with this scope:
 
-          For read actions, exists() works correctly as a SQL EXISTS subquery via FilterCheck.
-          For write actions, the exists() condition is replaced with `true` during in-memory \
-          evaluation, meaning the relational check is not enforced. Attribute-based conditions \
-          in the same scope (e.g., author_id == ^actor(:id)) are still checked.
-
-          If you need relational authorization for write actions, consider:
-          - Using a custom Ash.Policy.Check that queries the database
-          - Moving the relational check to a change/validation on the action
-          """,
-          []
-        )
-      end
+            scope :#{scope.name}, #{inspect_filter_brief(scope.filter)},
+              write: expr(direct_field in ^actor(:accessible_ids))
+            # or
+            scope :#{scope.name}, #{inspect_filter_brief(scope.filter)},
+              write: false
+        """,
+        []
+      )
     end
+  end
+
+  defp contains_relationship_reference?(filter) do
+    contains_exists?(filter) or contains_dot_path?(filter)
   end
 
   # Recursively check if an Ash expression contains %Ash.Query.Exists{} nodes
@@ -146,6 +151,30 @@ defmodule AshGrant.Transformers.ValidateScopes do
 
   defp contains_exists?(%Ash.Query.Not{expression: expr}), do: contains_exists?(expr)
   defp contains_exists?(_), do: false
+
+  # Check if an Ash expression contains dot-path references (relationship traversal)
+  defp contains_dot_path?(true), do: false
+  defp contains_dot_path?(false), do: false
+
+  defp contains_dot_path?(%Ash.Query.Ref{relationship_path: path}) when path != [] do
+    true
+  end
+
+  defp contains_dot_path?(%Ash.Query.BooleanExpression{left: left, right: right}) do
+    contains_dot_path?(left) or contains_dot_path?(right)
+  end
+
+  defp contains_dot_path?(%Ash.Query.Not{expression: expr}), do: contains_dot_path?(expr)
+
+  defp contains_dot_path?(%{__struct__: _, left: left, right: right}) do
+    contains_dot_path?(left) or contains_dot_path?(right)
+  end
+
+  defp contains_dot_path?(_), do: false
+
+  defp inspect_filter_brief(true), do: "true"
+  defp inspect_filter_brief(false), do: "false"
+  defp inspect_filter_brief(_filter), do: "expr(...)"
 
   defp get_scope_entities(dsl_state) do
     Transformer.get_entities(dsl_state, [:ash_grant])

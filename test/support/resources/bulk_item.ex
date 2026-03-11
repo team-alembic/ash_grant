@@ -40,11 +40,13 @@ defmodule AshGrant.Test.BulkItem do
 
     scope(:all, true)
     scope(:own, expr(author_id == ^actor(:id)))
-    scope(:team_member, expr(exists(team.memberships, user_id == ^actor(:id))))
+    scope(:team_member, [], expr(exists(team.memberships, user_id == ^actor(:id))), write: false)
 
     scope(
       :own_in_team,
-      expr(author_id == ^actor(:id) and exists(team.memberships, user_id == ^actor(:id)))
+      [],
+      expr(author_id == ^actor(:id) and exists(team.memberships, user_id == ^actor(:id))),
+      write: expr(author_id == ^actor(:id))
     )
   end
 

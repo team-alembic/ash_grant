@@ -28,6 +28,29 @@ defmodule AshGrant.Dsl do
   | Option | Type | Description |
   |--------|------|-------------|
   | `inherits` | list of atoms | Parent scopes to inherit and combine with |
+  | `write` | expression, boolean, or nil | Write-specific expression. Falls back to `filter` if omitted. |
+  | `description` | string | Human-readable description for explain/4 output |
+
+  ### Dual Read/Write Scope
+
+  The `filter` expression is used for read actions (converted to SQL via `FilterCheck`).
+  For write actions, `Check` evaluates the scope in-memory using `Ash.Expr.eval/2`.
+
+  Relationship traversal (`exists()` or dot-paths like `order.center_id`) cannot
+  be evaluated in-memory. Use the `write:` option to provide a direct-field expression
+  for write actions:
+
+      scope :team_member, expr(exists(team.members, user_id == ^actor(:id))),
+        write: expr(team_id in ^actor(:team_ids))
+
+  Set `write: false` to explicitly deny writes with a scope:
+
+      scope :readonly, expr(exists(org.users, id == ^actor(:id))),
+        write: false
+
+  When `write:` is omitted, the `filter` expression is used for both reads and writes
+  (backward compatible). A compile-time warning is emitted if relationship traversal
+  is detected without a `write:` option.
 
   ## Example
 
@@ -43,6 +66,10 @@ defmodule AshGrant.Dsl do
           scope :own, expr(author_id == ^actor(:id))
           scope :published, expr(status == :published)
           scope :own_draft, [:own], expr(status == :draft)
+
+          # Dual scope: read uses exists(), write uses direct field
+          scope :team_visible, expr(exists(team.members, user_id == ^actor(:id))),
+            write: expr(team_id in ^actor(:team_ids))
         end
       end
 
@@ -121,6 +148,14 @@ defmodule AshGrant.Dsl do
         scope :today, expr(fragment("DATE(inserted_at) = ?", ^context(:reference_date))),
           description: "Records created today"
 
+        # Dual read/write scope: read uses exists(), write uses direct field
+        scope :team_member, expr(exists(team.members, user_id == ^actor(:id))),
+          write: expr(team_id in ^actor(:team_ids))
+
+        # Explicitly deny writes with this scope
+        scope :readonly, expr(exists(org.users, id == ^actor(:id))),
+          write: false
+
         # Description is optional - backward compatible
         scope :archived, expr(status == :archived)
     """,
@@ -130,7 +165,9 @@ defmodule AshGrant.Dsl do
       "scope :published, expr(status == :published)",
       "scope :own_draft, [:own], expr(status == :draft)",
       ~s|scope :today, expr(fragment("DATE(inserted_at) = ?", ^context(:reference_date)))|,
-      ~s|scope :own, expr(author_id == ^actor(:id)), description: "Records owned by the current user"|
+      ~s|scope :own, expr(author_id == ^actor(:id)), description: "Records owned by the current user"|,
+      "scope :team_member, expr(exists(team.members, user_id == ^actor(:id))), write: expr(team_id in ^actor(:team_ids))",
+      "scope :readonly, expr(exists(org.users, id == ^actor(:id))), write: false"
     ],
     target: AshGrant.Dsl.Scope,
     args: [:name, {:optional, :inherits}, :filter],
@@ -153,6 +190,25 @@ defmodule AshGrant.Dsl do
         type: :string,
         required: false,
         doc: "Human-readable description of what this scope represents. Used in explain/4 output."
+      ],
+      write: [
+        type: {:or, [:boolean, :any]},
+        required: false,
+        doc: """
+        Expression for write action evaluation. Falls back to `filter` if omitted.
+        Set to `false` to explicitly deny writes with this scope.
+
+        Use this when the read filter uses relationship traversal (exists() or dot-paths)
+        that cannot be evaluated in-memory for write actions.
+
+        ## Example
+
+            scope :own, expr(exists(team.members, user_id == ^actor(:id))),
+              write: expr(team_id in ^actor(:team_ids))
+
+            scope :readonly, expr(exists(org.users, id == ^actor(:id))),
+              write: false
+        """
       ]
     ]
   }
@@ -345,15 +401,17 @@ defmodule AshGrant.Dsl.Scope do
   - `:name` - The atom name of the scope (e.g., `:own`, `:published`)
   - `:inherits` - List of parent scope names to inherit from
   - `:filter` - The filter expression (`true` for no filtering, or an Ash.Expr)
+  - `:write` - Optional write-specific expression. Falls back to `:filter` if nil. Set to `false` to deny writes.
   - `:description` - Optional human-readable description for debugging/explain
   """
 
-  defstruct [:name, :inherits, :filter, :description, :__spark_metadata__]
+  defstruct [:name, :inherits, :filter, :write, :description, :__spark_metadata__]
 
   @type t :: %__MODULE__{
           name: atom(),
           inherits: [atom()] | nil,
           filter: boolean() | Ash.Expr.t(),
+          write: boolean() | Ash.Expr.t() | nil,
           description: String.t() | nil,
           __spark_metadata__: map() | nil
         }

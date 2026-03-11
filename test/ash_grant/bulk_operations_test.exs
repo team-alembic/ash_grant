@@ -98,7 +98,7 @@ defmodule AshGrant.BulkOperationsTest do
       assert {:error, %Ash.Error.Forbidden{}} = result
     end
 
-    test "with exists() scope (team_member) and permission succeeds without crash" do
+    test "with exists() scope (team_member, write: false) is forbidden without crash" do
       actor_id = Ash.UUID.generate()
       actor = actor_with_perms(["item:*:create:team_member"], actor_id)
 
@@ -110,8 +110,9 @@ defmodule AshGrant.BulkOperationsTest do
         %{title: "Team Item 2", author_id: actor_id, team_id: team.id}
       ]
 
-      # This would crash before the fix with:
+      # Before the exists() fix, this would crash with:
       # nil.persisted(:relationships_by_name)
+      # Now team_member has write: false, so writes are cleanly denied
       result =
         Ash.bulk_create(inputs, BulkItem, :create,
           actor: actor,
@@ -119,8 +120,7 @@ defmodule AshGrant.BulkOperationsTest do
           return_errors?: true
         )
 
-      assert result.status == :success
-      assert length(result.records) == 2
+      assert result.status == :error
     end
 
     test "without any permission is forbidden" do
@@ -202,7 +202,7 @@ defmodule AshGrant.BulkOperationsTest do
   # === Single create + exists() regression ===
 
   describe "single create with exists() scope" do
-    test "does not crash with team_member scope" do
+    test "does not crash with team_member scope (write: false denies cleanly)" do
       actor_id = Ash.UUID.generate()
       actor = actor_with_perms(["item:*:create:team_member"], actor_id)
 
@@ -218,8 +218,8 @@ defmodule AshGrant.BulkOperationsTest do
         })
         |> Ash.create(actor: actor)
 
-      assert {:ok, item} = result
-      assert item.title == "Single Item"
+      # team_member scope has write: false, so writes are denied without crash
+      assert {:error, %Ash.Error.Forbidden{}} = result
     end
 
     test "with exists-only scope and no permission is forbidden" do
