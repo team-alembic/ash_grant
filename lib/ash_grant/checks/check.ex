@@ -391,6 +391,10 @@ defmodule AshGrant.Check do
   defp contains_relationship_reference?(%Ash.Query.Not{expression: e}),
     do: contains_relationship_reference?(e)
 
+  defp contains_relationship_reference?(%Ash.Query.Call{args: args}) do
+    Enum.any?(args, &contains_relationship_reference?/1)
+  end
+
   defp contains_relationship_reference?(%{__struct__: _, left: l, right: r}) do
     contains_relationship_reference?(l) or contains_relationship_reference?(r)
   end
@@ -442,7 +446,7 @@ defmodule AshGrant.Check do
     |> Ash.Query.for_read(:read, %{})
     |> Ash.Query.filter(^resolved_filter)
     |> Ash.Query.filter(^pk_filter)
-    |> Ash.exists?(authorize?: false)
+    |> Ash.exists?(exists_opts(context))
   rescue
     _ -> false
   end
@@ -541,10 +545,16 @@ defmodule AshGrant.Check do
       |> Ash.Query.for_read(:read, %{})
       |> Ash.Query.filter(^[{relationship.destination_attribute, fk_value}])
       |> Ash.Query.filter(^resolved)
-      |> Ash.exists?(authorize?: false)
+      |> Ash.exists?(exists_opts(context))
     else
       _ -> false
     end
+  end
+
+  # Build opts for Ash.exists? — always skip authorization, pass tenant if present
+  defp exists_opts(context) do
+    opts = [authorize?: false]
+    if context[:tenant], do: Keyword.put(opts, :tenant, context[:tenant]), else: opts
   end
 
   # Resolve actor/tenant/context templates in an expression
@@ -566,6 +576,10 @@ defmodule AshGrant.Check do
 
   defp extract_first_relationship(%Ash.Query.BooleanExpression{left: l, right: r}) do
     extract_first_relationship(l) || extract_first_relationship(r)
+  end
+
+  defp extract_first_relationship(%Ash.Query.Call{args: args}) do
+    Enum.find_value(args, &extract_first_relationship/1)
   end
 
   defp extract_first_relationship(%{__struct__: _, left: l, right: r}) do
