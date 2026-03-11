@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-03-11
+
 ### Added
 
 - **DB query fallback for relational write scopes**: Scopes using `exists()` or dot-path references now work correctly for write actions (create, update, destroy) without requiring a `write:` option. When a scope has relationship references and no explicit `write:` override, `AshGrant.Check` automatically queries the database using the read scope expression. (#28)
@@ -335,7 +337,8 @@ end
 | `AshGrant.Check` | SimpleCheck for write actions |
 | `AshGrant.FilterCheck` | FilterCheck for read actions |
 
-[Unreleased]: https://github.com/jhlee111/ash_grant/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/jhlee111/ash_grant/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/jhlee111/ash_grant/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/jhlee111/ash_grant/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/jhlee111/ash_grant/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/jhlee111/ash_grant/releases/tag/v0.6.0
