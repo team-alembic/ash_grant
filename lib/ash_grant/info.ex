@@ -226,8 +226,8 @@ defmodule AshGrant.Info do
   ## Examples
 
       # Scope with write: expr(...) → returns the write expression
-      resolve_write_scope_filter(Resource, :team_member, context)
-      # => expr(team_id in ^actor(:team_ids))
+      resolve_write_scope_filter(Resource, :same_org, context)
+      # => expr(org_id == ^actor(:org_id))
 
       # Scope with write: false → returns false
       resolve_write_scope_filter(Resource, :readonly, context)

@@ -79,8 +79,9 @@ defmodule AshGrant.Check do
   The `write:` option is an explicit override. When omitted, the check automatically
   chooses the best strategy for the scope expression (see "DB Query Fallback" below).
 
-      scope :team_member, expr(exists(team.members, user_id == ^actor(:id))),
-        write: expr(team_id in ^actor(:team_ids))
+      # Explicit in-memory override (avoids DB round-trip)
+      scope :same_org, expr(exists(org.users, id == ^actor(:id))),
+        write: expr(org_id == ^actor(:org_id))
 
   Set `write: false` to explicitly deny writes with a scope:
 

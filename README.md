@@ -443,9 +443,8 @@ ash_grant do
   scope :own_draft, [:own], expr(status == :draft)
   # Result: author_id == actor.id AND status == :draft
 
-  # Dual read/write scope - separate expression for write actions
-  scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id))),
-    write: expr(team_id in ^actor(:team_ids))
+  # Relational scope - works for both reads and writes automatically
+  scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id)))
 end
 ```
 
@@ -620,13 +619,13 @@ query to verify the record matches the scope.
 
 ```elixir
 ash_grant do
-  # Explicit in-memory expression for writes (avoids DB query)
-  scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id))),
-    write: expr(team_id in ^actor(:team_ids))
-
   # Explicitly deny writes with this scope
   scope :org_member, expr(exists(org.users, id == ^actor(:id))),
     write: false
+
+  # Explicit in-memory expression (avoids DB round-trip)
+  scope :same_org, expr(exists(org.users, id == ^actor(:id))),
+    write: expr(org_id == ^actor(:org_id))
 end
 ```
 
@@ -1030,15 +1029,17 @@ Scope Filter: true (no filtering)
 
 ### Dual Read/Write Scope (`write:` Option)
 
-Scopes using `exists()` or dot-path references cannot be evaluated in-memory for write
-actions. The `write:` option provides a separate expression for write action evaluation:
+Scopes with `exists()` or dot-paths work automatically for both reads and writes via
+[DB query fallback](#relational-scopes-exists-and-dot-paths). The `write:` option
+is an optional override for explicit control:
 
-| `write:` value | Behavior |
-|----------------|----------|
-| `write: expr(...)` | Use this direct-field expression for write actions |
-| `write: false` | Explicitly deny all writes with this scope |
-| `write: true` | Allow all writes with this scope (no filtering) |
-| _(omitted)_ | Fall back to `filter` (default, backward compatible) |
+| `write:` value | Strategy | Behavior |
+|----------------|----------|----------|
+| _(omitted, no relationships)_ | In-memory | Evaluates filter in-memory (default) |
+| _(omitted, has relationships)_ | DB query | Queries DB with read scope (automatic) |
+| `write: expr(...)` | In-memory | Use this expression for writes (overrides DB query) |
+| `write: false` | Deny | Explicitly deny all writes with this scope |
+| `write: true` | Allow | Allow all writes with this scope (no filtering) |
 
 ```elixir
 ash_grant do
@@ -1046,15 +1047,18 @@ ash_grant do
 
   scope :all, true
 
-  # Read uses SQL EXISTS; write checks team_id directly
-  scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id))),
-    write: expr(team_id in ^actor(:team_ids))
+  # Relational scope — DB query fallback handles writes automatically
+  scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id)))
 
-  # Read uses SQL; write is denied entirely
+  # Explicitly deny writes
   scope :org_member, expr(exists(org.users, id == ^actor(:id))),
     write: false
 
-  # No write: option — filter is used for both read and write
+  # Explicit in-memory override (avoids DB round-trip)
+  scope :same_org, expr(exists(org.users, id == ^actor(:id))),
+    write: expr(org_id == ^actor(:org_id))
+
+  # Simple scopes — in-memory evaluation, no write: needed
   scope :own, expr(author_id == ^actor(:id))
 end
 ```

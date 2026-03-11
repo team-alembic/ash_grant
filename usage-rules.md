@@ -184,9 +184,9 @@ ash_grant do
   # No write: needed — DB query fallback handles it automatically
   scope :team_member, expr(exists(team.members, user_id == ^actor(:id)))
 
-  # Explicit override: use in-memory expression for writes (avoids DB query)
-  scope :team_visible, expr(exists(team.members, user_id == ^actor(:id))),
-    write: expr(team_id in ^actor(:team_ids))
+  # Explicit override: in-memory expression (avoids DB round-trip)
+  scope :same_org, expr(exists(org.users, id == ^actor(:id))),
+    write: expr(org_id == ^actor(:org_id))
 
   # Explicitly deny writes with this scope
   scope :readonly, expr(exists(org.users, id == ^actor(:id))),
@@ -357,8 +357,8 @@ Use `write:` to override the automatic DB query strategy:
 
 ```elixir
 # Explicit in-memory expression (avoids DB query overhead)
-scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id))),
-  write: expr(team_id in ^actor(:team_ids))
+scope :same_org, expr(exists(org.users, id == ^actor(:id))),
+  write: expr(org_id == ^actor(:org_id))
 
 # Explicitly deny writes
 scope :readonly, expr(exists(org.users, id == ^actor(:id))),
@@ -679,8 +679,8 @@ in-memory evaluation. Use `write:` to provide a direct-field expression:
 
 ```elixir
 # For resources WITHOUT a data layer, use write: to provide an alternative
-scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id))),
-  write: expr(team_id in ^actor(:team_ids))
+scope :same_org, expr(exists(org.users, id == ^actor(:id))),
+  write: expr(org_id == ^actor(:org_id))
 ```
 
 ### Forgetting that deny-wins means no order dependency

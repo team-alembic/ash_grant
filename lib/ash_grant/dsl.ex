@@ -34,23 +34,22 @@ defmodule AshGrant.Dsl do
   ### Dual Read/Write Scope
 
   The `filter` expression is used for read actions (converted to SQL via `FilterCheck`).
-  For write actions, `Check` evaluates the scope in-memory using `Ash.Expr.eval/2`.
+  For write actions, `Check` evaluates the scope — simple scopes use in-memory
+  evaluation, while scopes with relationship references (`exists()` or dot-paths)
+  automatically use a DB query to verify the scope.
 
-  Relationship traversal (`exists()` or dot-paths like `order.center_id`) cannot
-  be evaluated in-memory. Use the `write:` option to provide a direct-field expression
-  for write actions:
+  The `write:` option is an optional override for explicit control:
 
-      scope :team_member, expr(exists(team.members, user_id == ^actor(:id))),
-        write: expr(team_id in ^actor(:team_ids))
-
-  Set `write: false` to explicitly deny writes with a scope:
-
+      # Explicitly deny writes
       scope :readonly, expr(exists(org.users, id == ^actor(:id))),
         write: false
 
-  When `write:` is omitted, the `filter` expression is used for both reads and writes
-  (backward compatible). A compile-time warning is emitted if relationship traversal
-  is detected without a `write:` option.
+      # Explicit in-memory expression (avoids DB round-trip)
+      scope :same_org, expr(exists(org.users, id == ^actor(:id))),
+        write: expr(org_id == ^actor(:org_id))
+
+  When `write:` is omitted, scopes with relationship references use a DB query
+  fallback; simple scopes use in-memory evaluation.
 
   ## Example
 
@@ -67,9 +66,8 @@ defmodule AshGrant.Dsl do
           scope :published, expr(status == :published)
           scope :own_draft, [:own], expr(status == :draft)
 
-          # Dual scope: read uses exists(), write uses direct field
-          scope :team_visible, expr(exists(team.members, user_id == ^actor(:id))),
-            write: expr(team_id in ^actor(:team_ids))
+          # Relational scope — works for reads and writes automatically
+          scope :team_visible, expr(exists(team.members, user_id == ^actor(:id)))
         end
       end
 
@@ -148,9 +146,8 @@ defmodule AshGrant.Dsl do
         scope :today, expr(fragment("DATE(inserted_at) = ?", ^context(:reference_date))),
           description: "Records created today"
 
-        # Dual read/write scope: read uses exists(), write uses direct field
-        scope :team_member, expr(exists(team.members, user_id == ^actor(:id))),
-          write: expr(team_id in ^actor(:team_ids))
+        # Relational scope — DB query fallback handles writes automatically
+        scope :team_member, expr(exists(team.members, user_id == ^actor(:id)))
 
         # Explicitly deny writes with this scope
         scope :readonly, expr(exists(org.users, id == ^actor(:id))),
@@ -166,7 +163,7 @@ defmodule AshGrant.Dsl do
       "scope :own_draft, [:own], expr(status == :draft)",
       ~s|scope :today, expr(fragment("DATE(inserted_at) = ?", ^context(:reference_date)))|,
       ~s|scope :own, expr(author_id == ^actor(:id)), description: "Records owned by the current user"|,
-      "scope :team_member, expr(exists(team.members, user_id == ^actor(:id))), write: expr(team_id in ^actor(:team_ids))",
+      "scope :team_member, expr(exists(team.members, user_id == ^actor(:id)))",
       "scope :readonly, expr(exists(org.users, id == ^actor(:id))), write: false"
     ],
     target: AshGrant.Dsl.Scope,
@@ -195,19 +192,20 @@ defmodule AshGrant.Dsl do
         type: {:or, [:boolean, :any]},
         required: false,
         doc: """
-        Expression for write action evaluation. Falls back to `filter` if omitted.
-        Set to `false` to explicitly deny writes with this scope.
+        Optional override for write action evaluation. When omitted, scopes with
+        relationship references use a DB query fallback; simple scopes use in-memory
+        evaluation.
 
-        Use this when the read filter uses relationship traversal (exists() or dot-paths)
-        that cannot be evaluated in-memory for write actions.
+        Set to `false` to explicitly deny writes, or to an expression for explicit
+        in-memory evaluation (avoids DB round-trip).
 
         ## Example
 
-            scope :own, expr(exists(team.members, user_id == ^actor(:id))),
-              write: expr(team_id in ^actor(:team_ids))
-
             scope :readonly, expr(exists(org.users, id == ^actor(:id))),
               write: false
+
+            scope :same_org, expr(exists(org.users, id == ^actor(:id))),
+              write: expr(org_id == ^actor(:org_id))
         """
       ]
     ]
