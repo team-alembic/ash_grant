@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **DB query fallback for relational write scopes**: Scopes using `exists()` or dot-path references now work correctly for write actions (create, update, destroy) without requiring a `write:` option. When a scope has relationship references and no explicit `write:` override, `AshGrant.Check` automatically queries the database using the read scope expression. (#28)
+  - **Update/destroy**: Queries DB to check if the existing record matches the read scope
+  - **Create**: Splits the filter — direct-attribute conditions are evaluated in-memory, relationship conditions are verified via DB query on parent resources
+  - `write:` option still works as an explicit override (backward compatible)
+  - Resources without a data layer fall back to in-memory evaluation (existing behavior)
+
+### Removed
+
+- **Compile-time warning for relationship scopes without `write:`**: The warning is no longer needed since the DB query fallback handles these cases automatically. (#28)
+
 ## [0.7.0] - 2026-03-11
 
 ### Added
