@@ -27,7 +27,7 @@ Add `ash_grant` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:ash_grant, "~> 0.6"}
+    {:ash_grant, "~> 0.7"}
   ]
 end
 ```
@@ -442,6 +442,10 @@ ash_grant do
   # Inherited scope - combines parent with additional filter
   scope :own_draft, [:own], expr(status == :draft)
   # Result: author_id == actor.id AND status == :draft
+
+  # Dual read/write scope - separate expression for write actions
+  scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id))),
+    write: expr(team_id in ^actor(:team_ids))
 end
 ```
 
@@ -592,32 +596,51 @@ Post |> Ash.read!(actor: actor)
 - Scope inheritance works with tenant scopes (e.g., `[:same_tenant]`)
 - Both `filter_check` (reads) and `check` (writes) properly evaluate tenant scopes
 
-### Relational Scopes (`exists()`)
+### Relational Scopes (`exists()` and Dot-Paths)
 
-You can use `exists()` in scope expressions for relationship-based filtering:
+You can use `exists()` and dot-path references in scope expressions for relationship-based filtering:
 
 ```elixir
 ash_grant do
   scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id)))
   scope :own_in_team, expr(author_id == ^actor(:id) and exists(team.memberships, user_id == ^actor(:id)))
+  scope :same_center, expr(order.center_id == ^actor(:center_id))
 end
 ```
 
-> **Important: `exists()` scopes and write actions**
+> **Important: Relationship traversal and write actions**
 >
-> `exists()` is only fully enforced for **read** actions, where `FilterCheck` converts it
-> to a SQL EXISTS subquery. For **write** actions (create, update, destroy), `Check`
-> evaluates scopes in-memory and cannot resolve `exists()` — the relational condition
-> is replaced with `true`. Attribute-based conditions in the same scope are still checked.
+> `exists()` and dot-path references (e.g., `order.center_id`) are only fully enforced
+> for **read** actions, where `FilterCheck` converts them to SQL. For **write** actions
+> (create, update, destroy), `Check` evaluates scopes in-memory and cannot resolve
+> relationship traversals.
 >
-> For example, with `expr(author_id == ^actor(:id) and exists(team.memberships, ...))`:
-> - **Read**: Both `author_id` check and `exists()` are enforced as SQL
-> - **Write**: Only `author_id` check is enforced; `exists()` is treated as `true`
->
-> A compile-time warning is emitted when `exists()` scopes are detected on resources
-> with write policies enabled. If you need relational authorization for writes, use a
-> custom `Ash.Policy.Check` that queries the database, or move the check to a
-> change/validation on the action.
+> Use the `write:` option to provide a direct-field expression for write actions:
+
+```elixir
+ash_grant do
+  # Read: SQL EXISTS subquery | Write: check team_id directly
+  scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id))),
+    write: expr(team_id in ^actor(:team_ids))
+
+  # Read: SQL join | Write: check center_id on the record
+  scope :same_center, expr(order.center_id == ^actor(:center_id)),
+    write: expr(center_id == ^actor(:center_id))
+
+  # Read: SQL EXISTS | Write: deny (no in-memory equivalent)
+  scope :org_member, expr(exists(org.users, id == ^actor(:id))),
+    write: false
+
+  # Mixed: exists() simplified for writes, author_id still checked
+  scope :own_in_team, [:own],
+    expr(exists(team.memberships, user_id == ^actor(:id))),
+    write: expr(author_id == ^actor(:id))
+end
+```
+
+> A compile-time warning is emitted when scopes use `exists()` or dot-paths without
+> a `write:` option. See [Dual Read/Write Scope](#dual-readwrite-scope-write-option)
+> for full details.
 
 ### Business Scope Examples
 
@@ -1016,6 +1039,51 @@ Matching Permissions:
 Scope Filter: true (no filtering)
 ───────────────────────────────────────────────────────────────────
 ```
+
+### Dual Read/Write Scope (`write:` Option)
+
+Scopes using `exists()` or dot-path references cannot be evaluated in-memory for write
+actions. The `write:` option provides a separate expression for write action evaluation:
+
+| `write:` value | Behavior |
+|----------------|----------|
+| `write: expr(...)` | Use this direct-field expression for write actions |
+| `write: false` | Explicitly deny all writes with this scope |
+| `write: true` | Allow all writes with this scope (no filtering) |
+| _(omitted)_ | Fall back to `filter` (default, backward compatible) |
+
+```elixir
+ash_grant do
+  resolver MyApp.PermissionResolver
+
+  scope :all, true
+
+  # Read uses SQL EXISTS; write checks team_id directly
+  scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id))),
+    write: expr(team_id in ^actor(:team_ids))
+
+  # Read uses SQL; write is denied entirely
+  scope :org_member, expr(exists(org.users, id == ^actor(:id))),
+    write: false
+
+  # No write: option — filter is used for both read and write
+  scope :own, expr(author_id == ^actor(:id))
+end
+```
+
+**Inheritance:** Child scopes inherit their parent's `write:` expression. If a parent
+has `write: false`, it propagates to all children:
+
+```elixir
+scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id))),
+  write: false
+scope :team_editor, [:team_member], expr(role == :editor)
+# team_editor inherits write: false — writes are denied
+```
+
+**Resolution functions:**
+- `AshGrant.Info.resolve_scope_filter/3` — always returns the read (filter) expression
+- `AshGrant.Info.resolve_write_scope_filter/3` — returns `write:` expression if set, otherwise falls back to `filter`
 
 ### Scope Descriptions
 
