@@ -26,6 +26,52 @@ defmodule AshGrant.PolicyTest.Assertions do
   alias AshGrant.PolicyTest.AssertionError
 
   @doc """
+  Asserts that the specified fields are visible to an actor for an action.
+
+  Resolves the actor's field groups for the given action. If the actor has
+  4-part permissions (no field_group), all fields are considered visible.
+  If field groups exist, only fields in the resolved groups are visible.
+
+  ## Examples
+
+      assert_fields_visible :reader, :read, [:name, :email]
+      assert_fields_visible :admin, :read, [:name, :salary, :ssn]
+  """
+  defmacro assert_fields_visible(actor_name, action_spec, fields) do
+    quote do
+      AshGrant.PolicyTest.Assertions.do_assert_fields_visible(
+        __MODULE__,
+        unquote(actor_name),
+        unquote(action_spec),
+        unquote(fields)
+      )
+    end
+  end
+
+  @doc """
+  Asserts that the specified fields are hidden from an actor for an action.
+
+  Resolves the actor's field groups for the given action. If the actor has
+  4-part permissions (no field_group), no fields are hidden and this assertion
+  will fail. If the actor is denied, all fields are hidden.
+
+  ## Examples
+
+      assert_fields_hidden :reader, :read, [:salary, :ssn]
+      assert_fields_hidden :guest, :read, [:name, :email]
+  """
+  defmacro assert_fields_hidden(actor_name, action_spec, fields) do
+    quote do
+      AshGrant.PolicyTest.Assertions.do_assert_fields_hidden(
+        __MODULE__,
+        unquote(actor_name),
+        unquote(action_spec),
+        unquote(fields)
+      )
+    end
+  end
+
+  @doc """
   Asserts that an actor can perform an action.
 
   ## Action Specifiers
@@ -128,6 +174,104 @@ defmodule AshGrant.PolicyTest.Assertions do
       {:allow, details} ->
         raise AssertionError,
           message: build_error_message(:assert_cannot, actor_name, action_spec, record, details)
+    end
+  end
+
+  @doc false
+  def do_assert_fields_visible(module, actor_name, action_spec, fields) do
+    {actor, resource, _action} = resolve_context(module, actor_name, action_spec)
+    action = normalize_action_spec(action_spec)
+
+    visible = resolve_visible_fields(resource, actor, action)
+
+    case visible do
+      :all_fields ->
+        :ok
+
+      :no_access ->
+        raise AssertionError,
+          message:
+            "Expected fields #{inspect(fields)} to be visible for actor :#{actor_name} " <>
+              "performing #{format_action(action_spec)}, but the actor has no permission"
+
+      field_set ->
+        hidden = Enum.reject(fields, &(&1 in field_set))
+
+        if hidden == [] do
+          :ok
+        else
+          raise AssertionError,
+            message:
+              "Expected fields #{inspect(hidden)} to be visible for actor :#{actor_name} " <>
+                "performing #{format_action(action_spec)}, but they were hidden. " <>
+                "Visible fields: #{inspect(field_set)}"
+        end
+    end
+  end
+
+  @doc false
+  def do_assert_fields_hidden(module, actor_name, action_spec, fields) do
+    {actor, resource, _action} = resolve_context(module, actor_name, action_spec)
+    action = normalize_action_spec(action_spec)
+
+    visible = resolve_visible_fields(resource, actor, action)
+
+    case visible do
+      :all_fields ->
+        raise AssertionError,
+          message:
+            "Expected fields #{inspect(fields)} to be hidden for actor :#{actor_name} " <>
+              "performing #{format_action(action_spec)}, but the actor has a 4-part permission " <>
+              "with no field restriction (all fields visible)"
+
+      :no_access ->
+        :ok
+
+      field_set ->
+        exposed = Enum.filter(fields, &(&1 in field_set))
+
+        if exposed == [] do
+          :ok
+        else
+          raise AssertionError,
+            message:
+              "Expected fields #{inspect(exposed)} to be hidden for actor :#{actor_name} " <>
+                "performing #{format_action(action_spec)}, but they were visible. " <>
+                "Visible fields: #{inspect(field_set)}"
+        end
+    end
+  end
+
+  @doc false
+  def resolve_visible_fields(resource, actor, action) do
+    permissions = AshGrant.Introspect.permissions_for(resource, actor)
+    resource_name = AshGrant.Info.resource_name(resource)
+    action_name = normalize_action_to_string(action)
+
+    field_groups =
+      AshGrant.Evaluator.get_all_field_groups(permissions, resource_name, action_name)
+
+    has_any_permission = AshGrant.Evaluator.has_access?(permissions, resource_name, action_name)
+
+    cond do
+      not has_any_permission -> :no_access
+      field_groups == [] -> :all_fields
+      true -> resolve_field_groups_to_fields(resource, field_groups)
+    end
+  end
+
+  defp resolve_field_groups_to_fields(resource, field_groups) do
+    field_groups
+    |> Enum.flat_map(&resolve_single_field_group(resource, &1))
+    |> Enum.uniq()
+  end
+
+  defp resolve_single_field_group(resource, group_name) do
+    group_atom = if is_binary(group_name), do: String.to_atom(group_name), else: group_name
+
+    case AshGrant.Info.resolve_field_group(resource, group_atom) do
+      nil -> []
+      resolved -> resolved.fields
     end
   end
 
@@ -331,4 +475,11 @@ defmodule AshGrant.PolicyTest.Assertions do
   defp format_action(action: action), do: "action: :#{action}"
   defp format_action(action_type: type), do: "action_type: :#{type}"
   defp format_action(other), do: inspect(other)
+
+  defp normalize_action_to_string(action) when is_atom(action), do: Atom.to_string(action)
+
+  defp normalize_action_to_string({:action_type, _type}),
+    do: raise("assert_fields_visible/assert_fields_hidden does not support action_type specs")
+
+  defp normalize_action_to_string(action) when is_binary(action), do: action
 end

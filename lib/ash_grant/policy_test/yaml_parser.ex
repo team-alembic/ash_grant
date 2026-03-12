@@ -53,11 +53,12 @@ defmodule AshGrant.PolicyTest.YamlParser do
 
   @type parsed_test :: %{
           name: String.t(),
-          type: :assert_can | :assert_cannot,
+          type: :assert_can | :assert_cannot | :assert_fields_visible | :assert_fields_hidden,
           actor: atom(),
           action: atom() | nil,
           action_type: atom() | nil,
-          record: map() | nil
+          record: map() | nil,
+          fields: [atom()] | nil
         }
 
   @type parsed :: %{
@@ -155,8 +156,14 @@ defmodule AshGrant.PolicyTest.YamlParser do
       Map.has_key?(test, "assert_cannot") ->
         parse_assertion(:assert_cannot, name, test["assert_cannot"])
 
+      Map.has_key?(test, "assert_fields_visible") ->
+        parse_field_assertion(:assert_fields_visible, name, test["assert_fields_visible"])
+
+      Map.has_key?(test, "assert_fields_hidden") ->
+        parse_field_assertion(:assert_fields_hidden, name, test["assert_fields_hidden"])
+
       true ->
-        raise "Test must have either assert_can or assert_cannot: #{inspect(test)}"
+        raise "Test must have assert_can, assert_cannot, assert_fields_visible, or assert_fields_hidden: #{inspect(test)}"
     end
   end
 
@@ -168,6 +175,23 @@ defmodule AshGrant.PolicyTest.YamlParser do
       action: parse_action(assertion["action"]),
       action_type: parse_action(assertion["action_type"]),
       record: parse_record(assertion["record"])
+    }
+  end
+
+  defp parse_field_assertion(type, name, assertion) do
+    fields =
+      assertion["fields"]
+      |> List.wrap()
+      |> Enum.map(&atomize_key/1)
+
+    %{
+      name: name,
+      type: type,
+      actor: atomize_key(assertion["actor"]),
+      action: parse_action(assertion["action"]),
+      action_type: nil,
+      record: nil,
+      fields: fields
     }
   end
 
@@ -236,6 +260,12 @@ defmodule AshGrant.PolicyTest.YamlParser do
 
         :assert_cannot ->
           do_assert_cannot(resource, actor, action_spec, test.record)
+
+        :assert_fields_visible ->
+          do_assert_fields_visible(resource, actor, action_spec, test.fields)
+
+        :assert_fields_hidden ->
+          do_assert_fields_hidden(resource, actor, action_spec, test.fields)
       end
 
       duration = System.monotonic_time(:microsecond) - start_time
@@ -271,6 +301,59 @@ defmodule AshGrant.PolicyTest.YamlParser do
       {:allow, details} ->
         raise AshGrant.PolicyTest.AssertionError,
           message: "Expected deny, got allow: #{inspect(details)}"
+    end
+  end
+
+  defp do_assert_fields_visible(resource, actor, action_spec, fields) do
+    visible = Assertions.resolve_visible_fields(resource, actor, action_spec)
+
+    case visible do
+      :all_fields ->
+        :ok
+
+      :no_access ->
+        raise AshGrant.PolicyTest.AssertionError,
+          message:
+            "Expected fields #{inspect(fields)} to be visible, but the actor has no permission"
+
+      field_set ->
+        hidden = Enum.reject(fields, &(&1 in field_set))
+
+        if hidden == [] do
+          :ok
+        else
+          raise AshGrant.PolicyTest.AssertionError,
+            message:
+              "Expected fields #{inspect(hidden)} to be visible, but they were hidden. " <>
+                "Visible fields: #{inspect(field_set)}"
+        end
+    end
+  end
+
+  defp do_assert_fields_hidden(resource, actor, action_spec, fields) do
+    visible = Assertions.resolve_visible_fields(resource, actor, action_spec)
+
+    case visible do
+      :all_fields ->
+        raise AshGrant.PolicyTest.AssertionError,
+          message:
+            "Expected fields #{inspect(fields)} to be hidden, but the actor has a 4-part " <>
+              "permission with no field restriction (all fields visible)"
+
+      :no_access ->
+        :ok
+
+      field_set ->
+        exposed = Enum.filter(fields, &(&1 in field_set))
+
+        if exposed == [] do
+          :ok
+        else
+          raise AshGrant.PolicyTest.AssertionError,
+            message:
+              "Expected fields #{inspect(exposed)} to be hidden, but they were visible. " <>
+                "Visible fields: #{inspect(field_set)}"
+        end
     end
   end
 

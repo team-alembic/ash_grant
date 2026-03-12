@@ -51,6 +51,22 @@ defmodule AshGrant.PolicyTest.YamlExporter do
     Enum.map(tests, &export_test/1)
   end
 
+  defp export_test(%{type: type, fields: fields} = test)
+       when type in [:assert_fields_visible, :assert_fields_hidden] do
+    assertion_key = Atom.to_string(type)
+
+    assertion = %{
+      "actor" => Atom.to_string(test.actor),
+      "action" => Atom.to_string(test.action),
+      "fields" => Enum.map(fields, &Atom.to_string/1)
+    }
+
+    %{
+      "name" => test.name,
+      assertion_key => assertion
+    }
+  end
+
   defp export_test(test) do
     # Analyze test body to determine assertion type and parameters
     # This is a simplified version - in reality, we'd need to inspect

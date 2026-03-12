@@ -92,7 +92,7 @@ defmodule AshGrant.PolicyTest.DslGenerator do
   defp generate_assertion(test) do
     actor = ":#{test.actor}"
     action_spec = generate_action_spec(test)
-    record = generate_record(test.record)
+    record = generate_record(test[:record])
 
     case test.type do
       :assert_can ->
@@ -108,7 +108,20 @@ defmodule AshGrant.PolicyTest.DslGenerator do
         else
           "assert_cannot #{actor}, #{action_spec}"
         end
+
+      :assert_fields_visible ->
+        fields_list = generate_fields_list(test.fields)
+        "assert_fields_visible #{actor}, #{action_spec}, #{fields_list}"
+
+      :assert_fields_hidden ->
+        fields_list = generate_fields_list(test.fields)
+        "assert_fields_hidden #{actor}, #{action_spec}, #{fields_list}"
     end
+  end
+
+  defp generate_fields_list(fields) do
+    inner = Enum.map_join(fields, ", ", &":#{&1}")
+    "[#{inner}]"
   end
 
   defp generate_action_spec(test) do
