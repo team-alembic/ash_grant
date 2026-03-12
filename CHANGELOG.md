@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`field_group` `except` option (blacklist mode)**: Use `[:*]` wildcard with `except` to exclude specific fields instead of listing all visible ones. Useful for resources with many attributes where only a few are sensitive. (#36)
+  - `field_group :public, [], [:*], except: [:salary, :ssn]` — all attributes except salary and ssn
+  - `[:*]` without `except` expands to all resource attributes
+  - Compile-time validations: `except` requires `[:*]`, except fields must exist, masked fields cannot be in `except`
+  - New transformer `AshGrant.Transformers.ResolveFieldGroupExcept` resolves wildcards before downstream validation
+
 ## [0.8.1] - 2026-03-11
 
 ### Fixed

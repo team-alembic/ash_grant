@@ -268,6 +268,13 @@ defmodule AshGrant do
         scope :all, true
         scope :own, expr(author_id == ^actor(:id))
         scope :same_tenant, expr(tenant_id == ^tenant())  # Multi-tenancy
+
+        # Field groups (whitelist)
+        field_group :public, [:name, :department]
+        field_group :sensitive, [:public], [:phone, :address]
+
+        # Field groups (blacklist with except)
+        # field_group :public, [], [:*], except: [:salary, :ssn]
       end
 
   | Option | Type | Description |
