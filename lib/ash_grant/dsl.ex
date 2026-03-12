@@ -232,10 +232,20 @@ defmodule AshGrant.Dsl do
         field_group :sensitive, [:public], [:phone, :address] do
           mask [:phone, :address], with: &MyApp.Masker.mask/2
         end
+
+        # Wildcard — all resource attributes
+        field_group :everything, [:*]
+
+        # Blacklist — all attributes except specified ones
+        field_group :public, [:*], except: [:salary, :ssn]
+
+        # Blacklist with inheritance
+        field_group :sensitive, [:public], [:*], except: [:salary]
     """,
     examples: [
       "field_group :public, [:name, :department]",
-      "field_group :sensitive, [:public], [:phone, :address]"
+      "field_group :sensitive, [:public], [:phone, :address]",
+      "field_group :public, [:*], except: [:salary, :ssn]"
     ],
     target: AshGrant.Dsl.FieldGroup,
     args: [:name, {:optional, :inherits}, :fields],
@@ -261,6 +271,13 @@ defmodule AshGrant.Dsl do
       mask_with: [
         type: {:fun, 2},
         doc: "2-arity masking function: (value, field_name) -> masked_value"
+      ],
+      except: [
+        type: {:list, :atom},
+        doc:
+          "Fields to exclude when using `[:*]` wildcard. " <>
+            "Only valid when `fields` is `[:*]`. " <>
+            "The transformer resolves `[:*]` minus `except` to concrete field names."
       ],
       description: [
         type: :string,
@@ -426,19 +443,30 @@ defmodule AshGrant.Dsl.FieldGroup do
   ## Fields
 
   - `:name` - The atom name of the field group (e.g., `:public`, `:sensitive`)
-  - `:fields` - List of field atoms included in this group
+  - `:fields` - List of field atoms included in this group (or `[:*]` for all attributes)
   - `:inherits` - Optional list of parent field group names to inherit fields from
+  - `:except` - Optional list of fields to exclude when using `[:*]` wildcard
   - `:mask` - Optional list of fields to mask (return masked values instead of hiding)
   - `:mask_with` - Optional 2-arity function `(value, field_name) -> masked_value`
   - `:description` - Optional human-readable description
   """
 
-  defstruct [:name, :fields, :inherits, :mask, :mask_with, :description, :__spark_metadata__]
+  defstruct [
+    :name,
+    :fields,
+    :inherits,
+    :except,
+    :mask,
+    :mask_with,
+    :description,
+    :__spark_metadata__
+  ]
 
   @type t :: %__MODULE__{
           name: atom(),
           fields: [atom()],
           inherits: [atom()] | nil,
+          except: [atom()] | nil,
           mask: [atom()] | nil,
           mask_with: (any(), atom() -> any()) | nil,
           description: String.t() | nil,

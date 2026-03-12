@@ -240,3 +240,36 @@ defmodule AshGrant.PolicyTest.Fixtures.MissingFieldTest do
     assert_can(:reader, :read, %{title: "test"})
   end
 end
+
+# Field group except (blacklist) tests
+
+defmodule AshGrant.PolicyTest.Fixtures.ExceptFieldGroupTest do
+  use AshGrant.PolicyTest
+
+  resource(AshGrant.Test.ExceptRecord)
+
+  # Actor with :public field_group ([:*] except [:salary, :ssn])
+  actor(:public_viewer, %{permissions: ["exceptrecord:*:read:all:public"]})
+  # Actor with :full field_group (inherits :public, adds [:salary, :ssn])
+  actor(:full_viewer, %{permissions: ["exceptrecord:*:read:all:full"]})
+  # Actor with 4-part permission (no field_group restriction)
+  actor(:unrestricted, %{permissions: ["exceptrecord:*:read:all"]})
+  # Actor with no permissions
+  actor(:nobody, %{permissions: []})
+
+  test "public viewer can read with except field group" do
+    assert_can(:public_viewer, :read)
+  end
+
+  test "full viewer can read with full field group" do
+    assert_can(:full_viewer, :read)
+  end
+
+  test "unrestricted viewer can read without field group" do
+    assert_can(:unrestricted, :read)
+  end
+
+  test "nobody cannot read" do
+    assert_cannot(:nobody, :read)
+  end
+end

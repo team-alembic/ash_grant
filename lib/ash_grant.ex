@@ -296,6 +296,7 @@ defmodule AshGrant do
     sections: AshGrant.Dsl.sections(),
     transformers: [
       AshGrant.Transformers.ValidateScopes,
+      AshGrant.Transformers.ResolveFieldGroupExcept,
       AshGrant.Transformers.ValidateFieldGroups,
       AshGrant.Transformers.AddDefaultPolicies,
       AshGrant.Transformers.AddFieldPolicies,
