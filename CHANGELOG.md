@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-03-12
+
 ### Added
 
 - **`field_group` `except` option (blacklist mode)**: Use `[:*]` wildcard with `except` to exclude specific fields instead of listing all visible ones. Useful for resources with many attributes where only a few are sensitive. (#36)
