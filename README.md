@@ -724,7 +724,7 @@ ash_grant do
 
   scope :all, true
 
-  # Root group — no inheritance
+  # Root group — no inheritance (whitelist)
   field_group :public, [:name, :department, :position]
 
   # Inherits all fields from :public, adds phone and address
@@ -734,6 +734,25 @@ ash_grant do
   field_group :confidential, [:sensitive], [:salary, :email]
 end
 ```
+
+#### Blacklist Mode (`except`)
+
+When a resource has many attributes, use `[:*]` with `except` to exclude specific fields instead of listing all visible ones:
+
+```elixir
+ash_grant do
+  resolver MyApp.PermissionResolver
+  scope :all, true
+
+  # All attributes except salary and ssn
+  field_group :public, [], [:*], except: [:salary, :ssn]
+
+  # Child group adds back the excluded fields
+  field_group :full, [:public], [:salary, :ssn]
+end
+```
+
+`[:*]` expands to all resource attributes at compile time. `except` removes fields from that list. `[:*]` without `except` is also valid (expands to all attributes).
 
 ### Permission Strings with Field Groups
 
@@ -786,7 +805,14 @@ ash_grant do
 end
 ```
 
-This auto-generates equivalent field policies with a catch-all `field_policy :*` that allows non-grouped fields.
+This also works with blacklist mode:
+
+```elixir
+field_group :public, [], [:*], except: [:salary, :ssn]
+field_group :full, [:public], [:salary, :ssn]
+```
+
+Auto-generates equivalent field policies with a catch-all `field_policy :*` that allows non-grouped fields.
 
 ### Field Group Inheritance
 
