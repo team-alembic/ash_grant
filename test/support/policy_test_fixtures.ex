@@ -241,6 +241,43 @@ defmodule AshGrant.PolicyTest.Fixtures.MissingFieldTest do
   end
 end
 
+# Field visibility assertion tests
+
+defmodule AshGrant.PolicyTest.Fixtures.FieldVisibilityTest do
+  use AshGrant.PolicyTest
+
+  resource(AshGrant.Test.ExceptRecord)
+
+  # Actor with :public field_group ([:*] except [:salary, :ssn])
+  actor(:public_viewer, %{permissions: ["exceptrecord:*:read:all:public"]})
+  # Actor with :full field_group (inherits :public, adds [:salary, :ssn])
+  actor(:full_viewer, %{permissions: ["exceptrecord:*:read:all:full"]})
+  # Actor with 4-part permission (no field_group restriction)
+  actor(:unrestricted, %{permissions: ["exceptrecord:*:read:all"]})
+  # Actor with no permissions
+  actor(:nobody, %{permissions: []})
+
+  test "public viewer sees non-sensitive fields" do
+    assert_fields_visible(:public_viewer, :read, [:name, :email, :department])
+  end
+
+  test "public viewer cannot see salary and ssn" do
+    assert_fields_hidden(:public_viewer, :read, [:salary, :ssn])
+  end
+
+  test "full viewer sees all fields" do
+    assert_fields_visible(:full_viewer, :read, [:name, :salary, :ssn])
+  end
+
+  test "unrestricted sees all fields (4-part permission)" do
+    assert_fields_visible(:unrestricted, :read, [:name, :salary, :ssn])
+  end
+
+  test "nobody has no visible fields" do
+    assert_fields_hidden(:nobody, :read, [:name, :salary])
+  end
+end
+
 # Field group except (blacklist) tests
 
 defmodule AshGrant.PolicyTest.Fixtures.ExceptFieldGroupTest do
