@@ -86,18 +86,21 @@ defmodule AshGrant.Introspect do
 
     Enum.map(actions, fn action ->
       action_name = to_string(action.name)
+      action_type = action.type
 
       # Check RBAC permissions
-      scopes = Evaluator.get_all_scopes(permissions, resource_name, action_name)
+      scopes = Evaluator.get_all_scopes(permissions, resource_name, action_name, action_type)
 
       # Check for deny
-      has_deny = has_deny_permission?(permissions, resource_name, action_name)
+      has_deny = has_deny_permission?(permissions, resource_name, action_name, action_type)
 
       # Check instance permissions
-      instance_ids = Evaluator.get_matching_instance_ids(permissions, resource_name, action_name)
+      instance_ids =
+        Evaluator.get_matching_instance_ids(permissions, resource_name, action_name, action_type)
 
       # Check field groups
-      field_groups = Evaluator.get_all_field_groups(permissions, resource_name, action_name)
+      field_groups =
+        Evaluator.get_all_field_groups(permissions, resource_name, action_name, action_type)
 
       # Determine status
       allowed = (scopes != [] or instance_ids != []) and not has_deny
@@ -207,21 +210,34 @@ defmodule AshGrant.Introspect do
       action_name = to_string(action)
       permissions = permissions_for(resource, actor, context: context)
 
+      # Resolve action type from Ash resource info
+      action_type =
+        case Ash.Resource.Info.action(resource, action) do
+          %{type: type} -> type
+          _ -> nil
+        end
+
       # Check for deny first
-      has_deny = has_deny_permission?(permissions, resource_name, action_name)
+      has_deny = has_deny_permission?(permissions, resource_name, action_name, action_type)
 
       if has_deny do
         {:deny, %{reason: :denied_by_rule}}
       else
         # Check RBAC scopes
-        scopes = Evaluator.get_all_scopes(permissions, resource_name, action_name)
+        scopes = Evaluator.get_all_scopes(permissions, resource_name, action_name, action_type)
 
         # Check instance permissions
         instance_ids =
-          Evaluator.get_matching_instance_ids(permissions, resource_name, action_name)
+          Evaluator.get_matching_instance_ids(
+            permissions,
+            resource_name,
+            action_name,
+            action_type
+          )
 
         # Check field groups
-        field_groups = Evaluator.get_all_field_groups(permissions, resource_name, action_name)
+        field_groups =
+          Evaluator.get_all_field_groups(permissions, resource_name, action_name, action_type)
 
         cond do
           scopes != [] ->
@@ -328,11 +344,12 @@ defmodule AshGrant.Introspect do
     Ash.Resource.Info.actions(resource)
   end
 
-  defp has_deny_permission?(permissions, resource_name, action_name) do
+  defp has_deny_permission?(permissions, resource_name, action_name, action_type) do
     permissions
     |> Enum.map(&normalize_permission/1)
     |> Enum.any?(fn perm ->
-      Permission.deny?(perm) and Permission.matches?(perm, resource_name, action_name)
+      Permission.deny?(perm) and
+        Permission.matches?(perm, resource_name, action_name, action_type)
     end)
   end
 

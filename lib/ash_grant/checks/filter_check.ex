@@ -210,7 +210,12 @@ defmodule AshGrant.FilterCheck do
         _module -> configured_name
       end
 
-    action_name = Keyword.get(opts, :action) || to_string(action.name)
+    # When action is overridden via opts, don't infer action_type
+    {action_name, action_type} =
+      case Keyword.get(opts, :action) do
+        nil -> {to_string(action.name), action_type_from(action)}
+        override -> {override, nil}
+      end
 
     # Build context
     context = %{
@@ -224,15 +229,24 @@ defmodule AshGrant.FilterCheck do
     permissions = resolve_permissions(resolver, actor, context)
 
     # Get RBAC scopes (instance_id = "*")
-    scopes = AshGrant.Evaluator.get_all_scopes(permissions, resource_name, action_name)
+    scopes =
+      AshGrant.Evaluator.get_all_scopes(permissions, resource_name, action_name, action_type)
 
     # Get instance permission IDs
     instance_ids =
-      AshGrant.Evaluator.get_matching_instance_ids(permissions, resource_name, action_name)
+      AshGrant.Evaluator.get_matching_instance_ids(
+        permissions,
+        resource_name,
+        action_name,
+        action_type
+      )
 
     # Build combined filter from RBAC scopes + instance IDs
     build_filter_with_instances(scopes, instance_ids, scope_resolver, context)
   end
+
+  defp action_type_from(%{type: type}), do: type
+  defp action_type_from(_), do: nil
 
   defp build_filter_with_instances(scopes, instance_ids, scope_resolver, context) do
     # Check for global access from RBAC

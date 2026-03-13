@@ -333,12 +333,33 @@ defmodule AshGrant.Permission do
 
   """
   @spec matches?(t(), String.t(), String.t()) :: boolean()
-  def matches?(%__MODULE__{instance_id: "*"} = perm, resource, action) do
+  def matches?(perm, resource, action), do: matches?(perm, resource, action, nil)
+
+  @doc """
+  Checks if a permission matches a resource, action, and optional Ash action type.
+
+  When `action_type` is provided, prefix patterns like `"read*"` will also match
+  actions whose Ash type equals the prefix (e.g., a `:read`-type action named
+  `list_published` matches `"read*"`).
+
+  ## Examples
+
+      iex> perm = AshGrant.Permission.parse!("blog:*:read*:all")
+      iex> AshGrant.Permission.matches?(perm, "blog", "list_published", :read)
+      true
+
+      iex> perm = AshGrant.Permission.parse!("blog:*:read*:all")
+      iex> AshGrant.Permission.matches?(perm, "blog", "list_published", :update)
+      false
+
+  """
+  @spec matches?(t(), String.t(), String.t(), atom() | nil) :: boolean()
+  def matches?(%__MODULE__{instance_id: "*"} = perm, resource, action, action_type) do
     matches_resource?(perm.resource, resource) and
-      matches_action?(perm.action, action)
+      matches_action?(perm.action, action, action_type)
   end
 
-  def matches?(%__MODULE__{}, _resource, _action) do
+  def matches?(%__MODULE__{}, _resource, _action, _action_type) do
     # Instance-level permissions don't match RBAC queries
     false
   end
@@ -426,12 +447,41 @@ defmodule AshGrant.Permission do
 
   """
   @spec matches_action?(String.t(), String.t()) :: boolean()
-  def matches_action?("*", _action), do: true
+  def matches_action?(pattern, action), do: matches_action?(pattern, action, nil)
 
-  def matches_action?(pattern, action) do
+  @doc """
+  Checks if an action pattern matches an action name, with optional Ash action type.
+
+  When `action_type` is provided and the pattern is a prefix wildcard like `"read*"`,
+  the match succeeds if the action name starts with the prefix **OR** the action type
+  matches the prefix. This allows `"read*"` to match `:read`-type actions like
+  `list_published` or `by_slug`.
+
+  ## Examples
+
+      iex> AshGrant.Permission.matches_action?("*", "anything", :read)
+      true
+      iex> AshGrant.Permission.matches_action?("read*", "list_published", :read)
+      true
+      iex> AshGrant.Permission.matches_action?("read*", "list_published", :update)
+      false
+      iex> AshGrant.Permission.matches_action?("read*", "read_all", nil)
+      true
+      iex> AshGrant.Permission.matches_action?("update*", "publish", :update)
+      true
+      iex> AshGrant.Permission.matches_action?("read", "read", :read)
+      true
+
+  """
+  @spec matches_action?(String.t(), String.t(), atom() | nil) :: boolean()
+  def matches_action?("*", _action, _action_type), do: true
+
+  def matches_action?(pattern, action, action_type) do
     if String.ends_with?(pattern, "*") do
       prefix = String.trim_trailing(pattern, "*")
-      String.starts_with?(action, prefix)
+
+      String.starts_with?(action, prefix) or
+        (action_type != nil and Atom.to_string(action_type) == prefix)
     else
       pattern == action
     end
