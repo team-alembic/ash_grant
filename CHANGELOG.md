@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1] - 2026-03-12
+
+### Fixed
+
+- **Action prefix patterns now match by Ash action type**: `read*` matches any `:read`-type action (e.g., `list_published`, `by_slug`, `search`), not just actions whose name starts with `"read"`. Same for `create*`, `update*`, `destroy*`. (#46)
+- **Explainer prefix matching**: `Explainer.matches_action?/2` only did exact match — now uses `Permission.matches_action?/3` with full prefix and action-type support.
+
 ## [0.10.0] - 2026-03-12
 
 ### Changed (BREAKING)
