@@ -44,6 +44,9 @@ defmodule AshGrant.Test.Domain do
     # Field group except (blacklist) test resource
     resource(AshGrant.Test.ExceptRecord)
 
+    # Overlapping field_group :all deduplication test resource
+    resource(AshGrant.Test.OverlappingRecord)
+
     # Bulk operations test resources (exists() scope crash fix)
     resource(AshGrant.Test.BulkTeam)
     resource(AshGrant.Test.BulkMembership)
