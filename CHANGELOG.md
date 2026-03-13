@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.2] - 2026-03-13
+
+### Fixed
+
+- **Overlapping field_policies with `:all` field_groups**: When multiple `field_group` definitions use `:all` (or `:all, except:`), resolved fields overlapped across policies. Since Ash requires ALL matching `field_policy` entries to pass, fields in multiple groups were denied even when the actor had the correct permission. `AddFieldPolicies` now deduplicates fields across groups so each field appears in exactly one policy. (#48)
+
 ## [0.10.1] - 2026-03-12
 
 ### Fixed
@@ -389,7 +395,11 @@ end
 | `AshGrant.Check` | SimpleCheck for write actions |
 | `AshGrant.FilterCheck` | FilterCheck for read actions |
 
-[Unreleased]: https://github.com/jhlee111/ash_grant/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/jhlee111/ash_grant/compare/v0.10.2...HEAD
+[0.10.2]: https://github.com/jhlee111/ash_grant/compare/v0.10.1...v0.10.2
+[0.10.1]: https://github.com/jhlee111/ash_grant/compare/v0.10.0...v0.10.1
+[0.10.0]: https://github.com/jhlee111/ash_grant/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/jhlee111/ash_grant/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/jhlee111/ash_grant/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/jhlee111/ash_grant/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/jhlee111/ash_grant/compare/v0.6.1...v0.7.0
