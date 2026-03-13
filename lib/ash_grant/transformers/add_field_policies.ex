@@ -61,30 +61,22 @@ defmodule AshGrant.Transformers.AddFieldPolicies do
   end
 
   defp add_field_policies(dsl_state, field_groups) do
-    # For each field_group, create a field_policy for its DIRECT fields
-    dsl_state =
-      Enum.reduce(field_groups, dsl_state, fn fg, acc ->
-        direct_fields = fg.fields || []
+    # For each field_group, create a field_policy for its DIRECT fields.
+    # Deduplicate: when multiple groups use :all (or :all except:), they expand
+    # to overlapping attribute lists. Each field must appear in exactly one
+    # field_policy to avoid Ash's "all must pass" semantics causing false denials.
+    # Earlier groups in DSL order win; later groups get the remaining fields.
+    {dsl_state, _seen} =
+      Enum.reduce(field_groups, {dsl_state, MapSet.new()}, fn fg, {acc, seen} ->
+        all_fields = fg.fields || []
+        unique_fields = Enum.reject(all_fields, &MapSet.member?(seen, &1))
+        new_seen = MapSet.union(seen, MapSet.new(all_fields))
 
-        if direct_fields != [] do
-          field_policy = %Ash.Policy.FieldPolicy{
-            __identifier__: System.unique_integer(),
-            fields: direct_fields,
-            bypass?: false,
-            condition: [],
-            policies: [
-              %Ash.Policy.Check{
-                type: :authorize_if,
-                check_module: AshGrant.FieldCheck,
-                check: {AshGrant.FieldCheck, [field_group: fg.name]},
-                check_opts: [field_group: fg.name]
-              }
-            ]
-          }
-
-          Transformer.add_entity(acc, [:field_policies], field_policy)
+        if unique_fields != [] do
+          field_policy = build_field_policy(fg.name, unique_fields)
+          {Transformer.add_entity(acc, [:field_policies], field_policy), new_seen}
         else
-          acc
+          {acc, new_seen}
         end
       end)
 
@@ -111,6 +103,23 @@ defmodule AshGrant.Transformers.AddFieldPolicies do
     dsl_state = rebuild_field_policy_cache(dsl_state)
 
     {:ok, dsl_state}
+  end
+
+  defp build_field_policy(group_name, fields) do
+    %Ash.Policy.FieldPolicy{
+      __identifier__: System.unique_integer(),
+      fields: fields,
+      bypass?: false,
+      condition: [],
+      policies: [
+        %Ash.Policy.Check{
+          type: :authorize_if,
+          check_module: AshGrant.FieldCheck,
+          check: {AshGrant.FieldCheck, [field_group: group_name]},
+          check_opts: [field_group: group_name]
+        }
+      ]
+    }
   end
 
   # Rebuild the :fields_to_field_policies persisted cache.
