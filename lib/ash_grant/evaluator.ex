@@ -137,14 +137,14 @@ defmodule AshGrant.Evaluator do
       false
 
   """
-  @spec has_access?(permissions(), String.t(), String.t()) :: boolean()
-  def has_access?(permissions, resource, action) do
+  @spec has_access?(permissions(), String.t(), String.t(), atom() | nil) :: boolean()
+  def has_access?(permissions, resource, action, action_type \\ nil) do
     permissions = normalize_permissions(permissions)
 
     # Check for deny rules first (deny wins)
     has_deny =
       Enum.any?(permissions, fn perm ->
-        Permission.deny?(perm) and Permission.matches?(perm, resource, action)
+        Permission.deny?(perm) and Permission.matches?(perm, resource, action, action_type)
       end)
 
     if has_deny do
@@ -152,7 +152,7 @@ defmodule AshGrant.Evaluator do
     else
       # Check for allow rules
       Enum.any?(permissions, fn perm ->
-        not Permission.deny?(perm) and Permission.matches?(perm, resource, action)
+        not Permission.deny?(perm) and Permission.matches?(perm, resource, action, action_type)
       end)
     end
   end
@@ -300,14 +300,14 @@ defmodule AshGrant.Evaluator do
       nil
 
   """
-  @spec get_scope(permissions(), String.t(), String.t()) :: String.t() | nil
-  def get_scope(permissions, resource, action) do
+  @spec get_scope(permissions(), String.t(), String.t(), atom() | nil) :: String.t() | nil
+  def get_scope(permissions, resource, action, action_type \\ nil) do
     permissions = normalize_permissions(permissions)
 
     # First check if denied
     has_deny =
       Enum.any?(permissions, fn perm ->
-        Permission.deny?(perm) and Permission.matches?(perm, resource, action)
+        Permission.deny?(perm) and Permission.matches?(perm, resource, action, action_type)
       end)
 
     if has_deny do
@@ -316,7 +316,7 @@ defmodule AshGrant.Evaluator do
       # Find first matching allow permission and return its scope
       permissions
       |> Enum.find(fn perm ->
-        not Permission.deny?(perm) and Permission.matches?(perm, resource, action)
+        not Permission.deny?(perm) and Permission.matches?(perm, resource, action, action_type)
       end)
       |> case do
         nil -> nil
@@ -338,14 +338,14 @@ defmodule AshGrant.Evaluator do
       ["own", "published", "all"]
 
   """
-  @spec get_all_scopes(permissions(), String.t(), String.t()) :: [String.t()]
-  def get_all_scopes(permissions, resource, action) do
+  @spec get_all_scopes(permissions(), String.t(), String.t(), atom() | nil) :: [String.t()]
+  def get_all_scopes(permissions, resource, action, action_type \\ nil) do
     permissions = normalize_permissions(permissions)
 
     # Check for deny first
     has_deny =
       Enum.any?(permissions, fn perm ->
-        Permission.deny?(perm) and Permission.matches?(perm, resource, action)
+        Permission.deny?(perm) and Permission.matches?(perm, resource, action, action_type)
       end)
 
     if has_deny do
@@ -353,7 +353,7 @@ defmodule AshGrant.Evaluator do
     else
       permissions
       |> Enum.filter(fn perm ->
-        not Permission.deny?(perm) and Permission.matches?(perm, resource, action)
+        not Permission.deny?(perm) and Permission.matches?(perm, resource, action, action_type)
       end)
       |> Enum.map(& &1.scope)
       |> Enum.reject(&is_nil/1)
@@ -378,13 +378,13 @@ defmodule AshGrant.Evaluator do
       nil
 
   """
-  @spec get_field_group(permissions(), String.t(), String.t()) :: String.t() | nil
-  def get_field_group(permissions, resource, action) do
+  @spec get_field_group(permissions(), String.t(), String.t(), atom() | nil) :: String.t() | nil
+  def get_field_group(permissions, resource, action, action_type \\ nil) do
     permissions = normalize_permissions(permissions)
 
     has_deny =
       Enum.any?(permissions, fn perm ->
-        Permission.deny?(perm) and Permission.matches?(perm, resource, action)
+        Permission.deny?(perm) and Permission.matches?(perm, resource, action, action_type)
       end)
 
     if has_deny do
@@ -392,7 +392,7 @@ defmodule AshGrant.Evaluator do
     else
       permissions
       |> Enum.find(fn perm ->
-        not Permission.deny?(perm) and Permission.matches?(perm, resource, action)
+        not Permission.deny?(perm) and Permission.matches?(perm, resource, action, action_type)
       end)
       |> case do
         nil -> nil
@@ -419,13 +419,13 @@ defmodule AshGrant.Evaluator do
       []
 
   """
-  @spec get_all_field_groups(permissions(), String.t(), String.t()) :: [String.t()]
-  def get_all_field_groups(permissions, resource, action) do
+  @spec get_all_field_groups(permissions(), String.t(), String.t(), atom() | nil) :: [String.t()]
+  def get_all_field_groups(permissions, resource, action, action_type \\ nil) do
     permissions = normalize_permissions(permissions)
 
     has_deny =
       Enum.any?(permissions, fn perm ->
-        Permission.deny?(perm) and Permission.matches?(perm, resource, action)
+        Permission.deny?(perm) and Permission.matches?(perm, resource, action, action_type)
       end)
 
     if has_deny do
@@ -433,7 +433,7 @@ defmodule AshGrant.Evaluator do
     else
       permissions
       |> Enum.filter(fn perm ->
-        not Permission.deny?(perm) and Permission.matches?(perm, resource, action)
+        not Permission.deny?(perm) and Permission.matches?(perm, resource, action, action_type)
       end)
       |> Enum.map(& &1.field_group)
       |> Enum.reject(&is_nil/1)
@@ -452,11 +452,11 @@ defmodule AshGrant.Evaluator do
       2
 
   """
-  @spec find_matching(permissions(), String.t(), String.t()) :: [Permission.t()]
-  def find_matching(permissions, resource, action) do
+  @spec find_matching(permissions(), String.t(), String.t(), atom() | nil) :: [Permission.t()]
+  def find_matching(permissions, resource, action, action_type \\ nil) do
     permissions
     |> normalize_permissions()
-    |> Enum.filter(&Permission.matches?(&1, resource, action))
+    |> Enum.filter(&Permission.matches?(&1, resource, action, action_type))
   end
 
   @doc """
@@ -483,8 +483,9 @@ defmodule AshGrant.Evaluator do
       []
 
   """
-  @spec get_matching_instance_ids(permissions(), String.t(), String.t()) :: [String.t()]
-  def get_matching_instance_ids(permissions, resource, action) do
+  @spec get_matching_instance_ids(permissions(), String.t(), String.t(), atom() | nil) ::
+          [String.t()]
+  def get_matching_instance_ids(permissions, resource, action, action_type \\ nil) do
     permissions = normalize_permissions(permissions)
 
     # Find all instance permissions that match resource and action
@@ -493,7 +494,7 @@ defmodule AshGrant.Evaluator do
       |> Enum.filter(fn perm ->
         Permission.instance_permission?(perm) and
           Permission.matches_resource?(perm.resource, resource) and
-          Permission.matches_action?(perm.action, action)
+          Permission.matches_action?(perm.action, action, action_type)
       end)
 
     # Get denied instance IDs

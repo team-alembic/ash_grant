@@ -250,7 +250,12 @@ defmodule AshGrant.Check do
         _module -> configured_name
       end
 
-    action_name = Keyword.get(opts, :action) || to_string(action.name)
+    # When action is overridden via opts, don't infer action_type
+    {action_name, action_type} =
+      case Keyword.get(opts, :action) do
+        nil -> {to_string(action.name), action_type_from(action)}
+        override -> {override, nil}
+      end
 
     # Build context
     context = build_context(actor, resource_module, action, authorizer)
@@ -259,16 +264,21 @@ defmodule AshGrant.Check do
     permissions = resolve_permissions(resolver, actor, context)
 
     # Check access using evaluator
-    case AshGrant.Evaluator.has_access?(permissions, resource_name, action_name) do
+    case AshGrant.Evaluator.has_access?(permissions, resource_name, action_name, action_type) do
       false ->
         false
 
       true ->
         # Has permission, now check scope
-        scope = AshGrant.Evaluator.get_scope(permissions, resource_name, action_name)
+        scope =
+          AshGrant.Evaluator.get_scope(permissions, resource_name, action_name, action_type)
+
         check_scope_access(scope, scope_resolver, context, authorizer, opts)
     end
   end
+
+  defp action_type_from(%{type: type}), do: type
+  defp action_type_from(_), do: nil
 
   defp build_context(actor, resource, action, authorizer) do
     %{

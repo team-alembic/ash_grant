@@ -58,6 +58,7 @@ defmodule AshGrant.FieldCheck do
     resource_name = AshGrant.Info.resource_name(resource_module)
     action = authorizer.action
     action_name = to_string(action.name)
+    action_type = action_type_from(action)
 
     context = %{
       actor: actor,
@@ -69,16 +70,24 @@ defmodule AshGrant.FieldCheck do
     permissions = resolve_permissions(resolver, actor, context)
 
     actor_field_groups =
-      AshGrant.Evaluator.get_all_field_groups(permissions, resource_name, action_name)
+      AshGrant.Evaluator.get_all_field_groups(
+        permissions,
+        resource_name,
+        action_name,
+        action_type
+      )
 
     # If no field groups specified in permissions, actor has unrestricted field access
     if actor_field_groups == [] do
       # Check if the actor has any matching permissions at all (for read access)
-      AshGrant.Evaluator.has_access?(permissions, resource_name, action_name)
+      AshGrant.Evaluator.has_access?(permissions, resource_name, action_name, action_type)
     else
       field_group_grants_access?(resource_module, actor_field_groups, required_group)
     end
   end
+
+  defp action_type_from(%{type: type}), do: type
+  defp action_type_from(_), do: nil
 
   # Check if any of the actor's field groups equals or inherits from the required group
   defp field_group_grants_access?(_resource, [], _required), do: false

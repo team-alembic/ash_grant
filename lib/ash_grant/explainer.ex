@@ -33,6 +33,13 @@ defmodule AshGrant.Explainer do
     resource_name = Info.resource_name(resource)
     action_str = to_string(action)
 
+    # Resolve action type from Ash resource info
+    action_type =
+      case Ash.Resource.Info.action(resource, action) do
+        %{type: type} -> type
+        _ -> nil
+      end
+
     # Get permissions from resolver
     raw_permissions = get_permissions(resource, actor, context)
 
@@ -43,16 +50,25 @@ defmodule AshGrant.Explainer do
     evaluated =
       Enum.map(permission_inputs, fn input ->
         perm = Permission.from_input(input)
-        matched = Permission.matches?(perm, resource_name, action_str)
+        matched = Permission.matches?(perm, resource_name, action_str, action_type)
         is_deny = Permission.deny?(perm)
 
         reason =
           cond do
-            matched && is_deny -> "Denied by explicit deny rule"
-            matched -> nil
-            !matches_resource?(perm, resource_name) -> "Resource mismatch"
-            !matches_action?(perm, action_str) -> "Action mismatch"
-            true -> "No match"
+            matched && is_deny ->
+              "Denied by explicit deny rule"
+
+            matched ->
+              nil
+
+            !matches_resource?(perm, resource_name) ->
+              "Resource mismatch"
+
+            !Permission.matches_action?(perm.action, action_str, action_type) ->
+              "Action mismatch"
+
+            true ->
+              "No match"
           end
 
         # Get scope info from DSL
@@ -156,9 +172,5 @@ defmodule AshGrant.Explainer do
 
   defp matches_resource?(%Permission{resource: perm_resource}, resource_name) do
     perm_resource == "*" || perm_resource == resource_name
-  end
-
-  defp matches_action?(%Permission{action: perm_action}, action_str) do
-    perm_action == "*" || perm_action == action_str
   end
 end

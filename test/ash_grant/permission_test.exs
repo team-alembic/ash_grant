@@ -374,6 +374,79 @@ defmodule AshGrant.PermissionTest do
     end
   end
 
+  describe "matches_action?/3 with action_type" do
+    test "read* matches :read type regardless of action name" do
+      assert Permission.matches_action?("read*", "list_published", :read)
+      assert Permission.matches_action?("read*", "by_slug", :read)
+      assert Permission.matches_action?("read*", "search", :read)
+    end
+
+    test "read* still matches actions starting with read (string prefix)" do
+      assert Permission.matches_action?("read*", "read", :read)
+      assert Permission.matches_action?("read*", "read_all", :update)
+      assert Permission.matches_action?("read*", "read_published", nil)
+    end
+
+    test "read* does NOT match :update type when name doesn't start with read" do
+      refute Permission.matches_action?("read*", "list_published", :update)
+      refute Permission.matches_action?("read*", "by_slug", :destroy)
+    end
+
+    test "update* matches :update type regardless of action name" do
+      assert Permission.matches_action?("update*", "publish", :update)
+      assert Permission.matches_action?("update*", "archive", :update)
+    end
+
+    test "create* matches :create type regardless of action name" do
+      assert Permission.matches_action?("create*", "register", :create)
+      assert Permission.matches_action?("create*", "signup", :create)
+    end
+
+    test "destroy* matches :destroy type regardless of action name" do
+      assert Permission.matches_action?("destroy*", "soft_delete", :destroy)
+      assert Permission.matches_action?("destroy*", "purge", :destroy)
+    end
+
+    test "exact match still works with action_type" do
+      assert Permission.matches_action?("read", "read", :read)
+      refute Permission.matches_action?("read", "list_published", :read)
+    end
+
+    test "wildcard * matches anything regardless of action_type" do
+      assert Permission.matches_action?("*", "anything", :read)
+      assert Permission.matches_action?("*", "anything", nil)
+    end
+
+    test "backward compat: 2-arg calls still work" do
+      assert Permission.matches_action?("read*", "read_all")
+      assert Permission.matches_action?("*", "anything")
+      refute Permission.matches_action?("read", "write")
+    end
+  end
+
+  describe "matches?/4 with action_type" do
+    test "read* matches :read type action with non-prefixed name" do
+      perm = Permission.parse!("blog:*:read*:all")
+      assert Permission.matches?(perm, "blog", "list_published", :read)
+    end
+
+    test "read* does NOT match :update type with non-prefixed name" do
+      perm = Permission.parse!("blog:*:read*:all")
+      refute Permission.matches?(perm, "blog", "list_published", :update)
+    end
+
+    test "backward compat: 3-arg matches? still works" do
+      perm = Permission.parse!("blog:*:read*:all")
+      assert Permission.matches?(perm, "blog", "read_published")
+      refute Permission.matches?(perm, "blog", "list_published")
+    end
+
+    test "instance permission still returns false for matches?/4" do
+      perm = Permission.parse!("blog:post_abc123:read*:")
+      refute Permission.matches?(perm, "blog", "list_published", :read)
+    end
+  end
+
   describe "String.Chars protocol" do
     test "converts to string" do
       perm = Permission.parse!("blog:*:read:all")

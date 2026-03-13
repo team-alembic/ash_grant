@@ -420,6 +420,102 @@ defmodule AshGrant.EvaluatorTest do
     end
   end
 
+  describe "has_access?/4 with action_type" do
+    test "read* matches :read type action with non-prefixed name" do
+      permissions = ["blog:*:read*:all"]
+      assert Evaluator.has_access?(permissions, "blog", "list_published", :read)
+    end
+
+    test "read* does NOT match :update type with non-prefixed name" do
+      permissions = ["blog:*:read*:all"]
+      refute Evaluator.has_access?(permissions, "blog", "list_published", :update)
+    end
+
+    test "deny-wins with action_type" do
+      permissions = [
+        "blog:*:read*:all",
+        "!blog:*:read*:all"
+      ]
+
+      refute Evaluator.has_access?(permissions, "blog", "list_published", :read)
+    end
+
+    test "backward compat: 3-arg has_access? unchanged" do
+      permissions = ["blog:*:read*:all"]
+      assert Evaluator.has_access?(permissions, "blog", "read")
+      assert Evaluator.has_access?(permissions, "blog", "read_all")
+      refute Evaluator.has_access?(permissions, "blog", "list_published")
+    end
+
+    test "update* matches :update type for publish action" do
+      permissions = ["blog:*:update*:own"]
+      assert Evaluator.has_access?(permissions, "blog", "publish", :update)
+      refute Evaluator.has_access?(permissions, "blog", "publish", :read)
+    end
+  end
+
+  describe "get_scope/4 with action_type" do
+    test "returns scope when read* matches via action_type" do
+      permissions = ["blog:*:read*:published"]
+      assert Evaluator.get_scope(permissions, "blog", "list_published", :read) == "published"
+    end
+
+    test "returns nil when action_type doesn't match" do
+      permissions = ["blog:*:read*:all"]
+      assert Evaluator.get_scope(permissions, "blog", "list_published", :update) == nil
+    end
+
+    test "returns nil when denied with action_type" do
+      permissions = ["blog:*:read*:all", "!blog:*:read*:all"]
+      assert Evaluator.get_scope(permissions, "blog", "by_slug", :read) == nil
+    end
+  end
+
+  describe "get_all_scopes/4 with action_type" do
+    test "returns all scopes matching via action_type" do
+      permissions = [
+        "blog:*:read*:own",
+        "blog:*:read*:published"
+      ]
+
+      scopes = Evaluator.get_all_scopes(permissions, "blog", "search", :read)
+      assert "own" in scopes
+      assert "published" in scopes
+    end
+
+    test "returns empty when denied with action_type" do
+      permissions = ["blog:*:read*:all", "!blog:*:read*:all"]
+      assert Evaluator.get_all_scopes(permissions, "blog", "search", :read) == []
+    end
+  end
+
+  describe "get_all_field_groups/4 with action_type" do
+    test "returns field groups matching via action_type" do
+      permissions = ["employee:*:read*:all:sensitive"]
+
+      assert Evaluator.get_all_field_groups(permissions, "employee", "by_department", :read) == [
+               "sensitive"
+             ]
+    end
+  end
+
+  describe "find_matching/4 with action_type" do
+    test "finds permissions matching via action_type" do
+      permissions = ["blog:*:read*:all", "blog:*:update*:own"]
+      matching = Evaluator.find_matching(permissions, "blog", "search", :read)
+      assert length(matching) == 1
+    end
+  end
+
+  describe "get_matching_instance_ids/4 with action_type" do
+    test "matches instance permissions via action_type" do
+      permissions = ["blog:post_abc:read*:", "blog:post_xyz:read*:"]
+      ids = Evaluator.get_matching_instance_ids(permissions, "blog", "by_slug", :read)
+      assert "post_abc" in ids
+      assert "post_xyz" in ids
+    end
+  end
+
   describe "combine/1" do
     test "combines multiple permission lists" do
       role_perms = ["blog:*:read:all"]

@@ -389,6 +389,64 @@ defmodule AshGrant.PermissionPropertyTest do
     end
   end
 
+  describe "action_type matching" do
+    property "prefix* always matches its own action_type regardless of action name" do
+      check all(
+              type <- member_of([:read, :create, :update, :destroy]),
+              action_name <-
+                string(:alphanumeric, min_length: 1, max_length: 15)
+                |> map(&String.downcase/1)
+                |> filter(fn name ->
+                  # Exclude names that happen to start with the type prefix
+                  not String.starts_with?(name, Atom.to_string(type))
+                end)
+            ) do
+        pattern = Atom.to_string(type) <> "*"
+        assert Permission.matches_action?(pattern, action_name, type)
+      end
+    end
+
+    property "prefix* does not match a different action_type when name doesn't start with prefix" do
+      check all(
+              type <- member_of([:read, :create, :update, :destroy]),
+              other_type <-
+                member_of([:read, :create, :update, :destroy]) |> filter(&(&1 != type)),
+              action_name <-
+                string(:alphanumeric, min_length: 1, max_length: 15)
+                |> map(&String.downcase/1)
+                |> filter(fn name ->
+                  not String.starts_with?(name, Atom.to_string(type))
+                end)
+            ) do
+        pattern = Atom.to_string(type) <> "*"
+        refute Permission.matches_action?(pattern, action_name, other_type)
+      end
+    end
+
+    property "matches?/4 with action_type is consistent with matches_action?/3" do
+      check all(
+              resource <-
+                string(:alphanumeric, min_length: 1, max_length: 10) |> map(&String.downcase/1),
+              type <- member_of([:read, :create, :update, :destroy]),
+              action_name <-
+                string(:alphanumeric, min_length: 1, max_length: 10) |> map(&String.downcase/1)
+            ) do
+        pattern = Atom.to_string(type) <> "*"
+
+        perm = %Permission{
+          resource: resource,
+          instance_id: "*",
+          action: pattern,
+          scope: "all",
+          deny: false
+        }
+
+        assert Permission.matches?(perm, resource, action_name, type) ==
+                 Permission.matches_action?(pattern, action_name, type)
+      end
+    end
+  end
+
   describe "edge cases" do
     property "empty scope becomes nil" do
       check all(
