@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.3] - 2026-03-15
+
+### Fixed
+
+- **`default_field_policies` includes PK/timestamps, fails on OTP 28**: When `field_group :admin, :all` is used with `default_field_policies true`, generated field policies now exclude primary keys and non-public attributes (e.g. `created_at`, `updated_at`). Previously these invalid fields caused `Spark.Error.DslError` on OTP 28 due to transformer ordering differences. (#51)
+
+### Changed
+
+- **Resolve all credo issues**: Fixed 82 credo warnings including `length/1` comparisons, `Enum.map_join` usage, negated conditions, nesting depth, and cyclomatic complexity. `mix credo` now reports zero issues.
+
 ## [0.10.2] - 2026-03-13
 
 ### Fixed
