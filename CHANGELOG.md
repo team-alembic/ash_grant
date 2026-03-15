@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.1] - 2026-03-15
+
+### Changed
+
+- **Documentation**: Add domain-level DSL section to README with usage guidance, inheritance rules, and examples. Update installation version, feature list, and DSL Configuration table.
+- **Developer tooling**: Add `/pr` and `/release` slash commands for streamlined PR and release workflows with built-in documentation gates. Update CLAUDE.md architecture section.
+
 ## [0.11.0] - 2026-03-15
 
 ### Added
