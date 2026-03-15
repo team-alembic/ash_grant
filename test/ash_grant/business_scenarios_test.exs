@@ -987,7 +987,7 @@ defmodule AshGrant.BusinessScenariosTest do
         {:ok, tasks} ->
           # Current behavior: instance deny doesn't filter individual records
           # All tasks are still visible because "all" scope wins for read
-          assert length(tasks) >= 1
+          assert tasks != []
 
         {:error, %Ash.Error.Forbidden{}} ->
           # If deny-wins at action level, all access is blocked

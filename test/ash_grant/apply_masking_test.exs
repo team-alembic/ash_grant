@@ -52,7 +52,7 @@ defmodule AshGrant.ApplyMaskingTest do
           match?({AshGrant.Preparations.ApplyMasking, _}, prep.preparation)
         end)
 
-      assert length(masking_preps) == 0
+      assert masking_preps == []
     end
   end
 end

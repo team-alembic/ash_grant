@@ -201,55 +201,51 @@ defmodule AshGrant.Introspect do
   """
   @spec can?(module(), atom(), term(), keyword()) ::
           {:allow, map()} | {:deny, map()}
-  def can?(resource, action, actor, opts \\ []) do
-    if actor == nil do
-      {:deny, %{reason: :no_actor}}
+  def can?(resource, action, actor, opts \\ [])
+
+  def can?(_resource, _action, nil, _opts) do
+    {:deny, %{reason: :no_actor}}
+  end
+
+  def can?(resource, action, actor, opts) do
+    context = Keyword.get(opts, :context, %{})
+    resource_name = Info.resource_name(resource)
+    action_name = to_string(action)
+    permissions = permissions_for(resource, actor, context: context)
+    action_type = resolve_action_type(resource, action)
+
+    if has_deny_permission?(permissions, resource_name, action_name, action_type) do
+      {:deny, %{reason: :denied_by_rule}}
     else
-      context = Keyword.get(opts, :context, %{})
-      resource_name = Info.resource_name(resource)
-      action_name = to_string(action)
-      permissions = permissions_for(resource, actor, context: context)
+      evaluate_allow(permissions, resource_name, action_name, action_type)
+    end
+  end
 
-      # Resolve action type from Ash resource info
-      action_type =
-        case Ash.Resource.Info.action(resource, action) do
-          %{type: type} -> type
-          _ -> nil
-        end
+  defp resolve_action_type(resource, action) do
+    case Ash.Resource.Info.action(resource, action) do
+      %{type: type} -> type
+      _ -> nil
+    end
+  end
 
-      # Check for deny first
-      has_deny = has_deny_permission?(permissions, resource_name, action_name, action_type)
+  defp evaluate_allow(permissions, resource_name, action_name, action_type) do
+    scopes = Evaluator.get_all_scopes(permissions, resource_name, action_name, action_type)
 
-      if has_deny do
-        {:deny, %{reason: :denied_by_rule}}
-      else
-        # Check RBAC scopes
-        scopes = Evaluator.get_all_scopes(permissions, resource_name, action_name, action_type)
+    instance_ids =
+      Evaluator.get_matching_instance_ids(permissions, resource_name, action_name, action_type)
 
-        # Check instance permissions
-        instance_ids =
-          Evaluator.get_matching_instance_ids(
-            permissions,
-            resource_name,
-            action_name,
-            action_type
-          )
+    field_groups =
+      Evaluator.get_all_field_groups(permissions, resource_name, action_name, action_type)
 
-        # Check field groups
-        field_groups =
-          Evaluator.get_all_field_groups(permissions, resource_name, action_name, action_type)
+    cond do
+      scopes != [] ->
+        {:allow, %{scope: hd(scopes), instance_ids: nil, field_groups: field_groups}}
 
-        cond do
-          scopes != [] ->
-            {:allow, %{scope: hd(scopes), instance_ids: nil, field_groups: field_groups}}
+      instance_ids != [] ->
+        {:allow, %{scope: nil, instance_ids: instance_ids, field_groups: field_groups}}
 
-          instance_ids != [] ->
-            {:allow, %{scope: nil, instance_ids: instance_ids, field_groups: field_groups}}
-
-          true ->
-            {:deny, %{reason: :no_permission}}
-        end
-      end
+      true ->
+        {:deny, %{reason: :no_permission}}
     end
   end
 
@@ -277,28 +273,31 @@ defmodule AshGrant.Introspect do
 
   """
   @spec allowed_actions(module(), term(), keyword()) :: [atom()] | [map()]
-  def allowed_actions(resource, actor, opts \\ []) do
-    if actor == nil do
-      []
-    else
-      detailed = Keyword.get(opts, :detailed, false)
-      perms = actor_permissions(resource, actor, opts)
+  def allowed_actions(resource, actor, opts \\ [])
 
-      allowed = Enum.filter(perms, & &1.allowed)
+  def allowed_actions(_resource, nil, _opts), do: []
 
-      if detailed do
-        Enum.map(allowed, fn p ->
-          %{
-            action: String.to_atom(p.action),
-            scope: p.scope,
-            instance_ids: p.instance_ids,
-            field_groups: p.field_groups
-          }
-        end)
-      else
-        Enum.map(allowed, &String.to_atom(&1.action))
-      end
-    end
+  def allowed_actions(resource, actor, opts) do
+    detailed = Keyword.get(opts, :detailed, false)
+    perms = actor_permissions(resource, actor, opts)
+    allowed = Enum.filter(perms, & &1.allowed)
+
+    format_allowed_actions(allowed, detailed)
+  end
+
+  defp format_allowed_actions(allowed, true) do
+    Enum.map(allowed, fn p ->
+      %{
+        action: String.to_atom(p.action),
+        scope: p.scope,
+        instance_ids: p.instance_ids,
+        field_groups: p.field_groups
+      }
+    end)
+  end
+
+  defp format_allowed_actions(allowed, false) do
+    Enum.map(allowed, &String.to_atom(&1.action))
   end
 
   @doc """

@@ -109,12 +109,10 @@ defmodule AshGrant.PolicyTest.YamlExporter do
   end
 
   defp format_yaml(map, indent) when is_map(map) do
-    map
-    |> Enum.map(fn {key, value} ->
+    Enum.map_join(map, "\n", fn {key, value} ->
       indent_str = String.duplicate("  ", indent)
       "#{indent_str}#{key}:#{format_yaml_value(value, indent)}"
     end)
-    |> Enum.join("\n")
   end
 
   defp format_yaml_value(value, indent) when is_map(value) do
@@ -123,10 +121,9 @@ defmodule AshGrant.PolicyTest.YamlExporter do
 
   defp format_yaml_value(value, indent) when is_list(value) do
     items =
-      Enum.map(value, fn item ->
+      Enum.map_join(value, "\n", fn item ->
         format_list_item_with_indent(item, indent + 1)
       end)
-      |> Enum.join("\n")
 
     "\n" <> items
   end
@@ -154,11 +151,9 @@ defmodule AshGrant.PolicyTest.YamlExporter do
       first_line
     else
       rest_lines =
-        rest
-        |> Enum.map(fn {k, v} ->
+        Enum.map_join(rest, "\n", fn {k, v} ->
           "#{indent_str}  #{k}:#{format_yaml_value(v, indent + 1)}"
         end)
-        |> Enum.join("\n")
 
       first_line <> "\n" <> rest_lines
     end

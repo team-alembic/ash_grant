@@ -1,4 +1,5 @@
 defmodule AshGrant.TestRepo do
+  @moduledoc false
   use AshPostgres.Repo,
     otp_app: :ash_grant,
     warn_on_missing_ash_functions?: false

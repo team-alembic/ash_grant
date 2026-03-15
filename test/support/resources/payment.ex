@@ -61,7 +61,7 @@ defmodule AshGrant.Test.Payment do
     scope(:all, true)
     scope(:unlimited, true)
     scope(:small_amount, expr(amount < 1000))
-    scope(:medium_amount, expr(amount < 10000))
+    scope(:medium_amount, expr(amount < 10_000))
     scope(:large_amount, expr(amount < 100_000))
 
     # Status scopes

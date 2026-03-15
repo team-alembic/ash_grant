@@ -270,7 +270,7 @@ defmodule AshGrant.DbIntegrationTest do
         |> Ash.read!(actor: actor)
 
       # Should NOT see any posts
-      assert length(posts) == 0
+      assert posts == []
     end
   end
 
@@ -378,7 +378,7 @@ defmodule AshGrant.DbIntegrationTest do
         |> Ash.read!(actor: actor)
 
       # Should NOT see any posts (6 is not between 9 and 17)
-      assert length(posts) == 0
+      assert posts == []
     end
 
     test "business_hours_injectable scope excludes posts outside business hours (late night)" do
@@ -400,7 +400,7 @@ defmodule AshGrant.DbIntegrationTest do
         |> Ash.read!(actor: actor)
 
       # Should NOT see any posts (22 is not between 9 and 17)
-      assert length(posts) == 0
+      assert posts == []
     end
 
     test "business_hours_injectable scope boundary test at hour 9" do
@@ -445,7 +445,7 @@ defmodule AshGrant.DbIntegrationTest do
         |> Ash.read!(actor: actor)
 
       # Should NOT see any posts (8 is not between 9 and 17)
-      assert length(posts) == 0
+      assert posts == []
     end
   end
 
@@ -501,7 +501,7 @@ defmodule AshGrant.DbIntegrationTest do
         |> Ash.read!(actor: actor)
 
       # Should NOT see any posts (9 PM in Seoul is outside 9-17)
-      assert length(posts) == 0
+      assert posts == []
     end
 
     test "business_hours_local allows access during business hours in America/New_York timezone" do
@@ -542,7 +542,7 @@ defmodule AshGrant.DbIntegrationTest do
         |> Ash.read!(actor: actor)
 
       # Should NOT see any posts (10 PM in NYC is outside 9-17)
-      assert length(posts) == 0
+      assert posts == []
     end
 
     test "same UTC time yields different results for different timezones" do
@@ -573,7 +573,7 @@ defmodule AshGrant.DbIntegrationTest do
         |> Ash.Query.set_context(%{current_time: utc_time, timezone: "America/New_York"})
         |> Ash.read!(actor: actor)
 
-      assert length(nyc_posts) == 0
+      assert nyc_posts == []
     end
   end
 
@@ -642,7 +642,7 @@ defmodule AshGrant.DbIntegrationTest do
         |> Ash.Query.set_context(%{current_time: utc_time})
         |> Ash.read!(actor: nyc_actor)
 
-      assert length(nyc_posts) == 0
+      assert nyc_posts == []
     end
   end
 end

@@ -1,4 +1,5 @@
 defmodule AshGrant.Test.Post do
+  @moduledoc false
   use Ash.Resource,
     domain: AshGrant.Test.Domain,
     data_layer: AshPostgres.DataLayer,

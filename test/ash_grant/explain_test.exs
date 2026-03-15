@@ -90,7 +90,7 @@ defmodule AshGrant.ExplainTest do
       result = AshGrant.explain(TestPost, :read, actor)
 
       assert result.decision == :allow
-      assert length(result.matching_permissions) >= 1
+      assert result.matching_permissions != []
 
       # Check that permission metadata is preserved
       [first_match | _] = result.matching_permissions
@@ -130,7 +130,7 @@ defmodule AshGrant.ExplainTest do
         end)
 
       # "post:*:read:all" should not match update action
-      assert length(non_matching) >= 1
+      assert non_matching != []
     end
 
     test "returns deny when no permissions match" do

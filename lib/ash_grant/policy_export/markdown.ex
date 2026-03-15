@@ -78,17 +78,17 @@ defmodule AshGrant.PolicyExport.Markdown do
     |> Enum.map(fn fg ->
       inherits =
         if fg.inherits && fg.inherits != [],
-          do: Enum.join(Enum.map(fg.inherits, &to_string/1), ", "),
+          do: Enum.map_join(fg.inherits, ", ", &to_string/1),
           else: "-"
 
       masking =
         if fg.mask && fg.mask != [],
-          do: Enum.join(Enum.map(fg.mask, &to_string/1), ", "),
+          do: Enum.map_join(fg.mask, ", ", &to_string/1),
           else: "-"
 
       %{
         name: fg.name,
-        fields: Enum.join(Enum.map(fg.fields, &to_string/1), ", "),
+        fields: Enum.map_join(fg.fields, ", ", &to_string/1),
         inherits: inherits,
         masking: masking
       }
@@ -100,29 +100,23 @@ defmodule AshGrant.PolicyExport.Markdown do
   end
 
   defp generate_actions_table(actions) do
-    actions
-    |> Enum.map(fn action ->
+    Enum.map_join(actions, "\n", fn action ->
       "| #{action.name} | #{action.type} |"
     end)
-    |> Enum.join("\n")
   end
 
   defp generate_scopes_table(scopes) do
-    scopes
-    |> Enum.map(fn scope ->
+    Enum.map_join(scopes, "\n", fn scope ->
       description = scope.description || "-"
       "| #{scope.name} | #{description} |"
     end)
-    |> Enum.join("\n")
   end
 
   defp generate_field_groups_section(field_groups) do
     rows =
-      field_groups
-      |> Enum.map(fn fg ->
+      Enum.map_join(field_groups, "\n", fn fg ->
         "| #{fg.name} | #{fg.fields} | #{fg.inherits} | #{fg.masking} |"
       end)
-      |> Enum.join("\n")
 
     [
       "",
@@ -137,15 +131,11 @@ defmodule AshGrant.PolicyExport.Markdown do
   defp generate_permissions_list(permissions) do
     permissions
     |> Enum.group_by(& &1.action)
-    |> Enum.map(fn {action, perms} ->
+    |> Enum.map_join("\n\n", fn {action, perms} ->
       perm_strings =
-        perms
-        |> Enum.map(& &1.permission_string)
-        |> Enum.map(&"  - `#{&1}`")
-        |> Enum.join("\n")
+        Enum.map_join(perms, "\n", fn p -> "  - `#{p.permission_string}`" end)
 
       "### #{action}\n\n#{perm_strings}"
     end)
-    |> Enum.join("\n\n")
   end
 end

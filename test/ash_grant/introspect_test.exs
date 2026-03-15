@@ -69,7 +69,7 @@ defmodule AshGrant.IntrospectTest do
       result = Introspect.available_permissions(Post)
 
       assert is_list(result)
-      assert length(result) > 0
+      assert result != []
 
       # Should include all actions
       actions = Enum.map(result, & &1.action) |> Enum.uniq()
@@ -271,8 +271,8 @@ defmodule AshGrant.IntrospectTest do
       base_perms = Enum.filter(result, &is_nil(&1.field_group))
       fg_perms = Enum.filter(result, &(not is_nil(&1.field_group)))
 
-      assert length(base_perms) > 0
-      assert length(fg_perms) > 0
+      assert base_perms != []
+      assert fg_perms != []
 
       # Field group names should include public, sensitive, confidential
       fg_names = fg_perms |> Enum.map(& &1.field_group) |> Enum.uniq()

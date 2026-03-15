@@ -89,7 +89,7 @@ defmodule AshGrant.DefaultPoliciesTest do
 
       # Admin can read
       articles = Article |> Ash.read!(actor: actor)
-      assert length(articles) >= 1
+      assert articles != []
       assert draft.id in Enum.map(articles, & &1.id)
 
       # Admin can update

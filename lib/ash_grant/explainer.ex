@@ -32,113 +32,20 @@ defmodule AshGrant.Explainer do
   def explain(resource, action, actor, context \\ %{}) do
     resource_name = Info.resource_name(resource)
     action_str = to_string(action)
+    action_type = resolve_action_type(resource, action)
 
-    # Resolve action type from Ash resource info
-    action_type =
-      case Ash.Resource.Info.action(resource, action) do
-        %{type: type} -> type
-        _ -> nil
-      end
-
-    # Get permissions from resolver
     raw_permissions = get_permissions(resource, actor, context)
-
-    # Normalize to PermissionInput first (to preserve metadata)
     permission_inputs = Enum.map(raw_permissions, &Permissionable.to_permission_input/1)
 
-    # Evaluate each permission
     evaluated =
-      Enum.map(permission_inputs, fn input ->
-        perm = Permission.from_input(input)
-        matched = Permission.matches?(perm, resource_name, action_str, action_type)
-        is_deny = Permission.deny?(perm)
+      Enum.map(
+        permission_inputs,
+        &evaluate_permission(&1, resource, resource_name, action_str, action_type)
+      )
 
-        reason =
-          cond do
-            matched && is_deny ->
-              "Denied by explicit deny rule"
-
-            matched ->
-              nil
-
-            !matches_resource?(perm, resource_name) ->
-              "Resource mismatch"
-
-            !Permission.matches_action?(perm.action, action_str, action_type) ->
-              "Action mismatch"
-
-            true ->
-              "No match"
-          end
-
-        # Get scope info from DSL
-        scope_name = if perm.scope, do: String.to_atom(perm.scope), else: nil
-
-        scope_description =
-          if scope_name, do: Info.scope_description(resource, scope_name), else: nil
-
-        %{
-          permission: PermissionInput.to_string(input),
-          matched: matched,
-          is_deny: is_deny,
-          reason: reason,
-          description: input.description,
-          source: input.source,
-          scope_name: scope_name,
-          scope_description: scope_description,
-          field_group: perm.field_group
-        }
-      end)
-
-    # Check for deny-wins
-    has_matching_deny =
-      Enum.any?(evaluated, fn e -> e.matched && e.is_deny end)
-
-    # Get matching allow permissions
-    matching_allows =
-      Enum.filter(evaluated, fn e -> e.matched && !e.is_deny end)
-
-    # Determine decision and reason
-    {decision, reason} =
-      cond do
-        has_matching_deny ->
-          {:deny, :denied_by_rule}
-
-        matching_allows != [] ->
-          {:allow, nil}
-
-        true ->
-          {:deny, :no_matching_permissions}
-      end
-
-    # Get scope filter for reads
-    scope_filter =
-      if decision == :allow do
-        # Get the scope from the first matching permission
-        case matching_allows do
-          [first | _] ->
-            if first.scope_name do
-              Info.resolve_scope_filter(resource, first.scope_name, context)
-            else
-              true
-            end
-
-          [] ->
-            nil
-        end
-      else
-        nil
-      end
-
-    # Get field groups from matching permissions
-    field_groups =
-      matching_allows
-      |> Enum.map(& &1[:field_group])
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq()
-
-    # Get field group definitions from resource DSL
-    field_group_defs = Info.field_groups(resource)
+    {decision, reason, matching_allows} = determine_decision(evaluated)
+    scope_filter = resolve_explain_scope_filter(decision, matching_allows, resource, context)
+    field_groups = extract_field_groups(matching_allows)
 
     %Explanation{
       resource: resource,
@@ -151,8 +58,82 @@ defmodule AshGrant.Explainer do
       evaluated_permissions: evaluated,
       scope_filter: scope_filter,
       field_groups: field_groups,
-      field_group_defs: field_group_defs
+      field_group_defs: Info.field_groups(resource)
     }
+  end
+
+  defp resolve_action_type(resource, action) do
+    case Ash.Resource.Info.action(resource, action) do
+      %{type: type} -> type
+      _ -> nil
+    end
+  end
+
+  defp evaluate_permission(input, resource, resource_name, action_str, action_type) do
+    perm = Permission.from_input(input)
+    matched = Permission.matches?(perm, resource_name, action_str, action_type)
+    is_deny = Permission.deny?(perm)
+
+    reason =
+      explain_mismatch_reason(perm, matched, is_deny, resource_name, action_str, action_type)
+
+    scope_name = if perm.scope, do: String.to_atom(perm.scope), else: nil
+
+    %{
+      permission: PermissionInput.to_string(input),
+      matched: matched,
+      is_deny: is_deny,
+      reason: reason,
+      description: input.description,
+      source: input.source,
+      scope_name: scope_name,
+      scope_description: if(scope_name, do: Info.scope_description(resource, scope_name)),
+      field_group: perm.field_group
+    }
+  end
+
+  defp explain_mismatch_reason(_perm, true, true, _resource_name, _action_str, _action_type),
+    do: "Denied by explicit deny rule"
+
+  defp explain_mismatch_reason(_perm, true, false, _resource_name, _action_str, _action_type),
+    do: nil
+
+  defp explain_mismatch_reason(perm, false, _is_deny, resource_name, action_str, action_type) do
+    cond do
+      !matches_resource?(perm, resource_name) -> "Resource mismatch"
+      !Permission.matches_action?(perm.action, action_str, action_type) -> "Action mismatch"
+      true -> "No match"
+    end
+  end
+
+  defp determine_decision(evaluated) do
+    has_matching_deny = Enum.any?(evaluated, fn e -> e.matched && e.is_deny end)
+    matching_allows = Enum.filter(evaluated, fn e -> e.matched && !e.is_deny end)
+
+    cond do
+      has_matching_deny -> {:deny, :denied_by_rule, matching_allows}
+      matching_allows != [] -> {:allow, nil, matching_allows}
+      true -> {:deny, :no_matching_permissions, matching_allows}
+    end
+  end
+
+  defp resolve_explain_scope_filter(:deny, _matching_allows, _resource, _context), do: nil
+
+  defp resolve_explain_scope_filter(:allow, [first | _], resource, context) do
+    if first.scope_name do
+      Info.resolve_scope_filter(resource, first.scope_name, context)
+    else
+      true
+    end
+  end
+
+  defp resolve_explain_scope_filter(:allow, [], _resource, _context), do: nil
+
+  defp extract_field_groups(matching_allows) do
+    matching_allows
+    |> Enum.map(& &1[:field_group])
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
   end
 
   # Private functions

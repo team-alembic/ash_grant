@@ -71,7 +71,7 @@ defmodule AshGrant.ContextInjectionTest do
       yesterday = Date.add(Date.utc_today(), -1)
       posts = read_posts_with_context(actor, %{reference_date: yesterday})
 
-      assert length(posts) == 0
+      assert posts == []
     end
   end
 

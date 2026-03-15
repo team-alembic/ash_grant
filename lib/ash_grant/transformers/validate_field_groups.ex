@@ -75,7 +75,7 @@ defmodule AshGrant.Transformers.ValidateFieldGroups do
           :ok
 
         cycle_path ->
-          path_str = cycle_path |> Enum.reverse() |> Enum.map(&inspect/1) |> Enum.join(" -> ")
+          path_str = cycle_path |> Enum.reverse() |> Enum.map_join(" -> ", &inspect/1)
 
           raise Spark.Error.DslError,
             module: resource,

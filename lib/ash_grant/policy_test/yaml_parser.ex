@@ -364,17 +364,21 @@ defmodule AshGrant.PolicyTest.YamlParser do
     if matching == [] do
       {:deny, %{reason: :no_matching_action_type}}
     else
-      results = Enum.map(matching, &check_single_permission(resource, actor, &1.name, record))
-
-      case Enum.find(results, fn {status, _} -> status == :allow end) do
-        nil -> {:deny, %{reason: :no_permission}}
-        allow -> allow
-      end
+      find_first_allowed(matching, resource, actor, record)
     end
   end
 
   defp check_permission(resource, actor, action, record) do
     check_single_permission(resource, actor, action, record)
+  end
+
+  defp find_first_allowed(matching, resource, actor, record) do
+    results = Enum.map(matching, &check_single_permission(resource, actor, &1.name, record))
+
+    case Enum.find(results, fn {status, _} -> status == :allow end) do
+      nil -> {:deny, %{reason: :no_permission}}
+      allow -> allow
+    end
   end
 
   defp check_single_permission(resource, actor, action, nil) do
@@ -383,24 +387,33 @@ defmodule AshGrant.PolicyTest.YamlParser do
 
   defp check_single_permission(resource, actor, action, record) do
     case AshGrant.Introspect.can?(resource, action, actor) do
-      {:deny, _} = deny ->
-        deny
+      {:deny, _} = deny -> deny
+      {:allow, details} -> verify_scope_against_record(resource, actor, record, details)
+    end
+  end
 
-      {:allow, details} ->
-        scope_name = details[:scope]
+  defp verify_scope_against_record(_resource, _actor, _record, %{scope: nil} = details) do
+    {:allow, details}
+  end
 
-        if scope_name == nil or scope_name == "all" or scope_name == "global" do
-          {:allow, details}
-        else
-          scope_atom = if is_binary(scope_name), do: String.to_atom(scope_name), else: scope_name
-          filter = AshGrant.Info.resolve_scope_filter(resource, scope_atom, %{actor: actor})
+  defp verify_scope_against_record(resource, actor, record, details) do
+    scope_name = details[:scope]
 
-          if Assertions.evaluate_filter_against_record(filter, record, actor) do
-            {:allow, details}
-          else
-            {:deny, %{reason: :scope_mismatch}}
-          end
-        end
+    if scope_name == nil or scope_name == "all" or scope_name == "global" do
+      {:allow, details}
+    else
+      evaluate_scope_for_record(resource, actor, record, details, scope_name)
+    end
+  end
+
+  defp evaluate_scope_for_record(resource, actor, record, details, scope_name) do
+    scope_atom = if is_binary(scope_name), do: String.to_atom(scope_name), else: scope_name
+    filter = AshGrant.Info.resolve_scope_filter(resource, scope_atom, %{actor: actor})
+
+    if Assertions.evaluate_filter_against_record(filter, record, actor) do
+      {:allow, details}
+    else
+      {:deny, %{reason: :scope_mismatch}}
     end
   end
 end

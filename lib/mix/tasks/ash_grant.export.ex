@@ -55,39 +55,37 @@ defmodule Mix.Tasks.AshGrant.Export do
   defp export_resource(resource_name, format, output) do
     resource = String.to_existing_atom("Elixir." <> resource_name)
 
-    if not AshGrant.Info.configured?(resource) do
-      Mix.shell().error("Resource #{resource_name} does not have AshGrant configured")
+    if AshGrant.Info.configured?(resource) do
+      content = generate_export(resource, format)
+      write_output(content, output)
     else
-      content =
-        case format do
-          "yaml" ->
-            export_yaml(resource)
-
-          "mermaid" ->
-            AshGrant.PolicyExport.to_mermaid(resource)
-
-          "markdown" ->
-            AshGrant.PolicyExport.to_markdown(resource)
-
-          other ->
-            Mix.shell().error("Unknown format: #{other}")
-            Mix.shell().error("Supported formats: yaml, mermaid, markdown")
-            nil
-        end
-
-      if content do
-        if output do
-          File.write!(output, content)
-          Mix.shell().info("Exported to #{output}")
-        else
-          Mix.shell().info(content)
-        end
-      end
+      Mix.shell().error("Resource #{resource_name} does not have AshGrant configured")
     end
   rescue
     ArgumentError ->
       Mix.shell().error("Resource not found: #{resource_name}")
       Mix.shell().error("Make sure the resource module is compiled and available.")
+  end
+
+  defp generate_export(resource, "yaml"), do: export_yaml(resource)
+  defp generate_export(resource, "mermaid"), do: AshGrant.PolicyExport.to_mermaid(resource)
+  defp generate_export(resource, "markdown"), do: AshGrant.PolicyExport.to_markdown(resource)
+
+  defp generate_export(_resource, other) do
+    Mix.shell().error("Unknown format: #{other}")
+    Mix.shell().error("Supported formats: yaml, mermaid, markdown")
+    nil
+  end
+
+  defp write_output(nil, _output), do: :ok
+
+  defp write_output(content, nil) do
+    Mix.shell().info(content)
+  end
+
+  defp write_output(content, output) do
+    File.write!(output, content)
+    Mix.shell().info("Exported to #{output}")
   end
 
   defp export_yaml(resource) do
@@ -115,28 +113,23 @@ defmodule Mix.Tasks.AshGrant.Export do
   end
 
   defp format_scopes_yaml(scopes) do
-    scopes
-    |> Enum.map(fn scope ->
+    Enum.map_join(scopes, "\n", fn scope ->
       desc = if scope.description, do: " # #{scope.description}", else: ""
       "  - #{scope.name}#{desc}"
     end)
-    |> Enum.join("\n")
   end
 
   defp format_actions_yaml(actions) do
-    actions
-    |> Enum.map(fn action ->
+    Enum.map_join(actions, "\n", fn action ->
       "  - name: #{action.name}\n    type: #{action.type}"
     end)
-    |> Enum.join("\n")
   end
 
   defp format_permissions_yaml(permissions) do
     permissions
     |> Enum.take(10)
-    |> Enum.map(fn perm ->
+    |> Enum.map_join("\n", fn perm ->
       "  - #{perm.permission_string}"
     end)
-    |> Enum.join("\n")
   end
 end
