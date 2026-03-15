@@ -211,6 +211,11 @@ defmodule AshGrant.Dsl do
     ]
   }
 
+  @doc """
+  Returns the scope entity definition for reuse by `AshGrant.Domain.Dsl`.
+  """
+  def scope_entity, do: @scope
+
   @field_group %Spark.Dsl.Entity{
     name: :field_group,
     describe: """
@@ -314,12 +319,13 @@ defmodule AshGrant.Dsl do
     schema: [
       resolver: [
         type: {:or, [{:behaviour, AshGrant.PermissionResolver}, {:fun, 2}]},
-        required: true,
+        required: false,
         doc: """
         Module implementing `AshGrant.PermissionResolver` behaviour,
         or a 2-arity function `(actor, context) -> permissions`.
 
         This resolves permissions for the current actor.
+        Can be inherited from the domain if the domain uses `AshGrant.Domain`.
         """
       ],
       scope_resolver: [
