@@ -21,8 +21,9 @@ defmodule AshGrant.OverlappingFieldPoliciesTest do
 
       policy_field_count = group_policies |> Enum.flat_map(& &1.fields) |> length()
 
-      # 7 attributes: id, name, description, price, cost, supplier, tax_code
-      assert policy_field_count == 7
+      # 6 public non-PK attributes: name, description, price, cost, supplier, tax_code
+      # (:id is excluded as a primary key — not a valid field policy target)
+      assert policy_field_count == 6
     end
 
     test "generates correct number of group policies plus catch-all" do
