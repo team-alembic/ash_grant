@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-03-15
+
+### Added
+
+- **Domain-level DSL (`AshGrant.Domain`)**: Define shared `resolver` and `scope` at the Ash Domain level. Resources using the `AshGrant` extension automatically inherit domain config, eliminating repeated `ash_grant do` blocks across resources. Resource-level settings take precedence (resolver override, same-name scope override). Cross-boundary scope inheritance is supported (resource scope can inherit from a domain-defined parent). (#54)
+
 ## [0.10.3] - 2026-03-15
 
 ### Fixed
