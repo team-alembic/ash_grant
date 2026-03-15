@@ -4,7 +4,7 @@ defmodule AshGrant.DefaultFieldPoliciesTest do
   describe "auto-generated field policies" do
     test "field policies are generated when default_field_policies is true" do
       field_policies = Ash.Policy.Info.field_policies(AshGrant.Test.SensitiveRecord)
-      assert length(field_policies) > 0
+      assert field_policies != []
     end
 
     test "generates field policy for each field group plus catch-all" do
@@ -59,6 +59,56 @@ defmodule AshGrant.DefaultFieldPoliciesTest do
       [check] = public_policy.policies
       assert check.check_module == AshGrant.FieldCheck
       assert check.check_opts[:field_group] == :public
+    end
+  end
+
+  describe "field_group :all excludes PK/private from field policies (issue #51)" do
+    test "resource with timestamps and field_group :all compiles without error" do
+      defmodule TimestampResource do
+        use Ash.Resource,
+          domain: AshGrant.Test.Domain,
+          data_layer: Ash.DataLayer.Ets,
+          authorizers: [Ash.Policy.Authorizer],
+          extensions: [AshGrant],
+          validate_domain_inclusion?: false
+
+        ash_grant do
+          resolver(fn _, _ -> [] end)
+          default_policies(true)
+          default_field_policies(true)
+          resource_name("timestamp_res")
+          scope(:all, true)
+
+          field_group(:admin, :all)
+        end
+
+        attributes do
+          uuid_primary_key(:id)
+          attribute(:name, :string, public?: true)
+          attribute(:status, :string, public?: true)
+          create_timestamp(:created_at)
+          update_timestamp(:updated_at)
+        end
+
+        actions do
+          defaults([:read, create: :*])
+        end
+      end
+
+      # Should compile without Spark.Error.DslError about invalid field references
+      assert Code.ensure_loaded?(TimestampResource)
+
+      # Field policies should not contain PK or private timestamp fields
+      field_policies = Ash.Policy.Info.field_policies(TimestampResource)
+      all_policy_fields = Enum.flat_map(field_policies, & &1.fields) |> Enum.uniq()
+
+      refute :id in all_policy_fields
+      refute :created_at in all_policy_fields
+      refute :updated_at in all_policy_fields
+
+      # Public fields should be present
+      assert :name in all_policy_fields
+      assert :status in all_policy_fields
     end
   end
 

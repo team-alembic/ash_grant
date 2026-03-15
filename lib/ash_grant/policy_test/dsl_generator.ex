@@ -65,17 +65,13 @@ defmodule AshGrant.PolicyTest.DslGenerator do
   end
 
   defp generate_actors(actors) do
-    actors
-    |> Enum.map(fn {name, attrs} ->
+    Enum.map_join(actors, "\n", fn {name, attrs} ->
       "  actor :#{name}, #{inspect(attrs)}"
     end)
-    |> Enum.join("\n")
   end
 
   defp generate_tests(tests) do
-    tests
-    |> Enum.map(&generate_test/1)
-    |> Enum.join("\n\n")
+    Enum.map_join(tests, "\n\n", &generate_test/1)
   end
 
   defp generate_test(test) do
@@ -140,11 +136,11 @@ defmodule AshGrant.PolicyTest.DslGenerator do
   defp generate_record(nil), do: nil
 
   defp generate_record(record) do
-    record
-    |> Enum.map(fn {k, v} ->
-      "#{k}: #{inspect(v)}"
-    end)
-    |> Enum.join(", ")
-    |> then(&"%{#{&1}}")
+    inner =
+      Enum.map_join(record, ", ", fn {k, v} ->
+        "#{k}: #{inspect(v)}"
+      end)
+
+    "%{#{inner}}"
   end
 end

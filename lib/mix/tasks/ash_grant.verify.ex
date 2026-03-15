@@ -159,24 +159,28 @@ defmodule Mix.Tasks.AshGrant.Verify do
 
   defp output_results(results, _format, verbose) do
     if verbose do
-      Enum.each(results.results, fn result ->
-        if result.passed do
-          Mix.shell().info("  ✓ #{result.test_name}")
-        else
-          Mix.shell().error("  ✗ #{result.test_name}")
-          Mix.shell().error("    #{result.message}")
-        end
-      end)
-
+      Enum.each(results.results, &print_verbose_result/1)
       Mix.shell().info("")
     end
 
-    total = results.passed + results.failed
+    print_summary(results)
+  end
 
-    if results.failed == 0 do
-      Mix.shell().info("#{results.passed} test(s) passed")
-    else
-      Mix.shell().error("#{results.failed}/#{total} test(s) failed")
-    end
+  defp print_verbose_result(%{passed: true, test_name: name}) do
+    Mix.shell().info("  ✓ #{name}")
+  end
+
+  defp print_verbose_result(%{passed: false, test_name: name, message: message}) do
+    Mix.shell().error("  ✗ #{name}")
+    Mix.shell().error("    #{message}")
+  end
+
+  defp print_summary(%{failed: 0, passed: passed}) do
+    Mix.shell().info("#{passed} test(s) passed")
+  end
+
+  defp print_summary(%{failed: failed, passed: passed}) do
+    total = passed + failed
+    Mix.shell().error("#{failed}/#{total} test(s) failed")
   end
 end

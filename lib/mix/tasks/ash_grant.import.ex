@@ -37,9 +37,7 @@ defmodule Mix.Tasks.AshGrant.Import do
   end
 
   defp import_yaml(yaml_path, output, module_name) do
-    if not File.exists?(yaml_path) do
-      Mix.shell().error("File not found: #{yaml_path}")
-    else
+    if File.exists?(yaml_path) do
       code =
         if module_name do
           # Generate with custom module name
@@ -60,6 +58,8 @@ defmodule Mix.Tasks.AshGrant.Import do
       else
         Mix.shell().info(code)
       end
+    else
+      Mix.shell().error("File not found: #{yaml_path}")
     end
   rescue
     e ->

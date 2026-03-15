@@ -149,7 +149,7 @@ defmodule AshGrant.PolicyTest.PropertyTest do
             ) do
         tests =
           1..num_tests
-          |> Enum.map(fn i ->
+          |> Enum.map_join("\n", fn i ->
             """
               - name: "test #{i}"
                 assert_can:
@@ -157,7 +157,6 @@ defmodule AshGrant.PolicyTest.PropertyTest do
                   action: read
             """
           end)
-          |> Enum.join("\n")
 
         yaml = """
         resource: AshGrant.Test.Document

@@ -123,7 +123,7 @@ defmodule AshGrant.PolicyExport.Mermaid do
       field_groups
       |> Enum.map(fn fg ->
         fg_id = "fg_#{sanitize_id(fg.name)}"
-        fields_str = fg.fields |> Enum.map(&to_string/1) |> Enum.join(", ")
+        fields_str = Enum.map_join(fg.fields, ", ", &to_string/1)
         "  #{resource_name} -.-> #{fg_id}{{\"#{fg.name}: #{fields_str}\"}}"
       end)
 

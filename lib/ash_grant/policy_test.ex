@@ -90,53 +90,15 @@ defmodule AshGrant.PolicyTest do
   defmacro __before_compile__(env) do
     tests = Module.get_attribute(env.module, :policy_test_tests) |> Enum.reverse()
 
-    # Generate function clauses for each test
-    test_functions =
-      for {test, index} <- Enum.with_index(tests) do
-        body = test.body
-
-        quote do
-          def __run_test__(unquote(index), _context) do
-            unquote(body)
-          end
-        end
-      end
-
-    # Add a fallback clause if there are any tests
-    fallback_function =
-      if tests != [] do
-        quote do
-          def __run_test__(index, _context) do
-            raise "Unknown test index: #{index}"
-          end
-        end
-      else
-        quote do
-          def __run_test__(_index, _context) do
-            raise "No tests defined"
-          end
-        end
-      end
-
-    # Create test entries with references to the generated functions
-    test_entries =
-      for {test, index} <- Enum.with_index(tests) do
-        %{
-          name: test.name,
-          describe: test.describe,
-          index: index
-        }
-      end
+    test_functions = generate_test_functions(tests)
+    fallback_function = generate_fallback_function(tests)
+    test_entries = build_test_entries(tests)
 
     quote do
-      def __policy_test__(:resource) do
-        @policy_test_resource
-      end
+      def __policy_test__(:resource), do: @policy_test_resource
 
       def __policy_test__(:actors) do
-        @policy_test_actors
-        |> Enum.reverse()
-        |> Enum.into(%{})
+        @policy_test_actors |> Enum.reverse() |> Enum.into(%{})
       end
 
       def __policy_test__(:tests) do
@@ -148,14 +110,39 @@ defmodule AshGrant.PolicyTest do
       end
 
       def __policy_test__(:context) do
-        %{
-          resource: __policy_test__(:resource),
-          actors: __policy_test__(:actors)
-        }
+        %{resource: __policy_test__(:resource), actors: __policy_test__(:actors)}
       end
 
       unquote_splicing(test_functions)
       unquote(fallback_function)
+    end
+  end
+
+  defp generate_test_functions(tests) do
+    for {test, index} <- Enum.with_index(tests) do
+      body = test.body
+
+      quote do
+        def __run_test__(unquote(index), _context), do: unquote(body)
+      end
+    end
+  end
+
+  defp generate_fallback_function([]) do
+    quote do
+      def __run_test__(_index, _context), do: raise("No tests defined")
+    end
+  end
+
+  defp generate_fallback_function(_tests) do
+    quote do
+      def __run_test__(index, _context), do: raise("Unknown test index: #{index}")
+    end
+  end
+
+  defp build_test_entries(tests) do
+    for {test, index} <- Enum.with_index(tests) do
+      %{name: test.name, describe: test.describe, index: index}
     end
   end
 

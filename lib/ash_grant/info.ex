@@ -275,41 +275,32 @@ defmodule AshGrant.Info do
   # Private functions
 
   defp do_resolve_field_group(resource, fg) do
-    inherited_fields =
-      case fg.inherits do
-        nil ->
-          []
-
-        [] ->
-          []
-
-        parents ->
-          parents
-          |> Enum.flat_map(fn parent_name ->
-            case resolve_field_group(resource, parent_name) do
-              nil -> []
-              resolved -> resolved.fields
-            end
-          end)
-      end
-
+    inherited_fields = resolve_inherited_fields(resource, fg.inherits)
     all_fields = Enum.uniq(inherited_fields ++ (fg.fields || []))
-
-    masked_fields =
-      case {fg.mask, fg.mask_with} do
-        {nil, _} ->
-          %{}
-
-        {_, nil} ->
-          %{}
-
-        {mask_fields, mask_fn} ->
-          mask_fields
-          |> Enum.filter(&(&1 in all_fields))
-          |> Map.new(&{&1, mask_fn})
-      end
+    masked_fields = build_masked_fields(fg.mask, fg.mask_with, all_fields)
 
     %{fields: all_fields, masked_fields: masked_fields}
+  end
+
+  defp resolve_inherited_fields(_resource, nil), do: []
+  defp resolve_inherited_fields(_resource, []), do: []
+
+  defp resolve_inherited_fields(resource, parents) do
+    Enum.flat_map(parents, fn parent_name ->
+      case resolve_field_group(resource, parent_name) do
+        nil -> []
+        resolved -> resolved.fields
+      end
+    end)
+  end
+
+  defp build_masked_fields(nil, _mask_fn, _all_fields), do: %{}
+  defp build_masked_fields(_mask_fields, nil, _all_fields), do: %{}
+
+  defp build_masked_fields(mask_fields, mask_fn, all_fields) do
+    mask_fields
+    |> Enum.filter(&(&1 in all_fields))
+    |> Map.new(&{&1, mask_fn})
   end
 
   defp derive_resource_name(resource) do
@@ -359,47 +350,35 @@ defmodule AshGrant.Info do
   end
 
   defp resolve_write_scope_with_inheritance(resource, scope, context) do
-    # Get write-specific filter, falling back to the regular filter
-    base_filter =
-      case scope.write do
-        nil -> scope.filter
-        write_filter -> write_filter
-      end
+    base_filter = if scope.write == nil, do: scope.filter, else: scope.write
 
-    # Short-circuit if base is false
     if base_filter == false do
       false
     else
-      case scope.inherits do
-        nil ->
-          base_filter
+      resolve_write_parents(resource, scope.inherits, base_filter, context)
+    end
+  end
 
-        [] ->
-          base_filter
+  defp resolve_write_parents(_resource, nil, base_filter, _context), do: base_filter
+  defp resolve_write_parents(_resource, [], base_filter, _context), do: base_filter
 
-        parent_names when is_list(parent_names) ->
-          parent_filters =
-            parent_names
-            |> Enum.map(&resolve_write_scope_filter(resource, &1, context))
+  defp resolve_write_parents(resource, parent_names, base_filter, context) do
+    parent_filters = Enum.map(parent_names, &resolve_write_scope_filter(resource, &1, context))
 
-          # If any parent returns false, propagate denial
-          if Enum.any?(parent_filters, &(&1 == false)) do
-            false
-          else
-            non_true_filters = Enum.reject(parent_filters, &(&1 == true))
+    if Enum.any?(parent_filters, &(&1 == false)) do
+      false
+    else
+      merge_parent_and_base_filters(parent_filters, base_filter)
+    end
+  end
 
-            case {non_true_filters, base_filter} do
-              {[], filter} ->
-                filter
+  defp merge_parent_and_base_filters(parent_filters, base_filter) do
+    non_true_filters = Enum.reject(parent_filters, &(&1 == true))
 
-              {filters, true} ->
-                combine_filters_with_and(filters)
-
-              {filters, filter} ->
-                combine_filters_with_and(filters ++ [filter])
-            end
-          end
-      end
+    case {non_true_filters, base_filter} do
+      {[], filter} -> filter
+      {filters, true} -> combine_filters_with_and(filters)
+      {filters, filter} -> combine_filters_with_and(filters ++ [filter])
     end
   end
 

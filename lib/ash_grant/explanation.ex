@@ -170,9 +170,7 @@ defmodule AshGrant.Explanation do
 
   defp matching_section(explanation, color) do
     permissions =
-      explanation.matching_permissions
-      |> Enum.map(&format_permission(&1, color))
-      |> Enum.join("\n")
+      Enum.map_join(explanation.matching_permissions, "\n", &format_permission(&1, color))
 
     """
     Matching Permissions:
@@ -209,9 +207,11 @@ defmodule AshGrant.Explanation do
 
   defp evaluated_section(explanation, color) do
     permissions =
-      explanation.evaluated_permissions
-      |> Enum.map(&format_evaluated_permission(&1, color))
-      |> Enum.join("\n")
+      Enum.map_join(
+        explanation.evaluated_permissions,
+        "\n",
+        &format_evaluated_permission(&1, color)
+      )
 
     """
 
@@ -237,8 +237,7 @@ defmodule AshGrant.Explanation do
   defp field_group_section(%{field_groups: [], field_group_defs: defs} = _explanation, color)
        when defs != [] do
     groups_info =
-      defs
-      |> Enum.map(fn fg ->
+      Enum.map_join(defs, "\n", fn fg ->
         name = Atom.to_string(fg.name)
 
         inherits =
@@ -248,7 +247,6 @@ defmodule AshGrant.Explanation do
 
         "  • #{maybe_color(name, :yellow, color)}: #{inspect(fg.fields)}#{inherits}"
       end)
-      |> Enum.join("\n")
 
     """
 
@@ -261,8 +259,7 @@ defmodule AshGrant.Explanation do
     actor_groups = explanation.field_groups |> Enum.join(", ")
 
     groups_info =
-      explanation.field_group_defs
-      |> Enum.map(fn fg ->
+      Enum.map_join(explanation.field_group_defs, "\n", fn fg ->
         name = Atom.to_string(fg.name)
 
         inherits =
@@ -272,7 +269,6 @@ defmodule AshGrant.Explanation do
 
         "  • #{maybe_color(name, :yellow, color)}: #{inspect(fg.fields)}#{inherits}"
       end)
-      |> Enum.join("\n")
 
     """
 

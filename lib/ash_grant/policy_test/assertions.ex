@@ -332,30 +332,30 @@ defmodule AshGrant.PolicyTest.Assertions do
   end
 
   defp check_basic_permission(resource, {:action_type, type}, actor) do
-    # For action_type, find any action of that type and check
     actions = Ash.Resource.Info.actions(resource)
-
-    matching_actions =
-      Enum.filter(actions, fn action -> action.type == type end)
+    matching_actions = Enum.filter(actions, fn action -> action.type == type end)
 
     if matching_actions == [] do
       {:deny, %{reason: :no_matching_action_type}}
     else
-      # Check if actor can perform ANY action of this type
-      results =
-        Enum.map(matching_actions, fn action ->
-          AshGrant.Introspect.can?(resource, action.name, actor)
-        end)
-
-      case Enum.find(results, fn {status, _} -> status == :allow end) do
-        nil -> {:deny, %{reason: :no_permission}}
-        allow -> allow
-      end
+      find_first_allowed_action(matching_actions, resource, actor)
     end
   end
 
   defp check_basic_permission(resource, action, actor) when is_atom(action) do
     AshGrant.Introspect.can?(resource, action, actor)
+  end
+
+  defp find_first_allowed_action(matching_actions, resource, actor) do
+    results =
+      Enum.map(matching_actions, fn action ->
+        AshGrant.Introspect.can?(resource, action.name, actor)
+      end)
+
+    case Enum.find(results, fn {status, _} -> status == :allow end) do
+      nil -> {:deny, %{reason: :no_permission}}
+      allow -> allow
+    end
   end
 
   defp check_scope_against_record(resource, _action, actor, record, permission_details) do

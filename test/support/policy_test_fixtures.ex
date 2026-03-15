@@ -1,10 +1,12 @@
 defmodule AshGrant.PolicyTest.Fixtures.TestWithResource do
+  @moduledoc false
   use AshGrant.PolicyTest
 
   resource(AshGrant.Test.Document)
 end
 
 defmodule AshGrant.PolicyTest.Fixtures.TestWithActors do
+  @moduledoc false
   use AshGrant.PolicyTest
 
   resource(AshGrant.Test.Document)
@@ -15,6 +17,7 @@ defmodule AshGrant.PolicyTest.Fixtures.TestWithActors do
 end
 
 defmodule AshGrant.PolicyTest.Fixtures.TestWithDescribeAndTest do
+  @moduledoc false
   use AshGrant.PolicyTest
 
   resource(AshGrant.Test.Document)
@@ -39,6 +42,7 @@ defmodule AshGrant.PolicyTest.Fixtures.TestWithDescribeAndTest do
 end
 
 defmodule AshGrant.PolicyTest.Fixtures.TestWithoutDescribe do
+  @moduledoc false
   use AshGrant.PolicyTest
 
   resource(AshGrant.Test.Document)
@@ -51,6 +55,7 @@ defmodule AshGrant.PolicyTest.Fixtures.TestWithoutDescribe do
 end
 
 defmodule AshGrant.PolicyTest.Fixtures.TestWithFunctions do
+  @moduledoc false
   use AshGrant.PolicyTest
 
   resource(AshGrant.Test.Document)
@@ -63,6 +68,7 @@ defmodule AshGrant.PolicyTest.Fixtures.TestWithFunctions do
 end
 
 defmodule AshGrant.PolicyTest.Fixtures.TestContextInheritance do
+  @moduledoc false
   use AshGrant.PolicyTest
 
   resource(AshGrant.Test.Document)
@@ -77,6 +83,7 @@ end
 # Fixtures for testing assertions with actual resources
 
 defmodule AshGrant.PolicyTest.Fixtures.DocumentPolicyTest do
+  @moduledoc false
   use AshGrant.PolicyTest
 
   resource(AshGrant.Test.Document)
@@ -125,6 +132,7 @@ defmodule AshGrant.PolicyTest.Fixtures.DocumentPolicyTest do
 end
 
 defmodule AshGrant.PolicyTest.Fixtures.PostPolicyTest do
+  @moduledoc false
   use AshGrant.PolicyTest
 
   resource(AshGrant.Test.Post)
@@ -157,6 +165,7 @@ end
 # Edge case test fixtures
 
 defmodule AshGrant.PolicyTest.Fixtures.NilActorTest do
+  @moduledoc false
   use AshGrant.PolicyTest
 
   resource(AshGrant.Test.Document)
@@ -169,6 +178,7 @@ defmodule AshGrant.PolicyTest.Fixtures.NilActorTest do
 end
 
 defmodule AshGrant.PolicyTest.Fixtures.UndefinedActorTest do
+  @moduledoc false
   use AshGrant.PolicyTest
 
   resource(AshGrant.Test.Document)
@@ -181,6 +191,7 @@ defmodule AshGrant.PolicyTest.Fixtures.UndefinedActorTest do
 end
 
 defmodule AshGrant.PolicyTest.Fixtures.SpecialCharsTest do
+  @moduledoc false
   use AshGrant.PolicyTest
 
   resource(AshGrant.Test.Document)
@@ -197,6 +208,7 @@ defmodule AshGrant.PolicyTest.Fixtures.SpecialCharsTest do
 end
 
 defmodule AshGrant.PolicyTest.Fixtures.MultiAssertTest do
+  @moduledoc false
   use AshGrant.PolicyTest
 
   resource(AshGrant.Test.Document)
@@ -212,6 +224,7 @@ defmodule AshGrant.PolicyTest.Fixtures.MultiAssertTest do
 end
 
 defmodule AshGrant.PolicyTest.Fixtures.FailFastTest do
+  @moduledoc false
   use AshGrant.PolicyTest
 
   resource(AshGrant.Test.Document)
@@ -227,6 +240,7 @@ defmodule AshGrant.PolicyTest.Fixtures.FailFastTest do
 end
 
 defmodule AshGrant.PolicyTest.Fixtures.MissingFieldTest do
+  @moduledoc false
   use AshGrant.PolicyTest
 
   resource(AshGrant.Test.Document)
@@ -244,6 +258,7 @@ end
 # Field visibility assertion tests
 
 defmodule AshGrant.PolicyTest.Fixtures.FieldVisibilityTest do
+  @moduledoc false
   use AshGrant.PolicyTest
 
   resource(AshGrant.Test.ExceptRecord)
@@ -281,6 +296,7 @@ end
 # Field group except (blacklist) tests
 
 defmodule AshGrant.PolicyTest.Fixtures.ExceptFieldGroupTest do
+  @moduledoc false
   use AshGrant.PolicyTest
 
   resource(AshGrant.Test.ExceptRecord)

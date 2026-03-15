@@ -19,7 +19,7 @@ defmodule AshGrant.PolicyTest.RunnerTest do
       results = Runner.run_module(DocumentPolicyTest)
 
       assert is_list(results)
-      assert length(results) > 0
+      assert results != []
 
       # All results should be Result structs
       Enum.each(results, fn result ->

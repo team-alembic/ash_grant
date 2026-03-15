@@ -66,9 +66,16 @@ defmodule AshGrant.Transformers.AddFieldPolicies do
     # to overlapping attribute lists. Each field must appear in exactly one
     # field_policy to avoid Ash's "all must pass" semantics causing false denials.
     # Earlier groups in DSL order win; later groups get the remaining fields.
+    #
+    # Filter out fields that are not valid field policy targets (primary keys,
+    # private attributes). Ash only allows non-PK, public attributes, calculations,
+    # and aggregates in field policies.
+    valid_fields = valid_field_policy_targets(dsl_state)
+
     {dsl_state, _seen} =
       Enum.reduce(field_groups, {dsl_state, MapSet.new()}, fn fg, {acc, seen} ->
         all_fields = fg.fields || []
+        all_fields = Enum.filter(all_fields, &(&1 in valid_fields))
         unique_fields = Enum.reject(all_fields, &MapSet.member?(seen, &1))
         new_seen = MapSet.union(seen, MapSet.new(all_fields))
 
@@ -140,6 +147,25 @@ defmodule AshGrant.Transformers.AddFieldPolicies do
       end)
 
     Transformer.persist(dsl_state, :fields_to_field_policies, fields_to_field_policies)
+  end
+
+  defp valid_field_policy_targets(dsl_state) do
+    attrs =
+      Ash.Resource.Info.attributes(dsl_state)
+      |> Enum.filter(fn attr -> attr.public? and not attr.primary_key? end)
+      |> Enum.map(& &1.name)
+
+    calcs =
+      Ash.Resource.Info.calculations(dsl_state)
+      |> Enum.filter(& &1.public?)
+      |> Enum.map(& &1.name)
+
+    aggs =
+      Ash.Resource.Info.aggregates(dsl_state)
+      |> Enum.filter(& &1.public?)
+      |> Enum.map(& &1.name)
+
+    MapSet.new(attrs ++ calcs ++ aggs)
   end
 
   defp get_field_group_entities(dsl_state) do

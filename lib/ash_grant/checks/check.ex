@@ -809,35 +809,33 @@ defmodule AshGrant.Check do
     end
   end
 
+  defp check_actor_match(_record, _filter, %{actor: nil}), do: false
+
   defp check_actor_match(record, filter, context) do
     actor = context[:actor]
 
-    case actor do
+    case extract_actor_in_list_check(filter) do
+      {record_field, actor_field} ->
+        evaluate_actor_in_list(record, actor, record_field, actor_field)
+
       nil ->
-        false
+        evaluate_actor_equality_or_default(record, filter, actor)
+    end
+  end
 
-      _ ->
-        # First try to extract "field in ^actor(:list_field)" pattern
-        case extract_actor_in_list_check(filter) do
-          {record_field, actor_field} ->
-            # Check if record's field value is in actor's list field
-            record_value = Map.get(record, record_field)
-            actor_list = Map.get(actor, actor_field) || []
-            record_value in actor_list
+  defp evaluate_actor_in_list(record, actor, record_field, actor_field) do
+    record_value = Map.get(record, record_field)
+    actor_list = Map.get(actor, actor_field) || []
+    record_value in actor_list
+  end
 
-          nil ->
-            # Fall back to extract "field == ^actor(:actor_field)" pattern
-            case extract_actor_equality_check(filter) do
-              {record_field, actor_field} ->
-                record_value = Map.get(record, record_field)
-                actor_value = Map.get(actor, actor_field)
-                record_value == actor_value
+  defp evaluate_actor_equality_or_default(record, filter, actor) do
+    case extract_actor_equality_check(filter) do
+      {record_field, actor_field} ->
+        Map.get(record, record_field) == Map.get(actor, actor_field)
 
-              nil ->
-                # No actor pattern found, assume OK (other checks may apply)
-                true
-            end
-        end
+      nil ->
+        true
     end
   end
 

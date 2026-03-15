@@ -72,9 +72,8 @@ defmodule AshGrant.Transformers.AddDefaultPolicies do
         {:ok, dsl_state}
 
       value when value in [true, :all] ->
-        with {:ok, dsl_state} <- add_read_policy(dsl_state),
-             {:ok, dsl_state} <- add_write_policy(dsl_state) do
-          {:ok, dsl_state}
+        with {:ok, dsl_state} <- add_read_policy(dsl_state) do
+          add_write_policy(dsl_state)
         end
 
       :read ->
