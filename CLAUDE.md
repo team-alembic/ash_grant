@@ -64,8 +64,16 @@ mix ash_grant.verify path/to/test.yaml --verbose  # Verbose output
 - **`AshGrant.PermissionResolver`** - Behaviour for fetching actor permissions
 - **`AshGrant.ScopeResolver`** - Legacy behaviour for custom scope resolution
 
+### Domain-Level Extension
+
+- **`AshGrant.Domain`** (`lib/ash_grant/domain.ex`) - Domain extension for shared resolver/scope inheritance
+- **`AshGrant.Domain.Dsl`** (`lib/ash_grant/domain/dsl.ex`) - Domain DSL section (resolver + scope entities)
+- **`AshGrant.Domain.Info`** (`lib/ash_grant/domain/info.ex`) - Domain introspection helpers
+
 ### Transformers
 
+- **`AshGrant.Transformers.MergeDomainConfig`** - Merges domain-level resolver/scopes into resources (runs first)
+- **`AshGrant.Transformers.ValidateResolverPresent`** - Validates resolver exists after domain merge
 - **`AshGrant.Transformers.AddDefaultPolicies`** - Auto-generates policies when `default_policies: true`
 
 ## Permission Format
@@ -129,39 +137,6 @@ All changes must go through Pull Requests (no direct push to main).
 | Refactoring | `refactor/<description>` | `refactor/evaluator-cleanup` |
 | Release | `release/v<version>` | `release/v0.4.1` |
 
-### Feature
-
-```bash
-git checkout -b feat/my-feature
-# Work on feature...
-git push -u origin feat/my-feature
-# Create PR → CI passes → Merge
-```
-
-### Fix
-
-```bash
-git checkout -b fix/bug-description
-# Fix the bug...
-mix test  # Local test
-git push -u origin fix/bug-description
-# Create PR → CI passes → Merge
-```
-
-### Release
-
-```bash
-git checkout -b release/v0.4.2
-# 1. Update version in mix.exs
-# 2. Update CHANGELOG.md (move Unreleased to new version)
-git push -u origin release/v0.4.2
-# Create PR → CI passes → Merge
-# 3. Tag on main
-git checkout main && git pull
-git tag v0.4.2
-git push --tags
-```
-
 ### Commit Message Convention
 
 ```
@@ -169,3 +144,12 @@ git push --tags
 
 Types: feat, fix, docs, refactor, test, release
 ```
+
+### Slash Commands
+
+Use these instead of manual steps:
+
+- **`/pr <description>`** — Full PR workflow: code verification → doc gate → branch → commit → push → create PR
+- **`/release <version>`** — Full release workflow: change analysis → docs + CHANGELOG → version bump → verify → PR → merge → tag
+
+Both commands include a **documentation gate** that checks README, CHANGELOG, @moduledoc, and CLAUDE.md before proceeding.

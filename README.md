@@ -7,6 +7,7 @@ AshGrant connects three Ash-native concepts — **resources**, **actions**, and
 Permissions resolve to native Ash filters and policy checks, with deny-wins semantics.
 
 **Authorization:**
+- **Domain-level DSL** — shared resolver and scopes inherited by all resources in a domain
 - **Scope DSL** with `expr()` — row-level filters, scope inheritance, `^tenant()` support
 - **Field groups** — column-level read access with inheritance and masking
 - **Instance permissions** — per-record sharing with optional scope conditions
@@ -27,7 +28,7 @@ Add `ash_grant` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:ash_grant, "~> 0.7"}
+    {:ash_grant, "~> 0.11"}
   ]
 end
 ```
@@ -191,6 +192,80 @@ defmodule MyApp.PermissionResolver do
   end
 end
 ```
+
+## Domain-Level DSL
+
+When multiple resources share the same resolver and scopes, define them once at the domain level instead of repeating the same `ash_grant do` block in every resource.
+
+**When to use:**
+- 3+ resources in a domain share the same resolver and common scopes (`:all`, `:own`, etc.)
+- You want a single place to change the resolver or add a scope for all resources
+
+**When NOT to use:**
+- Resources in a domain have very different resolvers or scope logic
+- You only have 1–2 resources in the domain
+
+### Setup
+
+```elixir
+defmodule MyApp.Blog do
+  use Ash.Domain,
+    extensions: [AshGrant.Domain]
+
+  ash_grant do
+    resolver MyApp.PermissionResolver
+
+    scope :all, true
+    scope :own, expr(author_id == ^actor(:id))
+  end
+
+  resources do
+    resource MyApp.Blog.Post
+    resource MyApp.Blog.Comment
+  end
+end
+```
+
+Resources inherit the domain's resolver and scopes automatically:
+
+```elixir
+defmodule MyApp.Blog.Post do
+  use Ash.Resource,
+    domain: MyApp.Blog,
+    authorizers: [Ash.Policy.Authorizer],
+    extensions: [AshGrant]
+
+  ash_grant do
+    default_policies true
+    # No resolver needed — inherited from domain
+    # :all and :own scopes inherited from domain
+    scope :published, expr(status == :published)  # Add resource-specific scopes
+  end
+
+  # ...
+end
+```
+
+### Inheritance Rules
+
+| Config | Resource defines it | Domain defines it | Result |
+|--------|-------------------|-------------------|--------|
+| resolver | Yes | Yes | **Resource wins** |
+| resolver | No | Yes | Domain's resolver used |
+| scope (same name) | Yes | Yes | **Resource wins** (override) |
+| scope | No | Yes | Domain scope inherited |
+
+Resource scopes can inherit from domain-defined parent scopes:
+
+```elixir
+# Domain defines :own scope
+# Resource adds :own_draft that inherits from domain's :own
+ash_grant do
+  scope :own_draft, [:own], expr(status == :draft)
+end
+```
+
+A compile error is raised if no resolver is found from either the resource or the domain.
 
 ## Resolver Patterns
 
@@ -882,7 +957,7 @@ end
 
 ```elixir
 ash_grant do
-  resolver MyApp.PermissionResolver       # Required
+  resolver MyApp.PermissionResolver       # Required (or inherited from domain)
   default_policies true                   # Optional: auto-generate policies
   resource_name "custom_name"             # Optional: defaults to module name (e.g., MyApp.Blog.Post → "post")
 
@@ -894,7 +969,7 @@ end
 
 | Option | Type | Description |
 |--------|------|-------------|
-| `resolver` | module or function | **Required.** Resolves permissions for actors |
+| `resolver` | module or function | **Required** (can be inherited from domain via `AshGrant.Domain`). Resolves permissions for actors |
 | `default_policies` | boolean or atom | Auto-generate policies: `true`, `:all`, `:read`, or `:write` |
 | `default_field_policies` | boolean | Auto-generate `field_policies` from `field_group` definitions |
 | `resource_name` | string | Resource name for permission matching. Default: derived from module name (last segment, snake_cased). `MyApp.Blog.Post` → `"post"`, `MyApp.CustomerOrder` → `"customer_order"` |
