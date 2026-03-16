@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-03-16
+
+### Added
+
+- **`CanPerform` calculation for per-record UI visibility**: New `AshGrant.Calculation.CanPerform` module produces per-record boolean values (e.g., `:can_update?`, `:can_destroy?`) that compile to SQL via `expression/2` — no N+1 queries. Supports RBAC scopes, instance permissions, deny-wins, and multi-scope OR combination. (#58)
+- **`can_perform` DSL entity**: Declare individual CanPerform calculations inline in the `ash_grant` block with optional custom naming (e.g., `can_perform :read, name: :visible?`). The transformer auto-detects the resource module.
+- **`can_perform_actions` batch option**: Generate multiple CanPerform calculations at once (e.g., `can_perform_actions [:update, :destroy]` generates `:can_update?` and `:can_destroy?`).
+- **Compile-time action name validation**: `can_perform` and `can_perform_actions` now raise `Spark.Error.DslError` at compile time if a referenced action does not exist on the resource, preventing typos from silently producing always-false calculations. (#60)
+- **`AshGrant.Info.can_perform_actions/1`**: Introspection helper to query configured batch actions.
+
 ## [0.11.1] - 2026-03-15
 
 ### Changed
