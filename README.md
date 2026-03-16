@@ -13,6 +13,9 @@ Permissions resolve to native Ash filters and policy checks, with deny-wins sema
 - **Instance permissions** — per-record sharing with optional scope conditions
 - **Deny-wins evaluation** — deny rules always override allows
 
+**UI Integration:**
+- **`CanPerform` calculation** — per-record boolean for UI visibility (compiles to SQL), with DSL sugar (`can_perform_actions`, `can_perform`)
+
 **Verification & Tooling:**
 - **`explain/4`** — trace why authorization succeeded or failed
 - **`Introspect`** — query actor permissions, available actions at runtime
@@ -953,6 +956,76 @@ policy action(:destroy) do
 end
 ```
 
+### `CanPerform` Calculation - Per-Record UI Visibility
+
+AshGrant generates per-record boolean calculations for UI visibility patterns
+(show/hide buttons per row). These compile to SQL via `expression/2` (no N+1).
+
+#### DSL Sugar (Recommended)
+
+```elixir
+ash_grant do
+  resolver MyApp.PermissionResolver
+  scope :all, true
+  scope :own, expr(author_id == ^actor(:id))
+
+  # Batch — generates :can_update? and :can_destroy?
+  can_perform_actions [:update, :destroy]
+
+  # Individual with custom name
+  can_perform :read, name: :visible?
+end
+```
+
+#### Explicit Module (Advanced)
+
+For cases needing full control (e.g., custom `resource_name`):
+
+```elixir
+calculations do
+  calculate :can_update?, :boolean,
+    {AshGrant.Calculation.CanPerform, action: "update", resource: __MODULE__},
+    public?: true
+end
+```
+
+DSL-generated and explicit calculations coexist safely. If both declare the same
+name, the explicit one takes precedence.
+
+#### Querying and Templates
+
+```elixir
+# In your LiveView / controller
+members =
+  Member
+  |> Ash.Query.load([:can_update?, :can_destroy?])
+  |> Ash.read!(actor: current_user)
+
+# In your template
+<.button :if={member.can_update?}>Edit</.button>
+<.button :if={member.can_destroy?}>Delete</.button>
+```
+
+#### DSL Options
+
+| DSL | Description |
+|-----|-------------|
+| `can_perform_actions [:update, :destroy]` | Batch-generate `:can_<action>?` calculations (public) |
+| `can_perform :action` | Generate a single calculation (default name: `:can_<action>?`) |
+| `can_perform :action, name: :custom?` | Generate with a custom calculation name |
+| `can_perform :action, public?: false` | Generate a private calculation |
+
+#### Explicit Module Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `:action` | string | **Required.** Action name for permission matching |
+| `:resource` | module | **Required.** The resource module (use `__MODULE__`) |
+| `:resource_name` | string | Override resource name for permission matching |
+
+The calculation handles RBAC scopes, instance permissions, deny-wins, and
+multi-scope OR combination — all identical to `FilterCheck`.
+
 ## DSL Configuration
 
 ```elixir
@@ -964,6 +1037,9 @@ ash_grant do
   # Inline scopes
   scope :all, true
   scope :own, expr(owner_id == ^actor(:id))
+
+  # UI visibility calculations
+  can_perform_actions [:update, :destroy]
 end
 ```
 
@@ -972,6 +1048,7 @@ end
 | `resolver` | module or function | **Required** (can be inherited from domain via `AshGrant.Domain`). Resolves permissions for actors |
 | `default_policies` | boolean or atom | Auto-generate policies: `true`, `:all`, `:read`, or `:write` |
 | `default_field_policies` | boolean | Auto-generate `field_policies` from `field_group` definitions |
+| `can_perform_actions` | list of atoms | Batch-generate `CanPerform` calculations (e.g., `[:update, :destroy]`) |
 | `resource_name` | string | Resource name for permission matching. Default: derived from module name (last segment, snake_cased). `MyApp.Blog.Post` → `"post"`, `MyApp.CustomerOrder` → `"customer_order"` |
 
 ### Default Policies Options
@@ -1061,16 +1138,16 @@ end
 ## Architecture
 
 ```
-                    Ash Policy Check
-                          |
-            +-------------+-------------+-------------+
-            |                           |             |
-      +-----v-----+              +------v------+  +--v----------+
-      |  Check    |              | FilterCheck |  | FieldCheck  |
-      | (writes)  |              |  (reads)    |  | (fields)    |
-      +-----+-----+              +------+------+  +--+----------+
-            |                           |             |
-            +-----------+---------------+-------------+
+                    Ash Policy Check                Ash Calculation
+                          |                              |
+            +-------------+-------------+--------+  +---v-----------+
+            |                           |        |  | CanPerform    |
+      +-----v-----+              +------v------+ |  | (UI booleans) |
+      |  Check    |              | FilterCheck | |  +---+-----------+
+      | (writes)  |              |  (reads)    | |      |
+      +-----+-----+              +------+------+ |      |
+            |                           |        |      |
+            +-----------+---------------+-+------+------+
                         |
             +-----------v-----------+
             | PermissionResolver    |

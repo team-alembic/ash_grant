@@ -79,6 +79,9 @@ defmodule AshGrant.Test.Post do
         )
       )
     )
+
+    # CanPerform DSL sugar — replaces explicit calculations block
+    can_perform_actions([:update, :destroy])
   end
 
   policies do

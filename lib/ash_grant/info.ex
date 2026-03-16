@@ -108,6 +108,16 @@ defmodule AshGrant.Info do
   end
 
   @doc """
+  Gets the list of action names configured via `can_perform_actions`.
+
+  Returns an empty list if not configured.
+  """
+  @spec can_perform_actions(Ash.Resource.t()) :: [atom()]
+  def can_perform_actions(resource) do
+    Spark.Dsl.Extension.get_opt(resource, [:ash_grant], :can_perform_actions) || []
+  end
+
+  @doc """
   Gets the default_field_policies setting.
 
   Returns `true` if field policies should be auto-generated from field_group definitions,

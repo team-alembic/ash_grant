@@ -81,6 +81,8 @@ defmodule AshGrant.Test.SharedDoc do
 
     scope(:all, true)
     scope(:own, expr(owner_id == ^actor(:id)))
+
+    can_perform :update
   end
 
   policies do

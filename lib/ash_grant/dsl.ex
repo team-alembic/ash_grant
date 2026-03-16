@@ -13,6 +13,7 @@ defmodule AshGrant.Dsl do
   | `resource_name` | string | No | Resource name for permission matching |
   | `default_policies` | boolean or atom | No | Auto-generate policies (`true`, `:all`, `:read`, `:write`) |
   | `default_field_policies` | boolean | No | Auto-generate `field_policies` from `field_group` definitions |
+  | `can_perform_actions` | list of atoms | No | Batch-generate CanPerform calculations (e.g., `[:update, :destroy]`) |
   | `owner_field` | atom | No | **Deprecated.** Use `scope :own, expr(...)` instead |
 
   ## Scope Entity
@@ -51,6 +52,31 @@ defmodule AshGrant.Dsl do
   When `write:` is omitted, scopes with relationship references use a DB query
   fallback; simple scopes use in-memory evaluation.
 
+  ## CanPerform Entity
+
+  The `can_perform` entity generates a boolean `CanPerform` calculation for a
+  single action. Use `can_perform_actions` for batch generation.
+
+  | Argument | Type | Description |
+  |----------|------|-------------|
+  | `action` | atom | The action name (e.g., `:update`, `:destroy`) |
+
+  | Option | Type | Default | Description |
+  |--------|------|---------|-------------|
+  | `name` | atom | `:can_<action>?` | Custom calculation name |
+  | `public?` | boolean | `true` | Whether the calculation is public |
+
+  ### Examples
+
+      # Batch — generates :can_update? and :can_destroy?
+      can_perform_actions [:update, :destroy]
+
+      # Individual
+      can_perform :update
+
+      # Individual with custom name
+      can_perform :read, name: :visible?
+
   ## Example
 
       defmodule MyApp.Blog.Post do
@@ -68,6 +94,9 @@ defmodule AshGrant.Dsl do
 
           # Relational scope — works for reads and writes automatically
           scope :team_visible, expr(exists(team.members, user_id == ^actor(:id)))
+
+          # UI visibility calculations
+          can_perform_actions [:update, :destroy]
         end
       end
 
@@ -293,6 +322,23 @@ defmodule AshGrant.Dsl do
     ]
   }
 
+  @can_perform %Spark.Dsl.Entity{
+    name: :can_perform,
+    describe: "Generates a CanPerform calculation for a specific action.",
+    examples: [
+      "can_perform :update",
+      "can_perform :destroy",
+      "can_perform :read, name: :visible?"
+    ],
+    target: AshGrant.Dsl.CanPerform,
+    args: [:action],
+    schema: [
+      action: [type: :atom, required: true, doc: "Action name (e.g. :update, :destroy)"],
+      name: [type: :atom, doc: "Calculation name. Defaults to :can_<action>?"],
+      public?: [type: :boolean, default: true, doc: "Whether the calculation is public"]
+    ]
+  }
+
   @ash_grant %Spark.Dsl.Section{
     name: :ash_grant,
     top_level?: false,
@@ -312,10 +358,12 @@ defmodule AshGrant.Dsl do
         scope :all, true
         scope :own, expr(author_id == ^actor(:id))
         scope :published, expr(status == :published)
+
+        can_perform_actions [:update, :destroy]
       end
       """
     ],
-    entities: [@scope, @field_group],
+    entities: [@scope, @field_group, @can_perform],
     schema: [
       resolver: [
         type: {:or, [{:behaviour, AshGrant.PermissionResolver}, {:fun, 2}]},
@@ -402,6 +450,19 @@ defmodule AshGrant.Dsl do
         When `false` (default), you can manually write `field_policies` using
         `AshGrant.field_check/1` (Mode A).
         """
+      ],
+      can_perform_actions: [
+        type: {:list, :atom},
+        doc: """
+        List of action names to generate CanPerform calculations for.
+        Each generates a `:can_<action>?` boolean calculation (public by default).
+
+        ## Example
+
+            can_perform_actions [:update, :destroy]
+
+        Generates `:can_update?` and `:can_destroy?` calculations.
+        """
       ]
     ]
   }
@@ -435,6 +496,30 @@ defmodule AshGrant.Dsl.Scope do
           filter: boolean() | Ash.Expr.t(),
           write: boolean() | Ash.Expr.t() | nil,
           description: String.t() | nil,
+          __spark_metadata__: map() | nil
+        }
+end
+
+defmodule AshGrant.Dsl.CanPerform do
+  @moduledoc """
+  Represents a can_perform entity in the AshGrant DSL.
+
+  Each entity generates a boolean calculation that evaluates whether the
+  current actor can perform the specified action on each record.
+
+  ## Fields
+
+  - `:action` - The action atom (e.g., `:update`, `:destroy`)
+  - `:name` - Custom calculation name. Defaults to `:can_<action>?`
+  - `:public?` - Whether the calculation is public (default: `true`)
+  """
+
+  defstruct [:action, :name, :public?, :__spark_metadata__]
+
+  @type t :: %__MODULE__{
+          action: atom(),
+          name: atom() | nil,
+          public?: boolean(),
           __spark_metadata__: map() | nil
         }
 end
