@@ -81,6 +81,8 @@ defmodule AshGrant.Test.SharedDoc do
 
     scope(:all, true)
     scope(:own, expr(owner_id == ^actor(:id)))
+
+    can_perform :update
   end
 
   policies do
@@ -104,15 +106,6 @@ defmodule AshGrant.Test.SharedDoc do
 
     create_timestamp(:inserted_at)
     update_timestamp(:updated_at)
-  end
-
-  calculations do
-    calculate(
-      :can_update?,
-      :boolean,
-      {AshGrant.Calculation.CanPerform, action: "update", resource: __MODULE__},
-      public?: true
-    )
   end
 
   actions do

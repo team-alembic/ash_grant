@@ -79,6 +79,7 @@ mix ash_grant.verify path/to/test.yaml --verbose  # Verbose output
 - **`AshGrant.Transformers.MergeDomainConfig`** - Merges domain-level resolver/scopes into resources (runs first)
 - **`AshGrant.Transformers.ValidateResolverPresent`** - Validates resolver exists after domain merge
 - **`AshGrant.Transformers.AddDefaultPolicies`** - Auto-generates policies when `default_policies: true`
+- **`AshGrant.Transformers.AddCanPerformCalculations`** - Generates CanPerform calculations from `can_perform` entities and `can_perform_actions` option
 
 ## Permission Format
 

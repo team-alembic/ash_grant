@@ -269,6 +269,12 @@ defmodule AshGrant do
         scope :own, expr(author_id == ^actor(:id))
         scope :same_tenant, expr(tenant_id == ^tenant())  # Multi-tenancy
 
+        # UI visibility — auto-generates :can_update? and :can_destroy? calculations
+        can_perform_actions [:update, :destroy]
+
+        # Or individually with custom name
+        can_perform :read, name: :visible?
+
         # Field groups (whitelist)
         field_group :public, [:name, :department]
         field_group :sensitive, [:phone, :address], inherits: [:public]
@@ -281,6 +287,7 @@ defmodule AshGrant do
   |--------|------|-------------|
   | `resolver` | module/function | **Required.** Resolves permissions for actors |
   | `default_policies` | boolean/atom | Auto-generate policies: `true`, `:all`, `:read`, `:write` |
+  | `can_perform_actions` | list of atoms | Batch-generate CanPerform calculations |
   | `resource_name` | string | Resource name for permission matching |
 
   ## Related Modules
@@ -297,6 +304,7 @@ defmodule AshGrant do
   - `AshGrant.Introspect` - Runtime permission introspection for UIs and APIs
   - `AshGrant.Explanation` - Authorization decision explanation struct
   - `AshGrant.Transformers.AddDefaultPolicies` - Policy generation transformer
+  - `AshGrant.Transformers.AddCanPerformCalculations` - CanPerform calculation generation from DSL
   """
 
   use Spark.Dsl.Extension,
@@ -309,7 +317,8 @@ defmodule AshGrant do
       AshGrant.Transformers.ValidateFieldGroups,
       AshGrant.Transformers.AddDefaultPolicies,
       AshGrant.Transformers.AddFieldPolicies,
-      AshGrant.Transformers.AddMaskingPreparation
+      AshGrant.Transformers.AddMaskingPreparation,
+      AshGrant.Transformers.AddCanPerformCalculations
     ]
 
   @doc """

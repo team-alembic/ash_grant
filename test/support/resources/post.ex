@@ -79,6 +79,9 @@ defmodule AshGrant.Test.Post do
         )
       )
     )
+
+    # CanPerform DSL sugar — replaces explicit calculations block
+    can_perform_actions([:update, :destroy])
   end
 
   policies do
@@ -109,22 +112,6 @@ defmodule AshGrant.Test.Post do
     attribute(:author_id, :uuid, public?: true)
     create_timestamp(:inserted_at)
     update_timestamp(:updated_at)
-  end
-
-  calculations do
-    calculate(
-      :can_update?,
-      :boolean,
-      {AshGrant.Calculation.CanPerform, action: "update", resource: __MODULE__},
-      public?: true
-    )
-
-    calculate(
-      :can_destroy?,
-      :boolean,
-      {AshGrant.Calculation.CanPerform, action: "destroy", resource: __MODULE__},
-      public?: true
-    )
   end
 
   actions do

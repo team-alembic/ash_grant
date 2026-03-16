@@ -8,23 +8,47 @@ defmodule AshGrant.Calculation.CanPerform do
 
   ## Usage
 
-      calculations do
-        calculate :can_update?, :boolean,
-          {AshGrant.Calculation.CanPerform, action: "update", resource: __MODULE__}
+  ### DSL Sugar (Recommended)
 
-        calculate :can_destroy?, :boolean,
-          {AshGrant.Calculation.CanPerform, action: "destroy", resource: __MODULE__}
+  Use `can_perform` entities or the `can_perform_actions` batch option in your
+  `ash_grant` block. The transformer auto-generates calculations at compile time:
+
+      ash_grant do
+        resolver MyApp.PermissionResolver
+        scope :all, true
+        scope :own, expr(author_id == ^actor(:id))
+
+        # Batch — generates :can_update? and :can_destroy?
+        can_perform_actions [:update, :destroy]
+
+        # Individual with custom name
+        can_perform :read, name: :visible?
       end
 
-  Then in queries:
+  ### Explicit Module (Advanced)
+
+  For cases where you need full control (e.g., custom `resource_name`), you can
+  still declare the calculation explicitly:
+
+      calculations do
+        calculate :can_update?, :boolean,
+          {AshGrant.Calculation.CanPerform, action: "update", resource: __MODULE__},
+          public?: true
+      end
+
+  DSL-generated and explicit calculations can coexist. If both declare the same
+  name, the explicit one takes precedence (the transformer uses `add_new_calculation`
+  which skips duplicates).
+
+  ## Querying
 
       members = Member |> Ash.Query.load([:can_update?, :can_destroy?]) |> Ash.read!(actor: actor)
 
-  And in templates:
+  In templates:
 
       <.button :if={member.can_update?}>Edit</.button>
 
-  ## Options
+  ## Options (Explicit Module)
 
   | Option | Type | Description |
   |--------|------|-------------|
@@ -46,6 +70,7 @@ defmodule AshGrant.Calculation.CanPerform do
 
   ## See Also
 
+  - `AshGrant.Transformers.AddCanPerformCalculations` - The transformer that generates calculations from DSL
   - `AshGrant.FilterCheck` - The policy check this mirrors
   - `AshGrant.Evaluator` - Permission evaluation logic
   """
