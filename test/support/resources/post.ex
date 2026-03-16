@@ -111,6 +111,22 @@ defmodule AshGrant.Test.Post do
     update_timestamp(:updated_at)
   end
 
+  calculations do
+    calculate(
+      :can_update?,
+      :boolean,
+      {AshGrant.Calculation.CanPerform, action: "update", resource: __MODULE__},
+      public?: true
+    )
+
+    calculate(
+      :can_destroy?,
+      :boolean,
+      {AshGrant.Calculation.CanPerform, action: "destroy", resource: __MODULE__},
+      public?: true
+    )
+  end
+
   actions do
     defaults([:read, :destroy])
 

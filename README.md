@@ -13,6 +13,9 @@ Permissions resolve to native Ash filters and policy checks, with deny-wins sema
 - **Instance permissions** — per-record sharing with optional scope conditions
 - **Deny-wins evaluation** — deny rules always override allows
 
+**UI Integration:**
+- **`CanPerform` calculation** — per-record boolean for UI visibility (compiles to SQL)
+
 **Verification & Tooling:**
 - **`explain/4`** — trace why authorization succeeded or failed
 - **`Introspect`** — query actor permissions, available actions at runtime
@@ -953,6 +956,48 @@ policy action(:destroy) do
 end
 ```
 
+### `CanPerform` Calculation - Per-Record UI Visibility
+
+`AshGrant.Calculation.CanPerform` is an Ash calculation that produces per-record
+boolean values, enabling UI patterns where buttons are shown/hidden per row.
+It mirrors `FilterCheck`'s logic and compiles to SQL via `expression/2` (no N+1).
+
+```elixir
+# In your resource
+calculations do
+  calculate :can_update?, :boolean,
+    {AshGrant.Calculation.CanPerform, action: "update", resource: __MODULE__},
+    public?: true
+
+  calculate :can_destroy?, :boolean,
+    {AshGrant.Calculation.CanPerform, action: "destroy", resource: __MODULE__},
+    public?: true
+end
+```
+
+```elixir
+# In your LiveView / controller
+members =
+  Member
+  |> Ash.Query.load([:can_update?, :can_destroy?])
+  |> Ash.read!(actor: current_user)
+
+# In your template
+<.button :if={member.can_update?}>Edit</.button>
+<.button :if={member.can_destroy?}>Delete</.button>
+```
+
+**Options:**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `:action` | string | **Required.** Action name for permission matching |
+| `:resource` | module | **Required.** The resource module (use `__MODULE__`) |
+| `:resource_name` | string | Override resource name for permission matching |
+
+The calculation handles RBAC scopes, instance permissions, deny-wins, and
+multi-scope OR combination — all identical to `FilterCheck`.
+
 ## DSL Configuration
 
 ```elixir
@@ -1061,16 +1106,16 @@ end
 ## Architecture
 
 ```
-                    Ash Policy Check
-                          |
-            +-------------+-------------+-------------+
-            |                           |             |
-      +-----v-----+              +------v------+  +--v----------+
-      |  Check    |              | FilterCheck |  | FieldCheck  |
-      | (writes)  |              |  (reads)    |  | (fields)    |
-      +-----+-----+              +------+------+  +--+----------+
-            |                           |             |
-            +-----------+---------------+-------------+
+                    Ash Policy Check                Ash Calculation
+                          |                              |
+            +-------------+-------------+--------+  +---v-----------+
+            |                           |        |  | CanPerform    |
+      +-----v-----+              +------v------+ |  | (UI booleans) |
+      |  Check    |              | FilterCheck | |  +---+-----------+
+      | (writes)  |              |  (reads)    | |      |
+      +-----+-----+              +------+------+ |      |
+            |                           |        |      |
+            +-----------+---------------+-+------+------+
                         |
             +-----------v-----------+
             | PermissionResolver    |

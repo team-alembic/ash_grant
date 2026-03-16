@@ -59,6 +59,10 @@ mix ash_grant.verify path/to/test.yaml --verbose  # Verbose output
 - **`AshGrant.Check`** (`lib/ash_grant/checks/check.ex`) - SimpleCheck for write actions (returns true/false)
 - **`AshGrant.FilterCheck`** (`lib/ash_grant/checks/filter_check.ex`) - FilterCheck for read actions (returns filter expression)
 
+### Calculations
+
+- **`AshGrant.Calculation.CanPerform`** (`lib/ash_grant/calculations/can_perform.ex`) - Per-record boolean calculation for UI visibility (mirrors FilterCheck logic, compiles to SQL)
+
 ### Behaviours
 
 - **`AshGrant.PermissionResolver`** - Behaviour for fetching actor permissions
