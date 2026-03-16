@@ -69,6 +69,92 @@ defmodule AshGrant.CanPerformDslTest do
     end
   end
 
+  describe "compile-time validation" do
+    test "can_perform_actions with nonexistent action raises DslError" do
+      assert_raise Spark.Error.DslError, ~r/Action :nonexistent does not exist/, fn ->
+        defmodule InvalidBatchResource do
+          use Ash.Resource,
+            domain: AshGrant.Test.Domain,
+            data_layer: Ash.DataLayer.Ets,
+            authorizers: [Ash.Policy.Authorizer],
+            extensions: [AshGrant]
+
+          ash_grant do
+            resolver(fn _, _ -> [] end)
+            scope(:all, true)
+            can_perform_actions([:nonexistent])
+          end
+
+          attributes do
+            uuid_primary_key(:id)
+          end
+
+          actions do
+            defaults([:read])
+          end
+        end
+      end
+    end
+
+    test "can_perform entity with nonexistent action raises DslError" do
+      assert_raise Spark.Error.DslError, ~r/Action :foobar does not exist/, fn ->
+        defmodule InvalidEntityResource do
+          use Ash.Resource,
+            domain: AshGrant.Test.Domain,
+            data_layer: Ash.DataLayer.Ets,
+            authorizers: [Ash.Policy.Authorizer],
+            extensions: [AshGrant]
+
+          ash_grant do
+            resolver(fn _, _ -> [] end)
+            scope(:all, true)
+            can_perform(:foobar)
+          end
+
+          attributes do
+            uuid_primary_key(:id)
+          end
+
+          actions do
+            defaults([:read])
+          end
+        end
+      end
+    end
+
+    test "valid action names compile without error" do
+      defmodule ValidActionsResource do
+        use Ash.Resource,
+          domain: AshGrant.Test.Domain,
+          data_layer: Ash.DataLayer.Ets,
+          authorizers: [Ash.Policy.Authorizer],
+          extensions: [AshGrant]
+
+        ash_grant do
+          resolver(fn _, _ -> [] end)
+          scope(:all, true)
+          can_perform_actions([:read, :destroy])
+          can_perform :update
+        end
+
+        attributes do
+          uuid_primary_key(:id)
+        end
+
+        actions do
+          defaults([:read, :destroy, :update])
+        end
+      end
+
+      calcs = Ash.Resource.Info.calculations(ValidActionsResource)
+      calc_names = Enum.map(calcs, & &1.name)
+
+      assert :can_read? in calc_names
+      assert :can_destroy? in calc_names
+      assert :can_update? in calc_names
+    end
+  end
+
   describe "introspection" do
     test "can_perform_actions/1 returns configured actions" do
       actions = AshGrant.Info.can_perform_actions(Post)

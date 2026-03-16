@@ -23,6 +23,9 @@ defmodule AshGrant.Transformers.AddCanPerformCalculations do
     `resource: __MODULE__` when using the DSL.
   - **Public by default**: All DSL-generated calculations are `public?: true` by default.
     The `can_perform` entity supports `public?: false` for private calculations.
+  - **Action validation**: At compile time, the transformer verifies that each referenced
+    action name exists on the resource. A typo like `can_perform_actions [:foobar]` raises
+    a `Spark.Error.DslError` with the list of available actions.
   """
 
   use Spark.Dsl.Transformer
@@ -63,6 +66,30 @@ defmodule AshGrant.Transformers.AddCanPerformCalculations do
       end)
 
     all_calcs = calcs_from_entities ++ calcs_from_batch
+
+    # Validate that all referenced actions exist on the resource
+    defined_actions =
+      dsl_state
+      |> Transformer.get_entities([:actions])
+      |> MapSet.new(& &1.name)
+
+    for {_name, action_str, _public?} <- all_calcs do
+      action_atom = String.to_atom(action_str)
+
+      unless MapSet.member?(defined_actions, action_atom) do
+        available =
+          defined_actions |> Enum.sort() |> Enum.map_join(", ", &":#{&1}")
+
+        raise Spark.Error.DslError,
+          module: resource,
+          path: [:ash_grant, :can_perform_actions],
+          message: """
+          Action :#{action_atom} does not exist on #{inspect(resource)}.
+
+          Available actions: #{available}
+          """
+      end
+    end
 
     # Add each calculation
     Enum.reduce_while(all_calcs, {:ok, dsl_state}, fn {name, action, public?}, {:ok, acc} ->
