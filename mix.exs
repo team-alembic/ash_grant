@@ -81,8 +81,18 @@ defmodule AshGrant.MixProject do
       source_ref: "v#{@version}",
       extras: [
         "README.md": [title: "Home"],
+        "guides/getting-started.md": [title: "Getting Started"],
+        "guides/permissions.md": [title: "Permissions"],
+        "guides/scopes.md": [title: "Scopes"],
+        "guides/field-level-permissions.md": [title: "Field-Level Permissions"],
+        "guides/checks-and-policies.md": [title: "Checks & Policies"],
+        "guides/debugging-and-introspection.md": [title: "Debugging & Introspection"],
+        "guides/policy-testing.md": [title: "Policy Testing"],
         "CHANGELOG.md": [title: "Changelog"],
         LICENSE: [title: "License"]
+      ],
+      groups_for_extras: [
+        Guides: ~r/guides\/.*/
       ]
     ]
   end
