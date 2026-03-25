@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-03-24
+
+### Added
+
+- **`instance_key` DSL option**: Match instance permission IDs against a field other than `:id`. For example, `instance_key :feed_id` makes `"feed:feed_abc:read:"` generate `WHERE feed_id IN ('feed_abc')` instead of `WHERE id IN ('feed_abc')`. Works with FilterCheck, Check, and CanPerform. (#62)
+- **`scope_through` entity**: Propagate parent resource instance permissions to child resources via `belongs_to` relationships. When a user has `"feed:feed_abc:read:"`, adding `scope_through :feed` to the child resource grants access to all child records where `feed_id == "feed_abc"`. Supports action filtering with `actions:` option. (#62)
+- **`ValidateScopeThroughs` transformer**: Compile-time validation that `scope_through` references valid `belongs_to` relationships.
+
+### Changed
+
+- **Documentation refactored into ExDoc guides**: README trimmed from 1,687 to 166 lines. Content split into 7 focused guides (Getting Started, Permissions, Scopes, Field-Level Permissions, Checks & Policies, Debugging & Introspection, Policy Testing) with ExDoc sidebar grouping under "Guides". (#65)
+- **Issue #65 documentation improvements**: Action wildcard type clarification (`read*` matches action type, not string prefix), instance permission boundary note, per-action `default_policies` subsection, RBAC + instance OR combination example, relational scopes tip in Getting Started.
+
 ## [0.12.0] - 2026-03-16
 
 ### Added
