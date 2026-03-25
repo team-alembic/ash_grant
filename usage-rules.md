@@ -139,9 +139,44 @@ AshGrant generates policy checks, but Ash must be told to enforce them.
 | `default_policies`     | bool/atom         | No       | `false` | `true`, `:all`, `:read`, or `:write`                        |
 | `default_field_policies`| boolean          | No       | `false` | Auto-generate `field_policies` from `field_group` definitions|
 | `resource_name`        | string            | No       | derived | Override resource name for permission matching               |
+| `instance_key`         | atom              | No       | `:id`   | Field to match instance permission IDs against               |
 
 `resource_name` defaults to the last segment of the module name, lowercased
 (e.g., `MyApp.Blog.Post` becomes `"post"`).
+
+`instance_key` changes which field instance IDs are matched against. By default,
+`"feed:feed_abc:read:"` generates `WHERE id IN ('feed_abc')`. With
+`instance_key :feed_id`, it generates `WHERE feed_id IN ('feed_abc')`.
+
+### `scope_through` entity
+
+Propagates a parent resource's instance permissions to a child resource via a
+`belongs_to` relationship.
+
+```elixir
+scope_through :relationship_name
+scope_through :relationship_name, actions: [:read, :update]
+```
+
+```elixir
+ash_grant do
+  resolver MyApp.PermissionResolver
+  default_policies true
+
+  scope :all, true
+  scope :own, expr(author_id == ^actor(:id))
+
+  # Posts inherit Feed's instance permissions via :feed relationship
+  scope_through :feed
+end
+
+relationships do
+  belongs_to :feed, MyApp.Feed
+end
+```
+
+When a user has `"feed:feed_abc:read:"`, they can read all posts where
+`feed_id == "feed_abc"`. Use `actions:` to limit propagation to specific actions.
 
 ### Scope entity
 
@@ -497,6 +532,52 @@ Instance permissions enable resource-sharing patterns (like Google Docs sharing)
 
 For read actions, `FilterCheck` automatically builds `WHERE id IN (...)` filters
 from instance permissions and combines them with RBAC scope filters using OR.
+
+Instance permissions match against the resource's own key field only (`:id` by
+default, or the field set by `instance_key`). They do **not** propagate to child
+resources automatically — use `scope_through` for that.
+
+### `instance_key` — match against a different field
+
+```elixir
+ash_grant do
+  resolver MyApp.PermissionResolver
+  instance_key :feed_id  # "feed:feed_abc:read:" → WHERE feed_id IN ('feed_abc')
+
+  scope :all, true
+end
+```
+
+### `scope_through` — propagate parent permissions to children
+
+```elixir
+# Parent: Feed (user has "feed:feed_abc:read:")
+# Child: Post (belongs_to :feed)
+ash_grant do
+  resolver MyApp.PermissionResolver
+  default_policies true
+
+  scope :all, true
+  scope_through :feed  # Posts where feed_id == "feed_abc" are now readable
+end
+```
+
+Works with FilterCheck (reads), Check (writes), and CanPerform calculations.
+Parent instance filters are combined with RBAC scopes using OR logic.
+
+### DON'T: Assume instance permissions propagate to children automatically
+
+```elixir
+# User has "feed:feed_abc:read:"
+
+# WRONG — this only grants access to the Feed record itself, not its Posts
+# (unless Post has scope_through :feed)
+
+# CORRECT — add scope_through to the child resource
+ash_grant do
+  scope_through :feed
+end
+```
 
 ## Field-Level Permissions
 
