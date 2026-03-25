@@ -458,6 +458,58 @@ When combined with RBAC permissions, users can access:
 The filters are combined with OR logic:
 `(owner_id == actor.id) OR (id IN ["doc_abc", "doc_xyz"])`
 
+#### Instance Key
+
+By default, instance permissions match against the `:id` (primary key) field.
+Use `instance_key` to match against a different field:
+
+```elixir
+ash_grant do
+  resolver MyApp.PermissionResolver
+  instance_key :feed_id  # Match against feed_id instead of id
+
+  scope :all, true
+end
+```
+
+With `instance_key :feed_id`, the permission `"feed:feed_abc:read:"` generates
+`WHERE feed_id IN ('feed_abc')` instead of `WHERE id IN ('feed_abc')`.
+
+#### Scope Through (Parent-Child Propagation)
+
+Use `scope_through` to propagate a parent resource's instance permissions to
+child resources via a `belongs_to` relationship:
+
+```elixir
+defmodule MyApp.Post do
+  use Ash.Resource, extensions: [AshGrant]
+
+  ash_grant do
+    resolver MyApp.PermissionResolver
+    default_policies true
+
+    scope :all, true
+    scope :own, expr(author_id == ^actor(:id))
+
+    # Posts inherit Feed's instance permissions via :feed relationship
+    scope_through :feed
+  end
+
+  relationships do
+    belongs_to :feed, MyApp.Feed
+  end
+end
+```
+
+When a user has `"feed:feed_abc:read:"`, they can read all posts where
+`feed_id == "feed_abc"`. This works for reads (FilterCheck), writes (Check),
+and CanPerform calculations. Parent instance filters are combined with RBAC
+scopes using OR logic.
+
+Options:
+- `scope_through :feed` — infer parent resource from relationship
+- `scope_through :feed, actions: [:read, :update]` — limit to specific actions
+
 ### Legacy Format Support
 
 For backward compatibility, shorter formats are supported but **use with caution**:
@@ -1050,6 +1102,7 @@ end
 | `default_field_policies` | boolean | Auto-generate `field_policies` from `field_group` definitions |
 | `can_perform_actions` | list of atoms | Batch-generate `CanPerform` calculations (e.g., `[:update, :destroy]`) |
 | `resource_name` | string | Resource name for permission matching. Default: derived from module name (last segment, snake_cased). `MyApp.Blog.Post` → `"post"`, `MyApp.CustomerOrder` → `"customer_order"` |
+| `instance_key` | atom | Field to match instance permission IDs against. Defaults to `:id` (primary key). See [Instance Key](#instance-key) |
 
 ### Default Policies Options
 

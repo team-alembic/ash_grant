@@ -326,3 +326,49 @@ defmodule AshGrant.PolicyTest.Fixtures.ExceptFieldGroupTest do
     assert_cannot(:nobody, :read)
   end
 end
+
+defmodule AshGrant.PolicyTest.Fixtures.FeedPolicyTest do
+  @moduledoc false
+  use AshGrant.PolicyTest
+
+  resource(AshGrant.Test.Feed)
+
+  actor(:feed_reader, %{permissions: ["feed:feed_abc:read:"]})
+  actor(:all_reader, %{permissions: ["feed:*:read:all"]})
+  actor(:guest, %{permissions: []})
+
+  test "feed_reader can read (instance permission)" do
+    assert_can(:feed_reader, :read)
+  end
+
+  test "all_reader can read (RBAC)" do
+    assert_can(:all_reader, :read)
+  end
+
+  test "guest cannot read" do
+    assert_cannot(:guest, :read)
+  end
+end
+
+defmodule AshGrant.PolicyTest.Fixtures.ScopeThroughTest do
+  @moduledoc false
+  use AshGrant.PolicyTest
+
+  resource(AshGrant.Test.ChildComment)
+
+  actor(:post_reader, %{permissions: ["post:post_123:read:"]})
+  actor(:own_reader, %{id: "user_1", permissions: ["child_comment:*:read:own"]})
+  actor(:nobody, %{permissions: []})
+
+  test "post_reader can read (parent instance permission)" do
+    assert_can(:post_reader, :read)
+  end
+
+  test "own_reader can read (RBAC scope)" do
+    assert_can(:own_reader, :read)
+  end
+
+  test "nobody cannot read" do
+    assert_cannot(:nobody, :read)
+  end
+end

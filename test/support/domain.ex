@@ -52,5 +52,11 @@ defmodule AshGrant.Test.Domain do
     resource(AshGrant.Test.BulkTeam)
     resource(AshGrant.Test.BulkMembership)
     resource(AshGrant.Test.BulkItem)
+
+    # Instance key test resource (custom field for instance permission matching)
+    resource(AshGrant.Test.Feed)
+
+    # Scope through test resource (parent instance permission propagation)
+    resource(AshGrant.Test.ChildComment)
   end
 end

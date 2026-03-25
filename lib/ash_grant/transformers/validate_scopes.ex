@@ -34,6 +34,7 @@ defmodule AshGrant.Transformers.ValidateScopes do
     if resolver do
       validate_common_scopes(dsl_state, resource)
       validate_deprecated_options(dsl_state, resource)
+      validate_instance_key(dsl_state, resource)
     end
 
     {:ok, dsl_state}
@@ -93,6 +94,24 @@ defmodule AshGrant.Transformers.ValidateScopes do
         """,
         []
       )
+    end
+  end
+
+  defp validate_instance_key(dsl_state, resource) do
+    instance_key = Transformer.get_option(dsl_state, [:ash_grant], :instance_key)
+
+    if instance_key && instance_key != :id do
+      attributes = Transformer.get_entities(dsl_state, [:attributes])
+      attr_names = Enum.map(attributes, & &1.name)
+
+      unless instance_key in attr_names do
+        raise Spark.Error.DslError,
+          module: resource,
+          path: [:ash_grant, :instance_key],
+          message:
+            "instance_key :#{instance_key} does not exist as an attribute on #{inspect(resource)}. " <>
+              "Available attributes: #{inspect(attr_names)}"
+      end
     end
   end
 

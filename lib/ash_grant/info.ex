@@ -70,6 +70,27 @@ defmodule AshGrant.Info do
   end
 
   @doc """
+  Gets the field to match instance permission IDs against.
+
+  Defaults to `:id` (primary key) when not configured.
+  """
+  @spec instance_key(Ash.Resource.t()) :: atom()
+  def instance_key(resource) do
+    Spark.Dsl.Extension.get_opt(resource, [:ash_grant], :instance_key) || :id
+  end
+
+  @doc """
+  Gets all scope_through entities for a resource.
+
+  Returns an empty list if none are configured.
+  """
+  @spec scope_throughs(Ash.Resource.t()) :: [AshGrant.Dsl.ScopeThrough.t()]
+  def scope_throughs(resource) do
+    Spark.Dsl.Extension.get_entities(resource, [:ash_grant])
+    |> Enum.filter(&match?(%AshGrant.Dsl.ScopeThrough{}, &1))
+  end
+
+  @doc """
   Gets the owner field for "own" scope resolution.
 
   DEPRECATED: Use explicit `scope :own, expr(field == ^actor(:id))` instead.

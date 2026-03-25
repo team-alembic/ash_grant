@@ -1,0 +1,27 @@
+resource: AshGrant.Test.Feed
+
+actors:
+  feed_reader:
+    permissions:
+      - "feed:feed_abc:read:"
+  all_reader:
+    permissions:
+      - "feed:*:read:all"
+  guest:
+    permissions: []
+
+tests:
+  - name: "feed_reader can read (has instance permission)"
+    assert_can:
+      actor: feed_reader
+      action: read
+
+  - name: "all_reader can read (has RBAC)"
+    assert_can:
+      actor: all_reader
+      action: read
+
+  - name: "guest cannot read"
+    assert_cannot:
+      actor: guest
+      action: read

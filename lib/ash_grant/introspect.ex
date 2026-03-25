@@ -217,7 +217,7 @@ defmodule AshGrant.Introspect do
     if has_deny_permission?(permissions, resource_name, action_name, action_type) do
       {:deny, %{reason: :denied_by_rule}}
     else
-      evaluate_allow(permissions, resource_name, action_name, action_type)
+      evaluate_allow(resource, permissions, resource_name, action_name, action_type)
     end
   end
 
@@ -228,7 +228,7 @@ defmodule AshGrant.Introspect do
     end
   end
 
-  defp evaluate_allow(permissions, resource_name, action_name, action_type) do
+  defp evaluate_allow(resource, permissions, resource_name, action_name, action_type) do
     scopes = Evaluator.get_all_scopes(permissions, resource_name, action_name, action_type)
 
     instance_ids =
@@ -237,6 +237,10 @@ defmodule AshGrant.Introspect do
     field_groups =
       Evaluator.get_all_field_groups(permissions, resource_name, action_name, action_type)
 
+    # Check parent instance permissions via scope_through
+    has_parent_instance =
+      has_parent_instance_access?(resource, permissions, action_name, action_type)
+
     cond do
       scopes != [] ->
         {:allow, %{scope: hd(scopes), instance_ids: nil, field_groups: field_groups}}
@@ -244,9 +248,46 @@ defmodule AshGrant.Introspect do
       instance_ids != [] ->
         {:allow, %{scope: nil, instance_ids: instance_ids, field_groups: field_groups}}
 
+      has_parent_instance ->
+        {:allow,
+         %{scope: nil, instance_ids: nil, field_groups: field_groups, via: :scope_through}}
+
       true ->
         {:deny, %{reason: :no_permission}}
     end
+  end
+
+  defp has_parent_instance_access?(resource, permissions, action_name, action_type) do
+    Info.scope_throughs(resource)
+    |> Enum.any?(fn scope_through ->
+      parent_resource =
+        case scope_through.resource do
+          nil ->
+            case Ash.Resource.Info.relationship(resource, scope_through.relationship) do
+              nil -> nil
+              rel -> rel.destination
+            end
+
+          explicit ->
+            explicit
+        end
+
+      if parent_resource do
+        parent_resource_name = Info.resource_name(parent_resource)
+
+        parent_ids =
+          Evaluator.get_matching_instance_ids(
+            permissions,
+            parent_resource_name,
+            action_name,
+            action_type
+          )
+
+        parent_ids != []
+      else
+        false
+      end
+    end)
   end
 
   @doc """
