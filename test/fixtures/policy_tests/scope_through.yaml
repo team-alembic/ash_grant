@@ -1,0 +1,28 @@
+resource: AshGrant.Test.ChildComment
+
+actors:
+  post_reader:
+    permissions:
+      - "post:post_123:read:"
+  own_reader:
+    id: "user_1"
+    permissions:
+      - "child_comment:*:read:own"
+  nobody:
+    permissions: []
+
+tests:
+  - name: "post_reader can read (parent instance permission)"
+    assert_can:
+      actor: post_reader
+      action: read
+
+  - name: "own_reader can read (RBAC scope)"
+    assert_can:
+      actor: own_reader
+      action: read
+
+  - name: "nobody cannot read"
+    assert_cannot:
+      actor: nobody
+      action: read

@@ -313,6 +313,7 @@ defmodule AshGrant do
       AshGrant.Transformers.MergeDomainConfig,
       AshGrant.Transformers.ValidateResolverPresent,
       AshGrant.Transformers.ValidateScopes,
+      AshGrant.Transformers.ValidateScopeThroughs,
       AshGrant.Transformers.ResolveFieldGroupFields,
       AshGrant.Transformers.ValidateFieldGroups,
       AshGrant.Transformers.AddDefaultPolicies,

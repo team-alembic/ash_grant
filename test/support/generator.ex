@@ -30,7 +30,8 @@ defmodule AshGrant.Test.Generator do
     Journal,
     SharedDocument,
     Article,
-    TenantPost
+    TenantPost,
+    Feed
   }
 
   # ============================================
@@ -470,6 +471,27 @@ defmodule AshGrant.Test.Generator do
 
   def user_actor(opts \\ []),
     do: Map.merge(%{id: Keyword.get(opts, :id, Ash.UUID.generate()), role: :user}, Map.new(opts))
+
+  # ============================================
+  # Feed Generators (instance_key test)
+  # ============================================
+
+  def feed(opts \\ []) do
+    seed_generator(
+      %Feed{
+        id: Ash.UUID.generate(),
+        feed_id: sequence(:feed_id, &"feed_#{&1}"),
+        title: sequence(:feed_title, &"Feed #{&1}"),
+        status: :draft,
+        inserted_at: DateTime.utc_now(),
+        updated_at: DateTime.utc_now()
+      },
+      overrides: opts
+    )
+  end
+
+  def published_feed(opts \\ []), do: feed(Keyword.put(opts, :status, :published))
+  def draft_feed(opts \\ []), do: feed(Keyword.put(opts, :status, :draft))
 
   # ============================================
   # Scenario Helpers

@@ -118,13 +118,25 @@ defmodule AshGrant.Calculation.CanPerform do
         tenant: context.tenant
       }
 
+      instance_key = AshGrant.Info.instance_key(resource)
+
       permissions = resolve_permissions(resolver, actor, resolver_context)
       scopes = AshGrant.Evaluator.get_all_scopes(permissions, resource_name, action)
 
       instance_ids =
         AshGrant.Evaluator.get_matching_instance_ids(permissions, resource_name, action)
 
-      build_expression(scopes, instance_ids, scope_resolver, resource)
+      parent_filters =
+        build_parent_instance_filters(resource, permissions, action)
+
+      build_expression(
+        scopes,
+        instance_ids,
+        instance_key,
+        parent_filters,
+        scope_resolver,
+        resource
+      )
     end
   end
 
@@ -140,31 +152,93 @@ defmodule AshGrant.Calculation.CanPerform do
 
   # Expression building (mirrors FilterCheck's build_filter_with_instances)
 
-  defp build_expression(scopes, instance_ids, scope_resolver, resource) do
+  defp build_expression(
+         scopes,
+         instance_ids,
+         instance_key,
+         parent_filters,
+         scope_resolver,
+         resource
+       ) do
     rbac_filter = build_rbac_expression(scopes, scope_resolver, resource)
-    instance_filter = build_instance_expression(instance_ids)
-    combine_filters(rbac_filter, instance_filter)
+    instance_filter = build_instance_expression(instance_ids, instance_key)
+
+    # Combine all filters with OR (same logic as FilterCheck)
+    all_filters =
+      ([rbac_filter, instance_filter] ++ parent_filters)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.reject(&(&1 == false))
+
+    case all_filters do
+      [] -> expr(false)
+      [true | _] -> expr(true)
+      [single] -> single
+      [first | rest] -> Enum.reduce(rest, first, &expr(^&2 or ^&1))
+    end
   end
 
   defp build_rbac_expression(scopes, scope_resolver, resource) do
     if "all" in scopes or "global" in scopes do
-      expr(true)
+      true
     else
       build_rbac_filter(scopes, scope_resolver, resource)
     end
   end
 
-  defp build_instance_expression([]), do: nil
-  defp build_instance_expression(instance_ids), do: build_instance_filter(instance_ids)
+  defp build_instance_expression([], _instance_key), do: nil
 
-  defp combine_filters(nil, nil), do: expr(false)
-  defp combine_filters(true, _), do: expr(true)
-  defp combine_filters(nil, instance), do: instance
-  defp combine_filters(rbac, nil), do: rbac
-  defp combine_filters(rbac, instance), do: expr(^rbac or ^instance)
+  defp build_instance_expression(instance_ids, instance_key),
+    do: build_instance_filter(instance_ids, instance_key)
 
-  defp build_instance_filter(instance_ids) do
+  defp build_instance_filter(instance_ids, :id) do
     expr(id in ^instance_ids)
+  end
+
+  defp build_instance_filter(instance_ids, instance_key) do
+    expr(^ref(instance_key) in ^instance_ids)
+  end
+
+  # Parent instance filter building (mirrors FilterCheck's build_parent_instance_filters)
+
+  defp build_parent_instance_filters(resource, permissions, action_name) do
+    AshGrant.Info.scope_throughs(resource)
+    |> Enum.flat_map(fn scope_through ->
+      parent_resource = resolve_parent_resource(resource, scope_through)
+      parent_resource_name = AshGrant.Info.resource_name(parent_resource)
+
+      parent_ids =
+        AshGrant.Evaluator.get_matching_instance_ids(
+          permissions,
+          parent_resource_name,
+          action_name
+        )
+
+      if parent_ids != [] do
+        relationship = Ash.Resource.Info.relationship(resource, scope_through.relationship)
+        fk_field = relationship.source_attribute
+        parent_dest_field = relationship.destination_attribute
+        parent_instance_key = AshGrant.Info.instance_key(parent_resource)
+
+        if parent_instance_key == parent_dest_field do
+          [expr(^ref(fk_field) in ^parent_ids)]
+        else
+          [expr(exists(^[scope_through.relationship], ^ref(parent_instance_key) in ^parent_ids))]
+        end
+      else
+        []
+      end
+    end)
+  end
+
+  defp resolve_parent_resource(resource, scope_through) do
+    case scope_through.resource do
+      nil ->
+        relationship = Ash.Resource.Info.relationship(resource, scope_through.relationship)
+        relationship.destination
+
+      explicit ->
+        explicit
+    end
   end
 
   # RBAC filter building (mirrors FilterCheck's build_combined_filter)

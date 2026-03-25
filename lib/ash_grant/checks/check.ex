@@ -266,7 +266,14 @@ defmodule AshGrant.Check do
     # Check access using evaluator
     case AshGrant.Evaluator.has_access?(permissions, resource_name, action_name, action_type) do
       false ->
-        false
+        # RBAC check failed — try scope_through (parent instance permissions)
+        check_scope_through_write(
+          resource_module,
+          permissions,
+          action_name,
+          action_type,
+          authorizer
+        )
 
       true ->
         # Has permission, now check scope
@@ -276,6 +283,76 @@ defmodule AshGrant.Check do
         check_scope_access(scope, scope_resolver, context, authorizer, opts)
     end
   end
+
+  defp check_scope_through_write(
+         resource_module,
+         permissions,
+         action_name,
+         action_type,
+         authorizer
+       ) do
+    scope_throughs = AshGrant.Info.scope_throughs(resource_module)
+
+    if scope_throughs == [] do
+      false
+    else
+      # Get the record being written (from changeset data or authorizer)
+      record = get_target_record(authorizer)
+
+      Enum.any?(scope_throughs, fn scope_through ->
+        # Check action filter
+        action_allowed =
+          scope_through.actions == nil or
+            action_type_atom(action_name, action_type) in scope_through.actions
+
+        if action_allowed do
+          parent_resource = resolve_parent_resource(resource_module, scope_through)
+          parent_resource_name = AshGrant.Info.resource_name(parent_resource)
+
+          parent_ids =
+            AshGrant.Evaluator.get_matching_instance_ids(
+              permissions,
+              parent_resource_name,
+              action_name,
+              action_type
+            )
+
+          if parent_ids != [] and record do
+            relationship =
+              Ash.Resource.Info.relationship(resource_module, scope_through.relationship)
+
+            fk_field = relationship.source_attribute
+            fk_value = to_string(Map.get(record, fk_field))
+            fk_value in parent_ids
+          else
+            false
+          end
+        else
+          false
+        end
+      end)
+    end
+  end
+
+  defp resolve_parent_resource(resource_module, scope_through) do
+    case scope_through.resource do
+      nil ->
+        relationship = Ash.Resource.Info.relationship(resource_module, scope_through.relationship)
+        relationship.destination
+
+      explicit ->
+        explicit
+    end
+  end
+
+  defp action_type_atom(_action_name, action_type)
+       when is_atom(action_type) and not is_nil(action_type),
+       do: action_type
+
+  defp action_type_atom(action_name, _) when is_binary(action_name),
+    do: String.to_existing_atom(action_name)
+
+  defp action_type_atom(action_name, _) when is_atom(action_name), do: action_name
 
   defp action_type_from(%{type: type}), do: type
   defp action_type_from(_), do: nil

@@ -339,6 +339,46 @@ defmodule AshGrant.Dsl do
     ]
   }
 
+  @scope_through %Spark.Dsl.Entity{
+    name: :scope_through,
+    describe: """
+    Propagates parent resource instance permissions to this child resource via relationship.
+
+    When a user has an instance permission on the parent resource (e.g.,
+    `"post:post_abc:read:"`), the child resource automatically grants access
+    to records that reference that parent via the specified belongs_to relationship.
+
+    ## Examples
+
+        # Comments inherit Post's instance permissions via :post relationship
+        scope_through :post
+
+        # Limit propagation to specific action types
+        scope_through :feed, actions: [:read, :update]
+    """,
+    examples: [
+      "scope_through :post",
+      "scope_through :feed, actions: [:read, :update]"
+    ],
+    target: AshGrant.Dsl.ScopeThrough,
+    args: [:relationship],
+    schema: [
+      relationship: [
+        type: :atom,
+        required: true,
+        doc: "The belongs_to relationship name on this child resource (e.g., :post)"
+      ],
+      resource: [
+        type: :atom,
+        doc: "The parent resource module. If omitted, inferred from the relationship definition."
+      ],
+      actions: [
+        type: {:list, :atom},
+        doc: "Limit propagation to specific action types. Default: all actions."
+      ]
+    ]
+  }
+
   @ash_grant %Spark.Dsl.Section{
     name: :ash_grant,
     top_level?: false,
@@ -363,7 +403,7 @@ defmodule AshGrant.Dsl do
       end
       """
     ],
-    entities: [@scope, @field_group, @can_perform],
+    entities: [@scope, @field_group, @can_perform, @scope_through],
     schema: [
       resolver: [
         type: {:or, [{:behaviour, AshGrant.PermissionResolver}, {:fun, 2}]},
@@ -462,6 +502,24 @@ defmodule AshGrant.Dsl do
             can_perform_actions [:update, :destroy]
 
         Generates `:can_update?` and `:can_destroy?` calculations.
+        """
+      ],
+      instance_key: [
+        type: :atom,
+        doc: """
+        Field to match instance permission IDs against. Defaults to `:id` (primary key).
+
+        When set, instance permissions like `"feed:feed_abc:read:"` will generate a
+        filter matching the specified field instead of the primary key.
+
+        ## Example
+
+            ash_grant do
+              instance_key :feed_id
+            end
+
+        With this, `"feed:feed_abc:read:"` generates `WHERE feed_id IN ('feed_abc')`
+        instead of `WHERE id IN ('feed_abc')`.
         """
       ]
     ]
@@ -562,6 +620,30 @@ defmodule AshGrant.Dsl.FieldGroup do
           mask: [atom()] | nil,
           mask_with: (any(), atom() -> any()) | nil,
           description: String.t() | nil,
+          __spark_metadata__: map() | nil
+        }
+end
+
+defmodule AshGrant.Dsl.ScopeThrough do
+  @moduledoc """
+  Represents a scope_through entity in the AshGrant DSL.
+
+  Propagates parent resource instance permissions to this child resource
+  via a belongs_to relationship.
+
+  ## Fields
+
+  - `:relationship` - The belongs_to relationship name (e.g., `:post`)
+  - `:resource` - Optional parent resource module (inferred from relationship if nil)
+  - `:actions` - Optional list of action types to limit propagation to
+  """
+
+  defstruct [:relationship, :resource, :actions, :__spark_metadata__]
+
+  @type t :: %__MODULE__{
+          relationship: atom(),
+          resource: module() | nil,
+          actions: [atom()] | nil,
           __spark_metadata__: map() | nil
         }
 end

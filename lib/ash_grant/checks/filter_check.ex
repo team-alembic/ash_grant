@@ -241,56 +241,129 @@ defmodule AshGrant.FilterCheck do
         action_type
       )
 
-    # Build combined filter from RBAC scopes + instance IDs
-    build_filter_with_instances(scopes, instance_ids, scope_resolver, context)
+    # Get the instance key field (defaults to :id)
+    instance_key = AshGrant.Info.instance_key(resource_module)
+
+    # Get parent instance filters from scope_through entities
+    parent_filters =
+      build_parent_instance_filters(resource_module, permissions, action_name, action_type)
+
+    # Build combined filter from RBAC scopes + instance IDs + parent filters
+    build_filter_with_instances(
+      scopes,
+      instance_ids,
+      instance_key,
+      parent_filters,
+      scope_resolver,
+      context
+    )
   end
 
   defp action_type_from(%{type: type}), do: type
   defp action_type_from(_), do: nil
 
-  defp build_filter_with_instances(scopes, instance_ids, scope_resolver, context) do
+  defp build_filter_with_instances(
+         scopes,
+         instance_ids,
+         instance_key,
+         parent_filters,
+         scope_resolver,
+         context
+       ) do
     # Check for global access from RBAC
     has_global_access = "all" in scopes or "global" in scopes
 
-    cond do
-      has_global_access ->
-        # Global access via RBAC
-        true
+    if has_global_access do
+      true
+    else
+      # Collect all OR-able filter components
+      rbac_filter =
+        if scopes != [] do
+          build_combined_filter(scopes, scope_resolver, context)
+        end
 
-      scopes == [] and instance_ids == [] ->
-        # No access at all
-        false
+      instance_filter =
+        if instance_ids != [] do
+          build_instance_filter(instance_ids, instance_key)
+        end
 
-      scopes == [] ->
-        # Only instance permissions, no RBAC
-        build_instance_filter(instance_ids)
+      # Combine all filters with OR
+      all_filters =
+        ([rbac_filter, instance_filter] ++ parent_filters)
+        |> Enum.reject(&is_nil/1)
+        |> Enum.reject(&(&1 == false))
 
-      instance_ids == [] ->
-        # Only RBAC, no instance permissions
-        build_combined_filter(scopes, scope_resolver, context)
-
-      true ->
-        # Both RBAC and instance permissions - combine with OR
-        rbac_filter = build_combined_filter(scopes, scope_resolver, context)
-        instance_filter = build_instance_filter(instance_ids)
-        combine_rbac_and_instance(rbac_filter, instance_filter)
+      case all_filters do
+        [] -> false
+        [single] -> single
+        [first | rest] -> Enum.reduce(rest, first, &Ash.Expr.expr(^&2 or ^&1))
+      end
     end
   end
 
-  defp build_instance_filter(instance_ids) do
-    # Build filter: id in ^instance_ids
+  defp build_instance_filter(instance_ids, :id) do
+    # Default: match against primary key
     Ash.Expr.expr(id in ^instance_ids)
   end
 
-  defp combine_rbac_and_instance(rbac_filter, _instance_filter) when rbac_filter == true do
-    # RBAC gives full access, instance permissions are redundant
-    true
+  defp build_instance_filter(instance_ids, instance_key) do
+    # Custom instance key: match against specified field
+    Ash.Expr.expr(^ref(instance_key) in ^instance_ids)
   end
 
-  defp combine_rbac_and_instance(rbac_filter, instance_filter) do
-    # Combine RBAC scope filters with instance ID filter using OR
-    Ash.Expr.expr(^rbac_filter or ^instance_filter)
+  defp build_parent_instance_filters(resource_module, permissions, action_name, action_type) do
+    AshGrant.Info.scope_throughs(resource_module)
+    |> Enum.filter(fn st ->
+      st.actions == nil or action_type_atom(action_name, action_type) in st.actions
+    end)
+    |> Enum.flat_map(fn scope_through ->
+      parent_resource = resolve_parent_resource(resource_module, scope_through)
+      parent_resource_name = AshGrant.Info.resource_name(parent_resource)
+
+      parent_ids =
+        AshGrant.Evaluator.get_matching_instance_ids(
+          permissions,
+          parent_resource_name,
+          action_name,
+          action_type
+        )
+
+      if parent_ids != [] do
+        relationship = Ash.Resource.Info.relationship(resource_module, scope_through.relationship)
+        fk_field = relationship.source_attribute
+        parent_dest_field = relationship.destination_attribute
+        parent_instance_key = AshGrant.Info.instance_key(parent_resource)
+
+        if parent_instance_key == parent_dest_field do
+          # Simple case: parent's instance_key matches the FK destination (usually :id)
+          [Ash.Expr.expr(^ref(fk_field) in ^parent_ids)]
+        else
+          # Complex case: parent's instance_key differs from PK, need a join
+          [
+            Ash.Expr.expr(
+              exists(^[scope_through.relationship], ^ref(parent_instance_key) in ^parent_ids)
+            )
+          ]
+        end
+      else
+        []
+      end
+    end)
   end
+
+  defp resolve_parent_resource(resource_module, scope_through) do
+    case scope_through.resource do
+      nil ->
+        relationship = Ash.Resource.Info.relationship(resource_module, scope_through.relationship)
+        relationship.destination
+
+      explicit ->
+        explicit
+    end
+  end
+
+  defp action_type_atom(_action_name, action_type) when is_atom(action_type), do: action_type
+  defp action_type_atom(action_name, _), do: String.to_existing_atom(action_name)
 
   defp resolve_permissions(resolver, actor, context) when is_function(resolver, 2) do
     resolver.(actor, context)
