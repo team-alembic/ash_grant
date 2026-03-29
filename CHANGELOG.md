@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.1] - 2026-03-29
+
+### Added
+
+- **Authorization Patterns guide**: New ExDoc guide covering RBAC, ABAC, ReBAC, and additional patterns (deny-wins, multi-tenancy, field-level access, domain inheritance, CanPerform). Includes practical scope DSL examples for each pattern and a comparison table. (#70)
+- **Usage rules**: Document `instance_key` and `scope_through` in policy test fixtures. (#69)
+
 ## [0.13.0] - 2026-03-24
 
 ### Added
