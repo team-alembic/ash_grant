@@ -116,10 +116,11 @@ defmodule AshGrant.PermissionEdgeCasesTest do
       _ -> :ok
     end
 
-    test "action prefix wildcard with exact match" do
+    test "action type wildcard requires action_type" do
       perm = Permission.parse!("blog:*:read*:all")
-      # "read" matches "read*"
-      assert Permission.matches?(perm, "blog", "read")
+      # read* requires action_type — exact name alone doesn't match
+      refute Permission.matches?(perm, "blog", "read")
+      assert Permission.matches?(perm, "blog", "read", :read)
     end
 
     test "action prefix wildcard does not match unrelated" do
@@ -132,10 +133,10 @@ defmodule AshGrant.PermissionEdgeCasesTest do
     end
 
     test "multiple asterisks in action pattern" do
-      # "read*write" is treated literally, not as two wildcards
+      # "read*" pattern does not match action name "read*" literally
+      # — prefix matching is removed, only exact action or action_type match
       perm = Permission.parse!("blog:*:read*:all")
-      # literal match
-      assert Permission.matches?(perm, "blog", "read*")
+      refute Permission.matches?(perm, "blog", "read*")
     end
 
     test "case sensitivity" do
@@ -174,10 +175,11 @@ defmodule AshGrant.PermissionEdgeCasesTest do
       assert Permission.matches_instance?(perm, "post_abc123", "anything")
     end
 
-    test "action prefix in instance permission" do
+    test "action type wildcard in instance permission" do
       perm = Permission.parse!("blog:post_abc123:read*:")
-      assert Permission.matches_instance?(perm, "post_abc123", "read")
-      assert Permission.matches_instance?(perm, "post_abc123", "read_comments")
+      # matches_instance? doesn't pass action_type, so read* never matches
+      refute Permission.matches_instance?(perm, "post_abc123", "read")
+      refute Permission.matches_instance?(perm, "post_abc123", "read_comments")
       refute Permission.matches_instance?(perm, "post_abc123", "write")
     end
   end

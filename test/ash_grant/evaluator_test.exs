@@ -21,11 +21,15 @@ defmodule AshGrant.EvaluatorTest do
       assert Evaluator.has_access?(permissions, "blog", "delete")
     end
 
-    test "grants access with action type wildcard" do
+    test "action type wildcard requires action_type" do
       permissions = ["blog:*:read*:all"]
-      assert Evaluator.has_access?(permissions, "blog", "read")
-      assert Evaluator.has_access?(permissions, "blog", "read_all")
+      # read* requires action_type — 3-arg call never matches
+      refute Evaluator.has_access?(permissions, "blog", "read")
+      refute Evaluator.has_access?(permissions, "blog", "read_all")
       refute Evaluator.has_access?(permissions, "blog", "write")
+      # With action_type, matches
+      assert Evaluator.has_access?(permissions, "blog", "read", :read)
+      assert Evaluator.has_access?(permissions, "blog", "list", :read)
     end
 
     test "deny wins over allow" do
@@ -348,12 +352,13 @@ defmodule AshGrant.EvaluatorTest do
       assert Evaluator.get_field_group(permissions, "employee", "read") == "sensitive"
     end
 
-    test "5-part with action prefix wildcard grants access" do
+    test "5-part with action type wildcard grants access" do
       permissions = ["employee:*:read*:all:sensitive"]
-      assert Evaluator.has_access?(permissions, "employee", "read")
-      assert Evaluator.has_access?(permissions, "employee", "read_all")
+      # read* requires action_type
+      refute Evaluator.has_access?(permissions, "employee", "read")
+      assert Evaluator.has_access?(permissions, "employee", "read", :read)
       refute Evaluator.has_access?(permissions, "employee", "write")
-      assert Evaluator.get_field_group(permissions, "employee", "read") == "sensitive"
+      assert Evaluator.get_field_group(permissions, "employee", "read", :read) == "sensitive"
     end
 
     test "5-part with resource wildcard grants access" do
@@ -442,8 +447,9 @@ defmodule AshGrant.EvaluatorTest do
 
     test "backward compat: 3-arg has_access? unchanged" do
       permissions = ["blog:*:read*:all"]
-      assert Evaluator.has_access?(permissions, "blog", "read")
-      assert Evaluator.has_access?(permissions, "blog", "read_all")
+      # read* requires action_type — 3-arg call never matches
+      refute Evaluator.has_access?(permissions, "blog", "read")
+      refute Evaluator.has_access?(permissions, "blog", "read_all")
       refute Evaluator.has_access?(permissions, "blog", "list_published")
     end
 

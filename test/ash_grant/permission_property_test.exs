@@ -220,14 +220,14 @@ defmodule AshGrant.PermissionPropertyTest do
       end
     end
 
-    property "action prefix wildcard (read*) matches actions starting with prefix" do
+    property "action type wildcard (prefix*) requires action_type — never matches without it" do
       check all(
               resource <-
                 string(:alphanumeric, min_length: 1, max_length: 10) |> map(&String.downcase/1),
               prefix <-
                 string(:alphanumeric, min_length: 2, max_length: 5) |> map(&String.downcase/1),
-              suffix <-
-                string(:alphanumeric, min_length: 0, max_length: 10) |> map(&String.downcase/1)
+              action_name <-
+                string(:alphanumeric, min_length: 1, max_length: 10) |> map(&String.downcase/1)
             ) do
         perm = %Permission{
           resource: resource,
@@ -237,8 +237,8 @@ defmodule AshGrant.PermissionPropertyTest do
           deny: false
         }
 
-        # Should match action that starts with prefix
-        assert Permission.matches?(perm, resource, "#{prefix}#{suffix}")
+        # Without action_type, prefix* never matches (not even exact prefix name)
+        refute Permission.matches?(perm, resource, action_name)
       end
     end
 
@@ -396,17 +396,13 @@ defmodule AshGrant.PermissionPropertyTest do
               action_name <-
                 string(:alphanumeric, min_length: 1, max_length: 15)
                 |> map(&String.downcase/1)
-                |> filter(fn name ->
-                  # Exclude names that happen to start with the type prefix
-                  not String.starts_with?(name, Atom.to_string(type))
-                end)
             ) do
         pattern = Atom.to_string(type) <> "*"
         assert Permission.matches_action?(pattern, action_name, type)
       end
     end
 
-    property "prefix* does not match a different action_type when name doesn't start with prefix" do
+    property "prefix* does not match a different action_type" do
       check all(
               type <- member_of([:read, :create, :update, :destroy]),
               other_type <-
@@ -415,7 +411,8 @@ defmodule AshGrant.PermissionPropertyTest do
                 string(:alphanumeric, min_length: 1, max_length: 15)
                 |> map(&String.downcase/1)
                 |> filter(fn name ->
-                  not String.starts_with?(name, Atom.to_string(type))
+                  # Exclude the exact action name that equals the type prefix
+                  name != Atom.to_string(type)
                 end)
             ) do
         pattern = Atom.to_string(type) <> "*"

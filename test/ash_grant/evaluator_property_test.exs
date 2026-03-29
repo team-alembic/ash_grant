@@ -246,18 +246,18 @@ defmodule AshGrant.EvaluatorPropertyTest do
       end
     end
 
-    property "action prefix wildcard matches prefixed actions" do
+    property "action type wildcard requires action_type" do
       check all(
               resource <- resource_gen(),
               prefix <-
                 string(:alphanumeric, min_length: 2, max_length: 5) |> map(&String.downcase/1),
-              suffix <-
-                string(:alphanumeric, min_length: 1, max_length: 5) |> map(&String.downcase/1)
+              action_name <-
+                string(:alphanumeric, min_length: 1, max_length: 10) |> map(&String.downcase/1)
             ) do
         permissions = ["#{resource}:*:#{prefix}*:all"]
-        action = "#{prefix}#{suffix}"
 
-        assert Evaluator.has_access?(permissions, resource, action)
+        # Without action_type, prefix* never matches
+        refute Evaluator.has_access?(permissions, resource, action_name)
       end
     end
   end
