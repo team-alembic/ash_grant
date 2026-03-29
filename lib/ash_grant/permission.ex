@@ -42,7 +42,7 @@ defmodule AshGrant.Permission do
 
   **Action wildcards:**
   - `*` - Matches any action
-  - `read*` - Matches `read`, `read_all`, `read_published`, etc.
+  - `read*` - Matches any action whose type is `:read` (requires action_type)
 
   ## Examples
 
@@ -325,7 +325,7 @@ defmodule AshGrant.Permission do
 
       iex> perm = AshGrant.Permission.parse!("blog:*:read*:all")
       iex> AshGrant.Permission.matches?(perm, "blog", "read_published")
-      true
+      false
 
       iex> perm = AshGrant.Permission.parse!("blog:*:*:all")
       iex> AshGrant.Permission.matches?(perm, "blog", "delete")
@@ -441,7 +441,7 @@ defmodule AshGrant.Permission do
       iex> AshGrant.Permission.matches_action?("read", "read")
       true
       iex> AshGrant.Permission.matches_action?("read*", "read_all")
-      true
+      false
       iex> AshGrant.Permission.matches_action?("read", "write")
       false
 
@@ -452,10 +452,10 @@ defmodule AshGrant.Permission do
   @doc """
   Checks if an action pattern matches an action name, with optional Ash action type.
 
-  When `action_type` is provided and the pattern is a prefix wildcard like `"read*"`,
-  the match succeeds if the action name starts with the prefix **OR** the action type
-  matches the prefix. This allows `"read*"` to match `:read`-type actions like
-  `list_published` or `by_slug`.
+  When `action_type` is provided and the pattern is a type wildcard like `"read*"`,
+  the match succeeds if the action type matches the prefix. This allows `"read*"` to
+  match `:read`-type actions like `list_published` or `by_slug`. Without `action_type`,
+  type wildcards never match — use exact action names instead.
 
   ## Examples
 
@@ -466,7 +466,7 @@ defmodule AshGrant.Permission do
       iex> AshGrant.Permission.matches_action?("read*", "list_published", :update)
       false
       iex> AshGrant.Permission.matches_action?("read*", "read_all", nil)
-      true
+      false
       iex> AshGrant.Permission.matches_action?("update*", "publish", :update)
       true
       iex> AshGrant.Permission.matches_action?("read", "read", :read)
@@ -479,9 +479,7 @@ defmodule AshGrant.Permission do
   def matches_action?(pattern, action, action_type) do
     if String.ends_with?(pattern, "*") do
       prefix = String.trim_trailing(pattern, "*")
-
-      String.starts_with?(action, prefix) or
-        (action_type != nil and Atom.to_string(action_type) == prefix)
+      action_type != nil and Atom.to_string(action_type) == prefix
     else
       pattern == action
     end

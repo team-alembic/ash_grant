@@ -393,21 +393,19 @@ defmodule AshGrant.FieldGroupPropertyTest do
       end
     end
 
-    property "5-part with action prefix wildcard matches prefixed actions" do
+    property "5-part with action type wildcard requires action_type" do
       check all(
               resource <- resource_gen(),
               prefix <-
                 string(:alphanumeric, min_length: 1, max_length: 5) |> map(&String.downcase/1),
-              suffix <-
-                string(:alphanumeric, min_length: 1, max_length: 5) |> map(&String.downcase/1),
+              action_name <-
+                string(:alphanumeric, min_length: 1, max_length: 10) |> map(&String.downcase/1),
               scope <- scope_gen(),
               field_group <- non_nil_field_group_gen()
             ) do
         permissions = ["#{resource}:*:#{prefix}*:#{scope}:#{field_group}"]
-        # prefix + suffix should match prefix*
-        assert Evaluator.has_access?(permissions, resource, prefix <> suffix)
-        # exact prefix should also match
-        assert Evaluator.has_access?(permissions, resource, prefix)
+        # Without action_type, prefix* never matches
+        refute Evaluator.has_access?(permissions, resource, action_name)
       end
     end
   end

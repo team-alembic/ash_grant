@@ -22,8 +22,8 @@ When present, only fields in the named group (and its inherited parents) are acc
 
 ## Wildcard Matching Rules
 
-| Component | `*` (all) | `prefix*` | Exact match |
-|-----------|-----------|-----------|-------------|
+| Component | `*` (all) | `type*` (action type) | Exact match |
+|-----------|-----------|----------------------|-------------|
 | resource | Yes | No | Yes |
 | instance_id | Yes | No | Yes |
 | action | Yes | Yes | Yes |
@@ -32,21 +32,25 @@ When present, only fields in the named group (and its inherited parents) are acc
 **Examples:**
 
 ```elixir
-"*:*:read:all"       # All resources, read action
-"blog*:*:read:all"   # Invalid - resource doesn't support prefix
-"blog:*:read*:all"   # Valid - action supports prefix (read, read_all, etc.)
-"blog:post_*:read:"  # Invalid - instance_id doesn't support prefix
+"*:*:read:all"       # All resources, read action (exact name match)
+"blog:*:read*:all"   # All :read-type actions on blog (type match)
+"blog:*:read:all"    # Only the action named "read" on blog (exact match)
 ```
 
-### Action Wildcards Match by Type, Not String Prefix
+### Action Type Wildcards vs Exact Action Names
 
-> **Important:** The `read*` wildcard matches all actions whose **action type** is `:read`,
-> not actions whose name starts with the string "read".
+AshGrant has two distinct action matching modes:
+
+- **`read`** (exact) — matches the action **named** `read`, regardless of its action type
+- **`read*`** (type wildcard) — matches any action whose **action type** is `:read`
+
+These are completely separate. `read*` does **not** match by string prefix — it only
+matches by action type.
 
 | Permission | Matches | Why |
 |------------|---------|-----|
-| `post:*:read*:all` | `:read`, `:list`, `:get_by_id` | All actions with `type: :read` |
-| `post:*:update*:all` | `:update`, `:approve`, `:publish` | All actions with `type: :update` |
+| `post:*:read*:all` | `:list`, `:search`, `:get_by_id` | All actions with `type: :read` |
+| `post:*:update*:all` | `:publish`, `:approve`, `:archive` | All actions with `type: :update` |
 | `post:*:read:all` | `:read` only | Exact action name match |
 
 This means a permission like `post:*:read*:all` grants access to **all read-type actions**

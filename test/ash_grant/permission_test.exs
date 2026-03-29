@@ -158,12 +158,16 @@ defmodule AshGrant.PermissionTest do
       assert Permission.matches?(perm, "blog", "delete")
     end
 
-    test "matches action type wildcard" do
+    test "action type wildcard requires action_type to match" do
       perm = Permission.parse!("blog:*:read*:all")
-      assert Permission.matches?(perm, "blog", "read")
-      assert Permission.matches?(perm, "blog", "read_all")
-      assert Permission.matches?(perm, "blog", "read_published")
+      # read* is purely action_type matching — without action_type, nothing matches
+      refute Permission.matches?(perm, "blog", "read")
+      refute Permission.matches?(perm, "blog", "read_all")
       refute Permission.matches?(perm, "blog", "write")
+      # With action_type, matches any action name
+      assert Permission.matches?(perm, "blog", "read", :read)
+      assert Permission.matches?(perm, "blog", "list", :read)
+      refute Permission.matches?(perm, "blog", "list", :update)
     end
 
     test "matches full wildcard" do
@@ -325,12 +329,14 @@ defmodule AshGrant.PermissionTest do
       assert perm.field_group == "sensitive"
     end
 
-    test "5-part with action prefix wildcard" do
+    test "5-part with action type wildcard" do
       assert {:ok, perm} = Permission.parse("employee:*:read*:all:sensitive")
       assert perm.action == "read*"
       assert perm.field_group == "sensitive"
-      assert Permission.matches?(perm, "employee", "read")
-      assert Permission.matches?(perm, "employee", "read_all")
+      # read* requires action_type
+      refute Permission.matches?(perm, "employee", "read")
+      assert Permission.matches?(perm, "employee", "read", :read)
+      assert Permission.matches?(perm, "employee", "by_dept", :read)
       refute Permission.matches?(perm, "employee", "write")
     end
 
@@ -381,10 +387,11 @@ defmodule AshGrant.PermissionTest do
       assert Permission.matches_action?("read*", "search", :read)
     end
 
-    test "read* still matches actions starting with read (string prefix)" do
+    test "read* does NOT match by string prefix" do
+      # read* only matches by action type, not by name prefix
       assert Permission.matches_action?("read*", "read", :read)
-      assert Permission.matches_action?("read*", "read_all", :update)
-      assert Permission.matches_action?("read*", "read_published", nil)
+      refute Permission.matches_action?("read*", "read_all", :update)
+      refute Permission.matches_action?("read*", "read_published", nil)
     end
 
     test "read* does NOT match :update type when name doesn't start with read" do
@@ -418,9 +425,13 @@ defmodule AshGrant.PermissionTest do
     end
 
     test "backward compat: 2-arg calls still work" do
-      assert Permission.matches_action?("read*", "read_all")
+      # read* requires action_type — without it, never matches
+      refute Permission.matches_action?("read*", "read_all")
+      refute Permission.matches_action?("read*", "read")
+      # * and exact match still work without action_type
       assert Permission.matches_action?("*", "anything")
       refute Permission.matches_action?("read", "write")
+      assert Permission.matches_action?("read", "read")
     end
   end
 
@@ -437,8 +448,10 @@ defmodule AshGrant.PermissionTest do
 
     test "backward compat: 3-arg matches? still works" do
       perm = Permission.parse!("blog:*:read*:all")
-      assert Permission.matches?(perm, "blog", "read_published")
+      # read* requires action_type — 3-arg call (no action_type) never matches
+      refute Permission.matches?(perm, "blog", "read_published")
       refute Permission.matches?(perm, "blog", "list_published")
+      refute Permission.matches?(perm, "blog", "read")
     end
 
     test "instance permission still returns false for matches?/4" do
