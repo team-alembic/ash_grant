@@ -82,6 +82,7 @@ defmodule AshGrant.MixProject do
       extras: [
         "README.md": [title: "Home"],
         "guides/getting-started.md": [title: "Getting Started"],
+        "guides/authorization-patterns.md": [title: "RBAC / ABAC / ReBAC / More"],
         "guides/permissions.md": [title: "Permissions"],
         "guides/scopes.md": [title: "Scopes"],
         "guides/field-level-permissions.md": [title: "Field-Level Permissions"],
