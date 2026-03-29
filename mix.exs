@@ -35,8 +35,8 @@ defmodule AshGrant.MixProject do
   defp deps do
     [
       {:igniter, "~> 0.6", only: [:dev, :test]},
-      {:ash, "~> 3.0"},
-      {:spark, "~> 2.0"},
+      {:ash, ash_version("~> 3.7")},
+      {:spark, spark_version("~> 2.0")},
       {:yaml_elixir, "~> 2.9", optional: true},
 
       # DB (test only)
@@ -96,5 +96,23 @@ defmodule AshGrant.MixProject do
         Guides: ~r/guides\/.*/
       ]
     ]
+  end
+
+  defp ash_version(default_version) do
+    case System.get_env("ASH_VERSION") do
+      nil -> default_version
+      "local" -> [path: "../ash", override: true]
+      "main" -> [git: "https://github.com/ash-project/ash.git", override: true]
+      version -> "~> #{version}"
+    end
+  end
+
+  defp spark_version(default_version) do
+    case System.get_env("SPARK_VERSION") do
+      nil -> default_version
+      "local" -> [path: "../spark", override: true]
+      "main" -> [git: "https://github.com/ash-project/spark.git", override: true]
+      version -> "~> #{version}"
+    end
   end
 end

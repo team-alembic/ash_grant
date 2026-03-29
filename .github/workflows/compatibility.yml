@@ -1,0 +1,157 @@
+name: Compatibility
+
+on:
+  # Weekly: Monday 06:00 UTC
+  schedule:
+    - cron: "0 6 * * 1"
+
+  # Manual trigger with version override
+  workflow_dispatch:
+    inputs:
+      ash_version:
+        description: "Ash version (blank=latest, 'main'=git main, '3.11'=specific)"
+        required: false
+        default: ""
+      spark_version:
+        description: "Spark version (blank=latest, 'main'=git main)"
+        required: false
+        default: ""
+
+env:
+  MIX_ENV: test
+  ELIXIR_VERSION: "1.18.4"
+  OTP_VERSION: "27"
+
+jobs:
+  # Test with latest compatible versions (deps unlock)
+  latest:
+    name: Latest Deps
+    if: github.event_name == 'schedule' || (github.event.inputs.ash_version == '' && github.event.inputs.spark_version == '')
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ash_grant_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+
+      - name: Unlock and fetch latest deps
+        run: mix deps.unlock --all && mix deps.get
+
+      - name: Compile
+        run: mix compile --warnings-as-errors
+
+      - name: Test
+        run: mix test
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/ash_grant_test
+
+  # Test with minimum supported Ash version (floor)
+  floor:
+    name: Ash Floor (3.7)
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ash_grant_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+
+      - name: Fetch deps with Ash floor version
+        run: mix deps.get
+        env:
+          ASH_VERSION: "3.7.0"
+
+      - name: Compile
+        run: mix compile --warnings-as-errors
+        env:
+          ASH_VERSION: "3.7.0"
+
+      - name: Test
+        run: mix test
+        env:
+          ASH_VERSION: "3.7.0"
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/ash_grant_test
+
+  # Manual: test against specific Ash version or main branch
+  custom:
+    name: "Ash ${{ github.event.inputs.ash_version || 'custom' }}"
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.ash_version != '' || github.event.inputs.spark_version != '')
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ash_grant_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+          otp-version: ${{ env.OTP_VERSION }}
+
+      - name: Fetch deps
+        run: mix deps.get
+        env:
+          ASH_VERSION: ${{ github.event.inputs.ash_version }}
+          SPARK_VERSION: ${{ github.event.inputs.spark_version }}
+
+      - name: Compile
+        run: mix compile --warnings-as-errors
+        env:
+          ASH_VERSION: ${{ github.event.inputs.ash_version }}
+          SPARK_VERSION: ${{ github.event.inputs.spark_version }}
+
+      - name: Test
+        run: mix test
+        env:
+          ASH_VERSION: ${{ github.event.inputs.ash_version }}
+          SPARK_VERSION: ${{ github.event.inputs.spark_version }}
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/ash_grant_test
