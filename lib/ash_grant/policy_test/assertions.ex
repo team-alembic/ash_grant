@@ -370,7 +370,7 @@ defmodule AshGrant.PolicyTest.Assertions do
       context = %{actor: actor}
       filter = AshGrant.Info.resolve_scope_filter(resource, scope_atom, context)
 
-      case evaluate_filter_against_record(filter, record, actor) do
+      case evaluate_filter_against_record(filter, record, actor, resource) do
         true ->
           {:allow, permission_details}
 
@@ -381,14 +381,17 @@ defmodule AshGrant.PolicyTest.Assertions do
   end
 
   @doc false
-  def evaluate_filter_against_record(true, _record, _actor), do: true
-  def evaluate_filter_against_record(false, _record, _actor), do: false
+  def evaluate_filter_against_record(filter, record, actor, resource \\ nil)
+  def evaluate_filter_against_record(true, _record, _actor, _resource), do: true
+  def evaluate_filter_against_record(false, _record, _actor, _resource), do: false
 
-  def evaluate_filter_against_record(filter, record, actor) do
-    # Use Ash.Expr.eval to evaluate the filter against the record
-    case Ash.Expr.eval(filter, record: record, actor: actor) do
+  def evaluate_filter_against_record(filter, record, actor, resource) do
+    filled = Ash.Expr.fill_template(filter, actor: actor, context: %{})
+
+    case Ash.Expr.eval(filled, record: record, resource: resource, actor: actor) do
       {:ok, true} -> true
       {:ok, false} -> false
+      {:ok, nil} -> false
       {:ok, _other} -> true
       :unknown -> fallback_evaluation(filter, record, actor)
       {:error, _} -> fallback_evaluation(filter, record, actor)

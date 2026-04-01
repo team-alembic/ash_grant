@@ -645,4 +645,82 @@ defmodule AshGrant.DbIntegrationTest do
       assert nyc_posts == []
     end
   end
+
+  # Regression tests: Ash.Expr.eval requires resource: to properly resolve
+  # attribute references. Without it, pure attribute-based scopes (no actor/tenant
+  # refs) silently fall through to fallback evaluation which returns true.
+  describe "write actions with attribute-based scope (resource: eval regression)" do
+    test "update with :published scope succeeds for published record" do
+      actor_id = Ash.UUID.generate()
+      actor = custom_perms_actor(["post:*:update:published", "post:*:read:all"], actor_id)
+      post = create_post!(%{title: "Pub Post", status: :published, author_id: actor_id})
+
+      result =
+        post
+        |> Ash.Changeset.for_update(:update, %{title: "Updated"})
+        |> Ash.update(actor: actor)
+
+      assert {:ok, updated} = result
+      assert updated.title == "Updated"
+    end
+
+    test "update with :published scope is forbidden for draft record" do
+      actor_id = Ash.UUID.generate()
+      actor = custom_perms_actor(["post:*:update:published", "post:*:read:all"], actor_id)
+      draft = create_post!(%{title: "Draft Post", status: :draft, author_id: actor_id})
+
+      result =
+        draft
+        |> Ash.Changeset.for_update(:update, %{title: "Should Fail"})
+        |> Ash.update(actor: actor)
+
+      assert {:error, %Ash.Error.Forbidden{}} = result
+    end
+
+    test "destroy with :published scope is forbidden for draft record" do
+      actor_id = Ash.UUID.generate()
+      actor = custom_perms_actor(["post:*:destroy:published", "post:*:read:all"], actor_id)
+      draft = create_post!(%{title: "Draft Post", status: :draft, author_id: actor_id})
+
+      result =
+        draft
+        |> Ash.Changeset.for_destroy(:destroy)
+        |> Ash.destroy(actor: actor)
+
+      assert {:error, %Ash.Error.Forbidden{}} = result
+    end
+
+    test "create with :published scope succeeds for published status" do
+      actor_id = Ash.UUID.generate()
+      actor = custom_perms_actor(["post:*:create:published"], actor_id)
+
+      result =
+        Post
+        |> Ash.Changeset.for_create(:create, %{
+          title: "New Published",
+          status: :published,
+          author_id: actor_id
+        })
+        |> Ash.create(actor: actor)
+
+      assert {:ok, post} = result
+      assert post.status == :published
+    end
+
+    test "create with :published scope is forbidden for draft status" do
+      actor_id = Ash.UUID.generate()
+      actor = custom_perms_actor(["post:*:create:published"], actor_id)
+
+      result =
+        Post
+        |> Ash.Changeset.for_create(:create, %{
+          title: "New Draft",
+          status: :draft,
+          author_id: actor_id
+        })
+        |> Ash.create(actor: actor)
+
+      assert {:error, %Ash.Error.Forbidden{}} = result
+    end
+  end
 end
