@@ -24,6 +24,10 @@ defmodule AshGrant.Test.Article do
         policy action_type([:create, :update, :destroy]) do
           authorize_if AshGrant.check()
         end
+
+        policy action_type(:action) do
+          authorize_if AshGrant.check()
+        end
       end
 
   ## Role Permissions
@@ -85,5 +89,9 @@ defmodule AshGrant.Test.Article do
 
   actions do
     defaults([:read, :destroy, create: :*, update: :*])
+
+    action :summarize, :string do
+      run(fn _input, _context -> {:ok, "summary"} end)
+    end
   end
 end

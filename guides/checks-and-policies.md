@@ -157,9 +157,9 @@ The `default_policies` option controls automatic policy generation:
 | Value | Description |
 |-------|-------------|
 | `false` | No policies generated (default). You must define policies explicitly. |
-| `true` or `:all` | Generate both read and write policies |
+| `true` or `:all` | Generate read, write, and generic action policies |
 | `:read` | Only generate `filter_check()` policy for read actions |
-| `:write` | Only generate `check()` policy for write actions |
+| `:write` | Only generate `check()` policy for write and generic actions |
 
 **Generated policies when `default_policies: true`:**
 
@@ -172,18 +172,12 @@ policies do
   policy action_type([:create, :update, :destroy]) do
     authorize_if AshGrant.check()
   end
+
+  policy action_type(:action) do
+    authorize_if AshGrant.check()
+  end
 end
 ```
-
-> **Note:** `default_policies` does not generate a policy for generic actions
-> (`action_type(:action)`). If your resource has generic actions, add an
-> explicit policy:
->
-> ```elixir
-> policy action_type(:action) do
->   authorize_if AshGrant.check()
-> end
-> ```
 
 ### Per-Action Authorization with default_policies
 
