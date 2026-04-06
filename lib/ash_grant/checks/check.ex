@@ -753,21 +753,22 @@ defmodule AshGrant.Check do
   defp record_matches_filter?(_record, false, _context, _opts), do: false
 
   defp record_matches_filter?(record, filter, context, _opts) do
-    # Use Ash.Expr.eval/2 to properly evaluate expressions with actor and tenant references
-    # This handles all Ash expression operators, actor template resolution, and ^tenant() resolution
     actor = context[:actor]
     tenant = context[:tenant]
+    resource = context[:resource]
 
     # Replace exists() nodes with true before in-memory evaluation.
     # Ash.Expr.eval cannot resolve exists() in-memory (requires DB queries).
-    # - For create: exists() is meaningless (record doesn't exist yet)
-    # - For update/destroy: exists() requires data layer queries that can't run in-memory
-    # Attribute-based checks (e.g., author_id == ^actor(:id)) are preserved.
     simplified = simplify_exists_for_eval(filter)
 
-    case Ash.Expr.eval(simplified, record: record, actor: actor, tenant: tenant) do
+    # Resolve actor/tenant/context templates to concrete values before eval,
+    # then pass resource: so Ash can hydrate attribute references.
+    filled = Ash.Expr.fill_template(simplified, actor: actor, tenant: tenant, context: %{})
+
+    case Ash.Expr.eval(filled, record: record, resource: resource, actor: actor, tenant: tenant) do
       {:ok, true} -> true
       {:ok, false} -> false
+      {:ok, nil} -> false
       {:ok, _other} -> true
       :unknown -> fallback_evaluation(record, filter, context)
       {:error, _} -> fallback_evaluation(record, filter, context)

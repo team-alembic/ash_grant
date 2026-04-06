@@ -410,7 +410,7 @@ defmodule AshGrant.PolicyTest.YamlParser do
     scope_atom = if is_binary(scope_name), do: String.to_atom(scope_name), else: scope_name
     filter = AshGrant.Info.resolve_scope_filter(resource, scope_atom, %{actor: actor})
 
-    if Assertions.evaluate_filter_against_record(filter, record, actor) do
+    if Assertions.evaluate_filter_against_record(filter, record, actor, resource) do
       {:allow, details}
     else
       {:deny, %{reason: :scope_mismatch}}
