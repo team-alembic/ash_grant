@@ -58,5 +58,8 @@ defmodule AshGrant.Test.Domain do
 
     # Scope through test resource (parent instance permission propagation)
     resource(AshGrant.Test.ChildComment)
+
+    # Generic action test resource (action_input tenant extraction)
+    resource(AshGrant.Test.ServiceRequest)
   end
 end

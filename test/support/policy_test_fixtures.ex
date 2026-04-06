@@ -372,3 +372,74 @@ defmodule AshGrant.PolicyTest.Fixtures.ScopeThroughTest do
     assert_cannot(:nobody, :read)
   end
 end
+
+# Generic action policy tests
+
+defmodule AshGrant.PolicyTest.Fixtures.GenericActionPolicyTest do
+  @moduledoc false
+  use AshGrant.PolicyTest
+
+  resource(AshGrant.Test.ServiceRequest)
+
+  # Actor with specific generic action permissions (by name)
+  actor(:operator, %{
+    permissions: ["service_request:*:ping:all", "service_request:*:check_status:all"]
+  })
+
+  # Actor with only ping permission
+  actor(:ping_only, %{permissions: ["service_request:*:ping:all"]})
+  # Actor with CRUD but no generic action permission
+  actor(:crud_only, %{
+    permissions: ["service_request:*:read:all", "service_request:*:create:all"]
+  })
+
+  # Actor with deny on specific generic action
+  actor(:denied_ping, %{
+    permissions: ["service_request:*:ping:all", "!service_request:*:ping:all"]
+  })
+
+  # No permissions at all
+  actor(:nobody, %{permissions: []})
+
+  describe "generic action access by name" do
+    test "operator can ping" do
+      assert_can(:operator, :ping)
+    end
+
+    test "operator can check_status" do
+      assert_can(:operator, :check_status)
+    end
+
+    test "ping_only can ping" do
+      assert_can(:ping_only, :ping)
+    end
+
+    test "ping_only cannot check_status" do
+      assert_cannot(:ping_only, :check_status)
+    end
+  end
+
+  describe "CRUD permission does not grant generic action access" do
+    test "crud_only cannot ping" do
+      assert_cannot(:crud_only, :ping)
+    end
+
+    test "crud_only cannot check_status" do
+      assert_cannot(:crud_only, :check_status)
+    end
+
+    test "crud_only can read" do
+      assert_can(:crud_only, :read)
+    end
+  end
+
+  describe "deny-wins for generic actions" do
+    test "denied_ping cannot ping" do
+      assert_cannot(:denied_ping, :ping)
+    end
+
+    test "nobody cannot ping" do
+      assert_cannot(:nobody, :ping)
+    end
+  end
+end

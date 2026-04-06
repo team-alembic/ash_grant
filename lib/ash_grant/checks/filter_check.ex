@@ -455,6 +455,7 @@ defmodule AshGrant.FilterCheck do
     case authorizer do
       %{query: %{tenant: tenant}} when not is_nil(tenant) -> tenant
       %{changeset: %{tenant: tenant}} when not is_nil(tenant) -> tenant
+      %{action_input: %{tenant: tenant}} when not is_nil(tenant) -> tenant
       _ -> nil
     end
   end
