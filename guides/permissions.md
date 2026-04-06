@@ -62,6 +62,27 @@ with `type: :read`.
 > using `read*` would grant access to both. Use exact action names instead:
 > `post:*:list:all` and `post:*:read:own`.
 
+### Generic Actions
+
+Generic actions (Ash actions with `type: :action`) must be authorized by their
+**specific action name**. Type wildcards do not apply — each generic action is
+individually unique (one might send email, another processes a payment), so
+blanket type-level access is not supported.
+
+| Permission | Matches | Why |
+|------------|---------|-----|
+| `service:*:ping:all` | `:ping` only | Exact action name match |
+| `service:*:*:all` | All actions including generic | Universal wildcard |
+| `service:*:check_status:all` | `:check_status` only | Exact action name match |
+
+```elixir
+# Grant access to specific generic actions
+["service:*:ping:all", "service:*:check_status:all"]
+
+# Or use the universal wildcard for admin access
+["service:*:*:all"]
+```
+
 ## RBAC Permissions (instance_id = `*`)
 
 ```elixir

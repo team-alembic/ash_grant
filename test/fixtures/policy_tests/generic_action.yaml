@@ -1,0 +1,64 @@
+resource: AshGrant.Test.ServiceRequest
+
+actors:
+  operator:
+    permissions:
+      - "service_request:*:ping:all"
+      - "service_request:*:check_status:all"
+  ping_only:
+    permissions:
+      - "service_request:*:ping:all"
+  crud_only:
+    permissions:
+      - "service_request:*:read:all"
+      - "service_request:*:create:all"
+  denied_ping:
+    permissions:
+      - "service_request:*:ping:all"
+      - "!service_request:*:ping:all"
+  nobody:
+    permissions: []
+
+tests:
+  # Generic actions are authorized by specific action name
+  - name: "operator can ping"
+    assert_can:
+      actor: operator
+      action: ping
+
+  - name: "operator can check_status"
+    assert_can:
+      actor: operator
+      action: check_status
+
+  - name: "ping_only can ping"
+    assert_can:
+      actor: ping_only
+      action: ping
+
+  - name: "ping_only cannot check_status"
+    assert_cannot:
+      actor: ping_only
+      action: check_status
+
+  # CRUD permissions do not grant generic action access
+  - name: "crud_only cannot ping"
+    assert_cannot:
+      actor: crud_only
+      action: ping
+
+  - name: "crud_only can read"
+    assert_can:
+      actor: crud_only
+      action: read
+
+  # Deny-wins
+  - name: "denied_ping cannot ping"
+    assert_cannot:
+      actor: denied_ping
+      action: ping
+
+  - name: "nobody cannot ping"
+    assert_cannot:
+      actor: nobody
+      action: ping

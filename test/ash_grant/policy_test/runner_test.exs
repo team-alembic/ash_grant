@@ -10,6 +10,7 @@ defmodule AshGrant.PolicyTest.RunnerTest do
   # Fixture modules from test/support/policy_test_fixtures.ex
   alias AshGrant.PolicyTest.Fixtures.{
     DocumentPolicyTest,
+    GenericActionPolicyTest,
     PostPolicyTest,
     TestWithResource
   }
@@ -76,6 +77,15 @@ defmodule AshGrant.PolicyTest.RunnerTest do
       # All DocumentPolicyTest tests should pass
       assert summary.failed == 0
       assert summary.passed == length(summary.results)
+    end
+
+    test "generic action policy tests all pass" do
+      summary =
+        Runner.run_all(modules: [GenericActionPolicyTest])
+
+      assert summary.failed == 0
+      assert summary.passed == length(summary.results)
+      assert summary.passed > 0
     end
 
     test "includes module name in results" do

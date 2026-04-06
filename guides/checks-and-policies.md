@@ -16,17 +16,43 @@ policy action_type(:read) do
 end
 ```
 
-### `check/1` - For Write Actions
+### `check/1` - For Write and Generic Actions
 
 Returns `true` or `false` based on whether the actor has permission.
 Simple scopes are evaluated in-memory. Scopes with relationship references
 (`exists()` or dot-paths) automatically use a DB query to verify the scope.
 
 ```elixir
-policy action(:destroy) do
+policy action_type([:create, :update, :destroy]) do
+  authorize_if AshGrant.check()
+end
+
+# Generic actions require an explicit policy (not covered by default_policies)
+policy action_type(:action) do
   authorize_if AshGrant.check()
 end
 ```
+
+#### Generic Actions
+
+Generic actions (Ash actions with `type: :action`) use `Ash.ActionInput` instead
+of `Ash.Query` or `Ash.Changeset`. `check/1` handles this correctly, including
+tenant extraction from `action_input` for multi-tenant authorization.
+
+Generic actions must be authorized by **specific action name** in the permission
+string. Type wildcards do not apply because each generic action is individually
+unique:
+
+```elixir
+# Grants access to the specific "ping" action only
+"service_request:*:ping:all"
+
+# Wildcard (*) grants access to all actions including generic ones
+"service_request:*:*:all"
+```
+
+Since generic actions have no target record, only non-record scopes (like
+`scope :all, true`) will pass scope evaluation.
 
 ### `CanPerform` Calculation - Per-Record UI Visibility
 
@@ -148,6 +174,16 @@ policies do
   end
 end
 ```
+
+> **Note:** `default_policies` does not generate a policy for generic actions
+> (`action_type(:action)`). If your resource has generic actions, add an
+> explicit policy:
+>
+> ```elixir
+> policy action_type(:action) do
+>   authorize_if AshGrant.check()
+> end
+> ```
 
 ### Per-Action Authorization with default_policies
 

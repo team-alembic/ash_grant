@@ -1,10 +1,10 @@
 defmodule AshGrant.Check do
   @moduledoc """
-  SimpleCheck for write actions (create, update, destroy).
+  SimpleCheck for write and generic actions.
 
   This check integrates with Ash's policy system to provide permission-based
-  authorization for write operations. It returns `true` or `false` based on
-  whether the actor has the required permission.
+  authorization for write operations and generic actions. It returns `true` or
+  `false` based on whether the actor has the required permission.
 
   For read actions, use `AshGrant.FilterCheck` instead, which returns a filter
   expression to limit query results.
@@ -12,8 +12,8 @@ defmodule AshGrant.Check do
   > #### Auto-generated Policies {: .info}
   >
   > When using `default_policies: true` in your resource's `ash_grant` block,
-  > this check is automatically configured for write actions. You don't need
-  > to manually add it to your policies.
+  > this check is automatically configured for write actions. Generic actions
+  > require an explicit policy — see "Generic Actions" below.
 
   ## When to Use
 
@@ -21,7 +21,7 @@ defmodule AshGrant.Check do
   - `:create` actions
   - `:update` actions
   - `:destroy` actions
-  - Custom actions that modify data
+  - `:action` (generic actions)
 
   ## Usage in Policies
 
@@ -31,11 +31,41 @@ defmodule AshGrant.Check do
           authorize_if AshGrant.check()
         end
 
+        # For generic actions (not included in default_policies)
+        policy action_type(:action) do
+          authorize_if AshGrant.check()
+        end
+
         # For a specific action
         policy action(:publish) do
           authorize_if AshGrant.check(action: "publish")
         end
       end
+
+  ## Generic Actions
+
+  Generic actions (Ash actions with `type: :action`) use `Ash.ActionInput`
+  instead of `Ash.Query` or `Ash.Changeset`. This check correctly extracts
+  tenant from `action_input` for multi-tenant authorization.
+
+  Generic actions must be authorized by their specific action name in the
+  permission string — type wildcards (`action*`) do not apply because generic
+  actions are individually unique:
+
+      # Permission grants access to the specific "ping" action
+      "service_request:*:ping:all"
+
+      # Wildcard (*) grants access to all actions including generic ones
+      "service_request:*:*:all"
+
+  Since generic actions have no target record, only `scope :all, true` (or
+  other non-record scopes) will pass scope evaluation. Record-based scopes
+  like `scope :own, expr(author_id == ^actor(:id))` are not applicable.
+
+  > #### default_policies and generic actions {: .warning}
+  >
+  > `default_policies: true` does **not** generate policies for generic actions.
+  > You must add an explicit `policy action_type(:action)` block.
 
   ## Options
 
@@ -975,6 +1005,7 @@ defmodule AshGrant.Check do
     case authorizer do
       %{query: %{tenant: tenant}} when not is_nil(tenant) -> tenant
       %{changeset: %{tenant: tenant}} when not is_nil(tenant) -> tenant
+      %{action_input: %{tenant: tenant}} when not is_nil(tenant) -> tenant
       _ -> nil
     end
   end

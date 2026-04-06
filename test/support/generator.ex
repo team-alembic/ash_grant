@@ -31,7 +31,8 @@ defmodule AshGrant.Test.Generator do
     SharedDocument,
     Article,
     TenantPost,
-    Feed
+    Feed,
+    ServiceRequest
   }
 
   # ============================================
@@ -492,6 +493,25 @@ defmodule AshGrant.Test.Generator do
 
   def published_feed(opts \\ []), do: feed(Keyword.put(opts, :status, :published))
   def draft_feed(opts \\ []), do: feed(Keyword.put(opts, :status, :draft))
+
+  # ============================================
+  # 10. ServiceRequest Generators (generic action test)
+  # ============================================
+
+  def service_request(opts \\ []) do
+    seed_generator(
+      %ServiceRequest{
+        id: Ash.UUID.generate(),
+        title: sequence(:service_request_title, &"Service Request #{&1}"),
+        requester_id: Ash.UUID.generate(),
+        tenant_id: Ash.UUID.generate(),
+        status: :open,
+        inserted_at: DateTime.utc_now(),
+        updated_at: DateTime.utc_now()
+      },
+      overrides: opts
+    )
+  end
 
   # ============================================
   # Scenario Helpers
