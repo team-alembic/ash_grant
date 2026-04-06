@@ -119,6 +119,34 @@ defmodule AshGrant.DefaultPoliciesTest do
     end
   end
 
+  describe "default_policies generates policy for generic actions" do
+    test "admin can run generic action" do
+      actor = %{role: :admin}
+
+      input = Ash.ActionInput.for_action(Article, :summarize, %{}, actor: actor)
+      assert {:ok, "summary"} = Ash.run_action(input)
+    end
+
+    test "actor with matching permission can run generic action" do
+      actor = %{permissions: ["article:*:summarize:all"]}
+
+      input = Ash.ActionInput.for_action(Article, :summarize, %{}, actor: actor)
+      assert {:ok, "summary"} = Ash.run_action(input)
+    end
+
+    test "actor without permission cannot run generic action" do
+      actor = %{role: :viewer}
+
+      input = Ash.ActionInput.for_action(Article, :summarize, %{}, actor: actor)
+      assert {:error, %Ash.Error.Forbidden{}} = Ash.run_action(input)
+    end
+
+    test "nil actor cannot run generic action" do
+      input = Ash.ActionInput.for_action(Article, :summarize, %{}, actor: nil)
+      assert {:error, %Ash.Error.Forbidden{}} = Ash.run_action(input)
+    end
+  end
+
   describe "AshGrant.Info.default_policies/1" do
     test "returns the configured value" do
       assert AshGrant.Info.default_policies(Article) == true

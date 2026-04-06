@@ -19,9 +19,9 @@ defmodule AshGrant.Transformers.AddDefaultPolicies do
   | Value | Description |
   |-------|-------------|
   | `false` | No policies generated (default) |
-  | `true` or `:all` | Generate both read and write policies |
+  | `true` or `:all` | Generate read, write, and generic action policies |
   | `:read` | Only generate `filter_check()` policy for read actions |
-  | `:write` | Only generate `check()` policy for write actions |
+  | `:write` | Only generate `check()` policy for write and generic actions |
 
   ## Generated Policies
 
@@ -33,6 +33,10 @@ defmodule AshGrant.Transformers.AddDefaultPolicies do
         end
 
         policy action_type([:create, :update, :destroy]) do
+          authorize_if AshGrant.check()
+        end
+
+        policy action_type(:action) do
           authorize_if AshGrant.check()
         end
       end
@@ -72,8 +76,9 @@ defmodule AshGrant.Transformers.AddDefaultPolicies do
         {:ok, dsl_state}
 
       value when value in [true, :all] ->
-        with {:ok, dsl_state} <- add_read_policy(dsl_state) do
-          add_write_policy(dsl_state)
+        with {:ok, dsl_state} <- add_read_policy(dsl_state),
+             {:ok, dsl_state} <- add_write_policy(dsl_state) do
+          add_generic_action_policy(dsl_state)
         end
 
       :read ->
@@ -118,5 +123,23 @@ defmodule AshGrant.Transformers.AddDefaultPolicies do
     }
 
     {:ok, Transformer.add_entity(dsl_state, [:policies], write_policy)}
+  end
+
+  defp add_generic_action_policy(dsl_state) do
+    generic_policy = %Ash.Policy.Policy{
+      bypass?: false,
+      access_type: :strict,
+      condition: [{Ash.Policy.Check.ActionType, type: [:action]}],
+      policies: [
+        %Ash.Policy.Check{
+          type: :authorize_if,
+          check_module: AshGrant.Check,
+          check: {AshGrant.Check, []},
+          check_opts: []
+        }
+      ]
+    }
+
+    {:ok, Transformer.add_entity(dsl_state, [:policies], generic_policy)}
   end
 end

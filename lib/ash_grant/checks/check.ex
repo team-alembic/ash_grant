@@ -12,8 +12,7 @@ defmodule AshGrant.Check do
   > #### Auto-generated Policies {: .info}
   >
   > When using `default_policies: true` in your resource's `ash_grant` block,
-  > this check is automatically configured for write actions. Generic actions
-  > require an explicit policy — see "Generic Actions" below.
+  > this check is automatically configured for write actions and generic actions.
 
   ## When to Use
 
@@ -62,10 +61,10 @@ defmodule AshGrant.Check do
   other non-record scopes) will pass scope evaluation. Record-based scopes
   like `scope :own, expr(author_id == ^actor(:id))` are not applicable.
 
-  > #### default_policies and generic actions {: .warning}
+  > #### default_policies and generic actions {: .info}
   >
-  > `default_policies: true` does **not** generate policies for generic actions.
-  > You must add an explicit `policy action_type(:action)` block.
+  > `default_policies: true` automatically generates a policy for generic actions
+  > using `AshGrant.Check`.
 
   ## Options
 

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Generic action authorization**: `AshGrant.Check` now correctly extracts tenant from `action_input` for generic actions (type `:action`). Previously, `get_tenant/1` only handled `query` and `changeset`, causing tenant-aware resolvers to return empty permissions for generic actions. The same fix is applied to `FilterCheck` and `FieldCheck`. (#76)
+- **`default_policies` now covers generic actions**: `AddDefaultPolicies` transformer generates a policy for `action_type(:action)` using `AshGrant.Check`. Previously, resources with `default_policies true` and generic actions had no matching policy, resulting in forbidden. (#76)
 - **Write scope evaluation**: Use `fill_template` and pass `resource:` option to `Ash.Expr.eval` for correct template resolution and attribute hydration in write scope checks. (#75)
 
 ## [0.13.2] - 2026-03-29
