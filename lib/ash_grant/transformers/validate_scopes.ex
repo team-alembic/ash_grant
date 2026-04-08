@@ -4,7 +4,6 @@ defmodule AshGrant.Transformers.ValidateScopes do
 
   This transformer provides helpful warnings for common scope configuration issues:
 
-  - Warns if `:all` scope is commonly expected but not defined
   - Warns about deprecated `owner_field` and `scope_resolver` usage
 
   ## See Also
@@ -32,30 +31,11 @@ defmodule AshGrant.Transformers.ValidateScopes do
     resolver = Transformer.get_option(dsl_state, [:ash_grant], :resolver)
 
     if resolver do
-      validate_common_scopes(dsl_state, resource)
       validate_deprecated_options(dsl_state, resource)
       validate_instance_key(dsl_state, resource)
     end
 
     {:ok, dsl_state}
-  end
-
-  defp validate_common_scopes(dsl_state, resource) do
-    scopes = get_scope_entities(dsl_state)
-    scope_names = Enum.map(scopes, & &1.name)
-
-    # Warn if :all scope is missing - it's commonly expected
-    unless :all in scope_names do
-      IO.warn(
-        """
-        AshGrant: scope :all is not defined in #{inspect(resource)}.
-        Consider adding: scope :all, true
-
-        This scope is commonly used for permissions like "#{derive_resource_name(resource)}:*:read:all"
-        """,
-        []
-      )
-    end
   end
 
   defp validate_deprecated_options(dsl_state, resource) do
@@ -113,17 +93,5 @@ defmodule AshGrant.Transformers.ValidateScopes do
               "Available attributes: #{inspect(attr_names)}"
       end
     end
-  end
-
-  defp get_scope_entities(dsl_state) do
-    Transformer.get_entities(dsl_state, [:ash_grant])
-    |> Enum.filter(&match?(%AshGrant.Dsl.Scope{}, &1))
-  end
-
-  defp derive_resource_name(resource) do
-    resource
-    |> Module.split()
-    |> List.last()
-    |> Macro.underscore()
   end
 end
