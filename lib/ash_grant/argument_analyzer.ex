@@ -8,8 +8,7 @@ defmodule AshGrant.ArgumentAnalyzer do
   `AshGrant.Transformers.AddArgumentResolvers` transformer uses to wire up
   `AshGrant.Changes.ResolveArgument` only where the argument is actually needed.
 
-  The walker understands the same AST shapes as
-  `AshGrant.Check.contains_relationship_reference?/1`:
+  The walker understands the following AST shapes:
 
     * `%Ash.Query.BooleanExpression{}`, `%Ash.Query.Not{}`
     * `%Ash.Query.Call{args: [...]}`
