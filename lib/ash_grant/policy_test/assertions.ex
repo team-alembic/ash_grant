@@ -80,6 +80,15 @@ defmodule AshGrant.PolicyTest.Assertions do
   - An atom for action name shorthand: `:read`, `:update`
   - A keyword list with `:action` or `:action_type`
 
+  ## Third argument — record and/or arguments
+
+  The third argument may be:
+  - omitted — check permission only
+  - a bare map — treated as the record attributes
+  - a keyword list with `:record` and/or `:arguments` — the latter supplies
+    action-argument values for scopes that use `^arg(:name)` templates
+    (see `resolve_argument` and `guides/argument-based-scope.md`)
+
   ## Examples
 
       # Actor can perform :read action
@@ -93,6 +102,11 @@ defmodule AshGrant.PolicyTest.Assertions do
 
       # Actor can access record with specific attributes
       assert_can :reader, :read, %{status: :published}
+
+      # Argument-based scope — actor, record, AND action arguments
+      assert_can :manager, :update,
+        record: %{author_id: "u1"},
+        arguments: %{center_id: "center_A"}
   """
   defmacro assert_can(actor_name, action_spec) do
     quote do
@@ -119,6 +133,9 @@ defmodule AshGrant.PolicyTest.Assertions do
   @doc """
   Asserts that an actor cannot perform an action.
 
+  See `assert_can/3` for the accepted third-argument forms (bare record map
+  or `record:`/`arguments:` keyword list).
+
   ## Examples
 
       # Actor cannot perform :delete action
@@ -126,6 +143,11 @@ defmodule AshGrant.PolicyTest.Assertions do
 
       # Actor cannot access record with specific attributes
       assert_cannot :reader, :read, %{status: :draft}
+
+      # Argument-based scope — verify a value *outside* the actor's units is denied
+      assert_cannot :manager, :update,
+        record: %{author_id: "u1"},
+        arguments: %{center_id: "center_Z"}
   """
   defmacro assert_cannot(actor_name, action_spec) do
     quote do
@@ -150,10 +172,11 @@ defmodule AshGrant.PolicyTest.Assertions do
   end
 
   @doc false
-  def do_assert_can(module, actor_name, action_spec, record) do
+  def do_assert_can(module, actor_name, action_spec, third) do
+    {record, arguments} = split_record_and_arguments(third)
     {actor, resource, action} = resolve_context(module, actor_name, action_spec)
 
-    case check_permission(resource, action, actor, record) do
+    case check_permission(resource, action, actor, record, arguments) do
       {:allow, _details} ->
         :ok
 
@@ -164,10 +187,11 @@ defmodule AshGrant.PolicyTest.Assertions do
   end
 
   @doc false
-  def do_assert_cannot(module, actor_name, action_spec, record) do
+  def do_assert_cannot(module, actor_name, action_spec, third) do
+    {record, arguments} = split_record_and_arguments(third)
     {actor, resource, action} = resolve_context(module, actor_name, action_spec)
 
-    case check_permission(resource, action, actor, record) do
+    case check_permission(resource, action, actor, record, arguments) do
       {:deny, _details} ->
         :ok
 
@@ -176,6 +200,25 @@ defmodule AshGrant.PolicyTest.Assertions do
           message: build_error_message(:assert_cannot, actor_name, action_spec, record, details)
     end
   end
+
+  # The third arg to assert_can/assert_cannot historically was a bare record
+  # map. Users may also pass a keyword list like `[record: %{...}, arguments:
+  # %{center_id: "..."}]` to supply both. Returns `{record, arguments}`.
+  defp split_record_and_arguments(nil), do: {nil, %{}}
+
+  defp split_record_and_arguments(kw) when is_list(kw) do
+    case Keyword.keyword?(kw) do
+      true ->
+        record = Keyword.get(kw, :record)
+        arguments = Keyword.get(kw, :arguments, %{}) || %{}
+        {record, arguments}
+
+      false ->
+        {nil, %{}}
+    end
+  end
+
+  defp split_record_and_arguments(record) when is_map(record), do: {record, %{}}
 
   @doc false
   def do_assert_fields_visible(module, actor_name, action_spec, fields) do
@@ -314,12 +357,12 @@ defmodule AshGrant.PolicyTest.Assertions do
     end
   end
 
-  defp check_permission(resource, action, actor, nil) do
+  defp check_permission(resource, action, actor, nil, _arguments) do
     # No record - just check if actor has permission for the action
     check_basic_permission(resource, action, actor)
   end
 
-  defp check_permission(resource, action, actor, record) when is_map(record) do
+  defp check_permission(resource, action, actor, record, arguments) when is_map(record) do
     # Record provided - check permission AND evaluate scope against record
     case check_basic_permission(resource, action, actor) do
       {:deny, _} = deny ->
@@ -327,7 +370,7 @@ defmodule AshGrant.PolicyTest.Assertions do
 
       {:allow, details} ->
         # Now check if the record matches the scope
-        check_scope_against_record(resource, action, actor, record, details)
+        check_scope_against_record(resource, action, actor, record, details, arguments)
     end
   end
 
@@ -358,7 +401,7 @@ defmodule AshGrant.PolicyTest.Assertions do
     end
   end
 
-  defp check_scope_against_record(resource, _action, actor, record, permission_details) do
+  defp check_scope_against_record(resource, _action, actor, record, permission_details, arguments) do
     scope_name = permission_details[:scope]
 
     if scope_name == nil or scope_name == "always" or scope_name == "all" or
@@ -371,7 +414,7 @@ defmodule AshGrant.PolicyTest.Assertions do
       context = %{actor: actor}
       filter = AshGrant.Info.resolve_scope_filter(resource, scope_atom, context)
 
-      case evaluate_filter_against_record(filter, record, actor, resource) do
+      case evaluate_filter_against_record(filter, record, actor, resource, arguments) do
         true ->
           {:allow, permission_details}
 
@@ -382,12 +425,22 @@ defmodule AshGrant.PolicyTest.Assertions do
   end
 
   @doc false
-  def evaluate_filter_against_record(filter, record, actor, resource \\ nil)
-  def evaluate_filter_against_record(true, _record, _actor, _resource), do: true
-  def evaluate_filter_against_record(false, _record, _actor, _resource), do: false
+  # Note: `arguments` is a map of action-argument values (or `%{}`) used to
+  # resolve `^arg(...)` templates in the filter. The old 4-arity version is
+  # preserved for back-compat; new callers should pass arguments.
+  def evaluate_filter_against_record(filter, record, actor, resource \\ nil, arguments \\ %{})
 
-  def evaluate_filter_against_record(filter, record, actor, resource) do
-    filled = Ash.Expr.fill_template(filter, actor: actor, context: %{})
+  def evaluate_filter_against_record(true, _record, _actor, _resource, _arguments), do: true
+
+  def evaluate_filter_against_record(false, _record, _actor, _resource, _arguments), do: false
+
+  def evaluate_filter_against_record(filter, record, actor, resource, arguments) do
+    filled =
+      Ash.Expr.fill_template(filter,
+        actor: actor,
+        context: %{},
+        args: arguments || %{}
+      )
 
     case Ash.Expr.eval(filled, record: record, resource: resource, actor: actor) do
       {:ok, true} -> true
