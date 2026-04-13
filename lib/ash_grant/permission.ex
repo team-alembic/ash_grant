@@ -123,6 +123,7 @@ defmodule AshGrant.Permission do
           metadata: map() | nil
         }
 
+  @derive Jason.Encoder
   defstruct [
     :resource,
     :action,
