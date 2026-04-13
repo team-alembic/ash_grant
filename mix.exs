@@ -1,7 +1,7 @@
 defmodule AshGrant.MixProject do
   use Mix.Project
 
-  @version "0.14.0"
+  @version "0.14.1"
   @source_url "https://github.com/jhlee111/ash_grant"
 
   def project do
@@ -86,6 +86,8 @@ defmodule AshGrant.MixProject do
         "guides/permissions.md": [title: "Permissions"],
         "guides/scopes.md": [title: "Scopes"],
         "guides/field-level-permissions.md": [title: "Field-Level Permissions"],
+        "guides/scope-naming-convention.md": [title: "Scope Naming Convention"],
+        "guides/argument-based-scope.md": [title: "Argument-Based Scope"],
         "guides/checks-and-policies.md": [title: "Checks & Policies"],
         "guides/debugging-and-introspection.md": [title: "Debugging & Introspection"],
         "guides/policy-testing.md": [title: "Policy Testing"],
