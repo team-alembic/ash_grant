@@ -9,6 +9,7 @@ Permissions resolve to native Ash filters and policy checks, with deny-wins sema
 **Authorization:**
 - **Domain-level DSL** — shared resolver and scopes inherited by all resources in a domain
 - **Scope DSL** with `expr()` — row-level filters, scope inheritance, `^tenant()` support
+- **Argument-based scopes** with `resolve_argument` — multi-hop authorization via action arguments populated from the resource's own relationships, with lazy loading
 - **Field groups** — column-level read access with inheritance and masking
 - **Instance permissions** — per-record sharing with optional scope conditions
 - **Deny-wins evaluation** — deny rules always override allows
@@ -31,7 +32,7 @@ Add `ash_grant` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:ash_grant, "~> 0.13"}
+    {:ash_grant, "~> 0.14"}
   ]
 end
 ```
