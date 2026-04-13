@@ -63,6 +63,11 @@ mix ash_grant.verify path/to/test.yaml --verbose  # Verbose output
 
 - **`AshGrant.Calculation.CanPerform`** (`lib/ash_grant/calculations/can_perform.ex`) - Per-record boolean calculation for UI visibility (mirrors FilterCheck logic, compiles to SQL)
 
+### Argument-Based Scope Support
+
+- **`AshGrant.ArgumentAnalyzer`** (`lib/ash_grant/argument_analyzer.ex`) - Compile-time AST walker that maps `%{arg_name => [scopes_using_it]}` for a resource's scopes
+- **`AshGrant.Changes.ResolveArgument`** (`lib/ash_grant/changes/resolve_argument.ex`) - Runtime change that lazily loads a relationship path and sets an action argument, but only when an in-play permission uses a scope that references the argument
+
 ### Behaviours
 
 - **`AshGrant.PermissionResolver`** - Behaviour for fetching actor permissions
@@ -80,6 +85,7 @@ mix ash_grant.verify path/to/test.yaml --verbose  # Verbose output
 - **`AshGrant.Transformers.ValidateResolverPresent`** - Validates resolver exists after domain merge
 - **`AshGrant.Transformers.AddDefaultPolicies`** - Auto-generates policies when `default_policies: true`
 - **`AshGrant.Transformers.AddCanPerformCalculations`** - Generates CanPerform calculations from `can_perform` entities and `can_perform_actions` option
+- **`AshGrant.Transformers.AddArgumentResolvers`** - For each `resolve_argument` declaration: validates path, checks at least one scope references the arg, injects `argument :name` + `change AshGrant.Changes.ResolveArgument` on every targeted write action
 - **`AshGrant.Transformers.ValidateScopeThroughs`** - Validates scope_through entities reference valid belongs_to relationships
 
 ## Permission Format

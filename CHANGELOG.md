@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-04-13
+
+This release is centred on a new **argument-based scope pattern** for
+multi-hop authorization, fixes a related security bypass in composite
+scope routing, and begins deprecating the `write:` scope option in favour
+of the new pattern.
+
+### Added
+
+- **`resolve_argument` DSL entity** for argument-based scopes (#90). Declare a scope that compares an action argument (`^arg(:name)`) to actor attributes, and let the resource populate the argument from its own relationships:
+
+  ```elixir
+  ash_grant do
+    scope :at_own_unit, expr(^arg(:center_id) in ^actor(:own_org_unit_ids))
+    resolve_argument :center_id, from_path: [:order, :center_id]
+  end
+  ```
+
+  The transformer validates the path, detects dead declarations, and auto-injects an argument + a lazy change on every write action. The change only performs the DB load when an in-play permission uses a scope that actually references the argument — direct-attribute scopes pay zero cost. Multi-hop paths (e.g., `[:order, :customer, :organization_id]`) are supported. See the new [Argument-Based Scope guide](guides/argument-based-scope.md).
+- **`^arg(:name)` templates in scope expressions** now resolve correctly at strict-check time (#88). Previously `AshGrant.Check` never forwarded `changeset.arguments` to `Ash.Expr.fill_template`, so any scope using `^arg(...)` crashed with `BadMapError` before this release.
+- **Explain surface for `resolve_argument`** (#93). `AshGrant.Explanation` gains a `:resolve_arguments` field populated by `Explainer.explain/4`, and `Explanation.to_string/2` renders a new "Argument Resolution" section showing each declared resolver, its path, and which scopes trigger it.
+- **PolicyTest support for action arguments** (#93). `assert_can`/`assert_cannot` accept a keyword-list third argument — `[record: ..., arguments: ...]` — and `YamlParser` parses an `arguments:` field on each test. `DslGenerator` emits the keyword-list form when converting YAML→DSL.
+
+### Fixed
+
+- **Composite scope on create security bypass** (#87, closes #83). `should_use_db_query?/3` now inspects the resolved filter (with inheritance applied) instead of the child scope's raw `scope_def.filter`. Composite scopes inheriting a relational parent (`exists()` or dot-path) no longer skip the DB query fallback on create actions. Before this fix, `:at_own_unit_and_small` (inheriting a relational `:at_own_unit` parent) could silently allow unauthorized creates when the parent's `exists()` condition evaluated truthy against a virtual record.
+- **Detector coverage** for function-wrapped relational references and lists (#87). `contains_relationship_reference?/1` now descends into `%{__function__?: true, arguments: ...}` structs, list RHS of `in` operators, and handles `nil` explicitly.
+
+### Deprecated
+
+- **`write:` option on `scope`** (#91). The option was introduced as an escape hatch for relational scopes that couldn't be evaluated in memory on writes. With `resolve_argument` now providing a first-class way to express multi-hop authorization via in-memory-evaluable scopes, `write:` is redundant for the common case. Using it still works but emits a compile-time deprecation warning pointing at the replacement pattern. A regression test (#92) asserts the warning emits with the correct message.
+
+### Changed
+
+- **Scope naming**: the unrestricted scope is renamed from `:all` to `:always` across the codebase, guides, and test fixtures (#84). `"all"` is still accepted as a boolean-true scope for backward compatibility; new code should use `:always`. A [Scope Naming Convention guide](guides/scope-naming-convention.md) documents the "sentence test" that motivated the rename.
+
+### Documentation
+
+- New [Argument-Based Scope guide](guides/argument-based-scope.md) with full Refund → Order → center_id example, hand-rolled "under the hood" section, safety analysis, and gotchas (#89).
+- Cross-links from `authorization-patterns.md`, `checks-and-policies.md`, `policy-testing.md`, `scope-naming-convention.md`, `debugging-and-introspection.md`, `scopes.md`, `getting-started.md` (#94).
+- `usage-rules.md` (the AI-agent-facing rulebook) rewritten to recommend `resolve_argument`, flag `write:` as deprecated, and document the new DSL entity (#95).
+- `/pr` and `/release` skill doc gates extended to check `usage-rules.md` and `guides/*.md` — structural fix so these files aren't silently missed in future PRs (#95).
+- New tip in `guides/scopes.md` preferring direct FK column (`is_nil(team_id)`) over relationship traversal (`is_nil(team.id)`) when the check is really about the FK itself (#96).
+
+### Follow-up / related
+
+- [#86](https://github.com/jhlee111/ash_grant/issues/86) (DB-query fallback limitations on function-wrapped relational refs during create) was closed as "not planned" — the argument-based pattern covers the motivating cases cleanly, and the fallback path is no longer the recommended route for authorization involving relationships.
+
 ## [0.13.5] - 2026-04-08
 
 ### Changed
