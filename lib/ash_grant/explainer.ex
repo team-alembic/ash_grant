@@ -55,6 +55,19 @@ defmodule AshGrant.Explainer do
     field_groups = extract_field_groups(matching_allows)
     resolve_arguments = build_resolve_arguments(resource, action)
 
+    reason_code = reason_to_code(decision, reason)
+    scope_filter_string = stringify_scope_filter(scope_filter)
+
+    summary =
+      build_summary(
+        decision,
+        reason_code,
+        matching_allows,
+        evaluated,
+        action,
+        scope_filter_string
+      )
+
     %Explanation{
       resource: resource,
       action: action,
@@ -62,14 +75,51 @@ defmodule AshGrant.Explainer do
       context: context,
       decision: decision,
       reason: reason,
+      reason_code: reason_code,
+      summary: summary,
       matching_permissions: matching_allows,
       evaluated_permissions: evaluated,
       scope_filter: scope_filter,
+      scope_filter_string: scope_filter_string,
       field_groups: field_groups,
       field_group_defs: Info.field_groups(resource),
       resolve_arguments: resolve_arguments
     }
   end
+
+  defp reason_to_code(:allow, _reason), do: :allow_matched
+  defp reason_to_code(:deny, :denied_by_rule), do: :deny_rule_matched
+  defp reason_to_code(:deny, :no_matching_permissions), do: :no_matching_permission
+  defp reason_to_code(_, _), do: nil
+
+  defp stringify_scope_filter(nil), do: nil
+  defp stringify_scope_filter(filter), do: AshGrant.ExprStringify.to_string(filter)
+
+  defp build_summary(:allow, :allow_matched, matching_allows, _evaluated, _action, scope_str) do
+    [first | rest] = matching_allows
+    extra = if rest == [], do: "", else: " (and #{length(rest)} more)"
+    scope_part = allow_scope_phrase(scope_str)
+    "Allowed by '#{first.permission}'#{extra}.#{scope_part}"
+  end
+
+  defp build_summary(:deny, :deny_rule_matched, _matching, evaluated, _action, _scope_str) do
+    case Enum.find(evaluated, fn e -> e.matched && e.is_deny end) do
+      nil -> "Denied by a deny rule."
+      deny -> "Denied by '#{deny.permission}' (deny rule)."
+    end
+  end
+
+  defp build_summary(:deny, :no_matching_permission, _matching, _evaluated, action, _scope_str) do
+    "No matching permission for action #{inspect(action)}."
+  end
+
+  defp build_summary(_decision, _code, _matching, _evaluated, action, _scope_str) do
+    "No decision information available for action #{inspect(action)}."
+  end
+
+  defp allow_scope_phrase(nil), do: ""
+  defp allow_scope_phrase("true"), do: ""
+  defp allow_scope_phrase(str), do: " Scope filters by #{str}."
 
   # Collect resolve_argument declarations active for this action, annotated with
   # the scopes that actually reference the argument. Declarations that no scope
