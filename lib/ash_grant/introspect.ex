@@ -59,6 +59,90 @@ defmodule AshGrant.Introspect do
         }
 
   @doc """
+  Lists Ash domains configured under `:ash_domains` across all started
+  applications.
+
+  AshGrant reuses the standard Ash convention (`config :my_app, ash_domains: [...]`)
+  rather than introducing its own configuration key. Any domain registered this
+  way is a candidate for resource discovery.
+
+  ## Examples
+
+      iex> AshGrant.Introspect.list_domains()
+      [MyApp.Blog, MyApp.Accounts]
+
+  """
+  @spec list_domains() :: [module()]
+  def list_domains do
+    for {app, _, _} <- Application.started_applications(),
+        domain <- Application.get_env(app, :ash_domains, []),
+        uniq: true,
+        do: domain
+  end
+
+  @doc """
+  Lists every resource that uses the `AshGrant` extension.
+
+  By default, domains are auto-discovered via `list_domains/0`. Pass
+  `:domains` to scope the lookup to a specific set (useful in tests and
+  multi-tenant setups).
+
+  ## Options
+
+  - `:domains` - Explicit list of Ash domain modules to inspect. When
+    omitted, uses `list_domains/0`.
+
+  ## Examples
+
+      iex> AshGrant.Introspect.list_resources()
+      [MyApp.Blog.Post, MyApp.Blog.Comment, ...]
+
+      iex> AshGrant.Introspect.list_resources(domains: [MyApp.Blog])
+      [MyApp.Blog.Post, MyApp.Blog.Comment]
+
+  """
+  @spec list_resources(keyword()) :: [module()]
+  def list_resources(opts \\ []) do
+    domains = Keyword.get_lazy(opts, :domains, &list_domains/0)
+
+    for domain <- domains,
+        resource <- Ash.Domain.Info.resources(domain),
+        uses_ash_grant?(resource),
+        uniq: true,
+        do: resource
+  end
+
+  @doc """
+  Resolves a resource key string to its module, if any registered resource
+  declares that name.
+
+  Matching is case-sensitive and uses `AshGrant.Info.resource_name/1`
+  (either the explicit `resource_name "..."` DSL value or the auto-derived
+  default). This enables external tools to accept resource names as strings
+  without knowing Elixir module references.
+
+  ## Examples
+
+      iex> AshGrant.Introspect.find_resource_by_key("blog")
+      {:ok, MyApp.Blog.Post}
+
+      iex> AshGrant.Introspect.find_resource_by_key("unknown")
+      :error
+
+  """
+  @spec find_resource_by_key(String.t()) :: {:ok, module()} | :error
+  def find_resource_by_key(""), do: :error
+
+  def find_resource_by_key(key) when is_binary(key) do
+    list_resources()
+    |> Enum.find(fn resource -> Info.resource_name(resource) == key end)
+    |> case do
+      nil -> :error
+      resource -> {:ok, resource}
+    end
+  end
+
+  @doc """
   Returns all permissions for a resource with their status for a given actor.
 
   Useful for Admin UI to display what a user can or cannot do.
@@ -379,6 +463,12 @@ defmodule AshGrant.Introspect do
   end
 
   # Private functions
+
+  defp uses_ash_grant?(resource) do
+    AshGrant in Spark.extensions(resource)
+  rescue
+    _ -> false
+  end
 
   defp get_resource_actions(resource) do
     Ash.Resource.Info.actions(resource)
