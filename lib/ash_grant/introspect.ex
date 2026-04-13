@@ -143,6 +143,144 @@ defmodule AshGrant.Introspect do
   end
 
   @doc """
+  Explains an access decision using string/ID inputs.
+
+  Resolves `resource_key` to a resource module via `find_resource_by_key/1`,
+  then loads the actor by calling `load_actor/1` on the resource's
+  permission resolver module, and finally delegates to
+  `AshGrant.explain/4`.
+
+  This is the primary entry point for external tools (admin dashboards,
+  LLM agents, `mix ash_grant.explain`) that only know string identifiers.
+
+  ## Options (keyword list)
+
+  - `:actor_id` - Required. Identifier to pass to `resolver.load_actor/1`.
+  - `:resource_key` - Required. Resource name (matches `AshGrant.Info.resource_name/1`).
+  - `:action` - Required. Action name as an atom.
+  - `:context` - Optional. Additional context map passed to the resolver.
+
+  ## Returns
+
+  - `{:ok, AshGrant.Explanation.t()}`
+  - `{:error, :unknown_resource}` - no resource matched `resource_key`
+  - `{:error, :actor_loader_not_implemented}` - resolver cannot load actors
+    by ID (either it's an anonymous function or the module doesn't export
+    the optional `load_actor/1` callback)
+  - `{:error, :actor_not_found}` - resolver's `load_actor/1` returned `:error`
+
+  ## Examples
+
+      iex> AshGrant.Introspect.explain_by_identifier(
+      ...>   actor_id: "user_1",
+      ...>   resource_key: "post",
+      ...>   action: :read
+      ...> )
+      {:ok, %AshGrant.Explanation{decision: :allow, ...}}
+
+  """
+  @spec explain_by_identifier(keyword()) ::
+          {:ok, AshGrant.Explanation.t()}
+          | {:error, :unknown_resource | :actor_loader_not_implemented | :actor_not_found}
+  def explain_by_identifier(opts) when is_list(opts) do
+    actor_id = Keyword.fetch!(opts, :actor_id)
+    resource_key = Keyword.fetch!(opts, :resource_key)
+    action = Keyword.fetch!(opts, :action)
+    context = Keyword.get(opts, :context, %{})
+
+    with {:ok, resource} <- resolve_resource(resource_key),
+         {:ok, actor} <- load_actor_for(resource, actor_id) do
+      {:ok, AshGrant.explain(resource, action, actor, context)}
+    end
+  end
+
+  @doc """
+  Identifier-based variant of `can?/4`.
+
+  Same resolution flow as `explain_by_identifier/1` (resource key →
+  module, actor id → actor), then delegates to `can?/4`.
+
+  ## Options
+
+  - `:context` - Optional. Additional context map passed to the resolver.
+
+  ## Returns
+
+  - `{:allow, map()}` / `{:deny, map()}` - same shape as `can?/4`
+  - `{:error, :unknown_resource | :actor_loader_not_implemented | :actor_not_found}`
+
+  ## Examples
+
+      iex> AshGrant.Introspect.can_by_identifier("user_1", "post", :read)
+      {:allow, %{scope: "always", instance_ids: nil, field_groups: []}}
+
+  """
+  @spec can_by_identifier(term(), String.t(), atom(), keyword()) ::
+          {:allow, map()}
+          | {:deny, map()}
+          | {:error, :unknown_resource | :actor_loader_not_implemented | :actor_not_found}
+  def can_by_identifier(actor_id, resource_key, action, opts \\ []) do
+    with {:ok, resource} <- resolve_resource(resource_key),
+         {:ok, actor} <- load_actor_for(resource, actor_id) do
+      can?(resource, action, actor, opts)
+    end
+  end
+
+  @doc """
+  Identifier-based variant of `actor_permissions/3`.
+
+  ## Options
+
+  - `:context` - Optional. Additional context map passed to the resolver.
+
+  ## Returns
+
+  - `{:ok, [permission_status()]}`
+  - `{:error, :unknown_resource | :actor_loader_not_implemented | :actor_not_found}`
+
+  ## Examples
+
+      iex> AshGrant.Introspect.actor_permissions_by_id("user_1", "post")
+      {:ok, [%{action: "read", allowed: true, ...}, ...]}
+
+  """
+  @spec actor_permissions_by_id(term(), String.t(), keyword()) ::
+          {:ok, [permission_status()]}
+          | {:error, :unknown_resource | :actor_loader_not_implemented | :actor_not_found}
+  def actor_permissions_by_id(actor_id, resource_key, opts \\ []) do
+    with {:ok, resource} <- resolve_resource(resource_key),
+         {:ok, actor} <- load_actor_for(resource, actor_id) do
+      {:ok, actor_permissions(resource, actor, opts)}
+    end
+  end
+
+  defp resolve_resource(resource_key) do
+    case find_resource_by_key(resource_key) do
+      {:ok, resource} -> {:ok, resource}
+      :error -> {:error, :unknown_resource}
+    end
+  end
+
+  defp load_actor_for(resource, actor_id) do
+    case Info.resolver(resource) do
+      resolver when is_atom(resolver) and not is_nil(resolver) ->
+        Code.ensure_loaded(resolver)
+
+        if function_exported?(resolver, :load_actor, 1) do
+          case resolver.load_actor(actor_id) do
+            {:ok, actor} -> {:ok, actor}
+            :error -> {:error, :actor_not_found}
+          end
+        else
+          {:error, :actor_loader_not_implemented}
+        end
+
+      _ ->
+        {:error, :actor_loader_not_implemented}
+    end
+  end
+
+  @doc """
   Returns all permissions for a resource with their status for a given actor.
 
   Useful for Admin UI to display what a user can or cannot do.
