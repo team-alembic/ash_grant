@@ -70,6 +70,7 @@ defmodule AshGrant.PermissionInput do
           metadata: map() | nil
         }
 
+  @derive Jason.Encoder
   @enforce_keys [:string]
   defstruct [:string, :description, :source, :metadata]
 

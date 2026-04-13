@@ -340,3 +340,43 @@ defmodule AshGrant.Explanation do
     |> IO.iodata_to_binary()
   end
 end
+
+defimpl Jason.Encoder, for: AshGrant.Explanation do
+  # The JSON surface is consumed by external tooling (ash_grant_phoenix,
+  # ash_grant_ai). It must never raise on terms that are valid Elixir but
+  # not valid JSON (module refs, Ash.Expr internals, captured functions in
+  # field_group defs, arbitrary actor structs). We transform to a JSON-safe
+  # map first, then delegate.
+  def encode(explanation, opts) do
+    explanation
+    |> to_json_safe()
+    |> Jason.Encode.map(opts)
+  end
+
+  defp to_json_safe(%AshGrant.Explanation{} = exp) do
+    %{
+      resource: inspect(exp.resource),
+      action: exp.action,
+      actor: inspect(exp.actor),
+      context: exp.context,
+      decision: exp.decision,
+      reason: exp.reason,
+      matching_permissions: exp.matching_permissions,
+      evaluated_permissions: exp.evaluated_permissions,
+      scope_filter_string: AshGrant.ExprStringify.to_string(exp.scope_filter),
+      field_groups: exp.field_groups,
+      field_group_defs: Enum.map(exp.field_group_defs, &field_group_to_map/1),
+      resolve_arguments: exp.resolve_arguments
+    }
+  end
+
+  # AshGrant.Dsl.FieldGroup carries an anonymous `:mask_with` function that
+  # Jason cannot encode. Strip it (and only it) — keep the rest intact.
+  defp field_group_to_map(%{__struct__: _} = fg) do
+    fg
+    |> Map.from_struct()
+    |> Map.delete(:mask_with)
+  end
+
+  defp field_group_to_map(other), do: other
+end
