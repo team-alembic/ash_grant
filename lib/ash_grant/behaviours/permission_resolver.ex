@@ -152,4 +152,43 @@ defmodule AshGrant.PermissionResolver do
 
   """
   @callback resolve(actor(), context()) :: [permission()]
+
+  @doc """
+  Optional. Loads an actor given an identifier (e.g., primary key).
+
+  This callback powers identifier-based introspection entry points such as
+  `AshGrant.Introspect.explain_by_identifier/1` and
+  `AshGrant.Introspect.can_by_identifier/3`, where the caller (an admin
+  dashboard, LLM tool, `mix ash_grant.explain` task, etc.) only knows the
+  actor's ID — not the fully-hydrated struct.
+
+  Implementations should fetch the actor from the underlying data store
+  and return it in the same shape that `resolve/2` expects.
+
+  ## Return values
+
+  - `{:ok, actor}` - the loaded actor
+  - `:error` - when no actor exists for the given identifier
+
+  ## Example
+
+      defmodule MyApp.PermissionResolver do
+        @behaviour AshGrant.PermissionResolver
+
+        @impl true
+        def resolve(actor, _context), do: actor.permissions
+
+        @impl true
+        def load_actor(id) do
+          case MyApp.Accounts.get_user(id) do
+            nil -> :error
+            user -> {:ok, user}
+          end
+        end
+      end
+
+  """
+  @callback load_actor(id :: term()) :: {:ok, actor()} | :error
+
+  @optional_callbacks load_actor: 1
 end

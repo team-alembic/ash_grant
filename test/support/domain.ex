@@ -67,5 +67,10 @@ defmodule AshGrant.Test.Domain do
 
     # Generic action test resource (action_input tenant extraction)
     resource(AshGrant.Test.ServiceRequest)
+
+    # Identifier-based introspection test resources (module resolver with
+    # and without the optional `load_actor/1` callback)
+    resource(AshGrant.Test.IdLoadablePost)
+    resource(AshGrant.Test.NoLoadActorPost)
   end
 end
