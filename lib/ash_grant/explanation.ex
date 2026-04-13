@@ -19,6 +19,9 @@ defmodule AshGrant.Explanation do
   - `:field_groups` - List of field group names the actor has access to (from 5-part permissions)
   - `:field_group_defs` - Field group definitions from the resource DSL
   - `:resolve_arguments` - `resolve_argument` declarations active for this action, each annotated with the scope atoms that trigger the resolver at runtime (see `guides/argument-based-scope.md`)
+  - `:summary` - Human-readable one-line summary of the decision, suitable for UIs and LLM responses
+  - `:reason_code` - Structured reason code (`:allow_matched`, `:deny_rule_matched`, `:no_matching_permission`)
+  - `:scope_filter_string` - Stringified form of `:scope_filter` using `AshGrant.ExprStringify` (nil when no filter)
 
   ## Example
 
@@ -72,6 +75,9 @@ defmodule AshGrant.Explanation do
           scopes_needing: [atom()]
         }
 
+  @type reason_code ::
+          :allow_matched | :deny_rule_matched | :no_matching_permission | nil
+
   @type t :: %__MODULE__{
           resource: module(),
           action: atom(),
@@ -79,9 +85,12 @@ defmodule AshGrant.Explanation do
           context: map() | nil,
           decision: :allow | :deny,
           reason: atom() | nil,
+          reason_code: reason_code(),
+          summary: String.t() | nil,
           matching_permissions: [evaluated_permission()],
           evaluated_permissions: [evaluated_permission()],
           scope_filter: term() | nil,
+          scope_filter_string: String.t() | nil,
           field_groups: [String.t()],
           field_group_defs: [AshGrant.Dsl.FieldGroup.t()],
           resolve_arguments: [resolve_argument_entry()]
@@ -94,7 +103,10 @@ defmodule AshGrant.Explanation do
     :context,
     :decision,
     :reason,
+    :reason_code,
+    :summary,
     :scope_filter,
+    :scope_filter_string,
     matching_permissions: [],
     evaluated_permissions: [],
     field_groups: [],
@@ -361,9 +373,11 @@ defimpl Jason.Encoder, for: AshGrant.Explanation do
       context: exp.context,
       decision: exp.decision,
       reason: exp.reason,
+      reason_code: exp.reason_code,
+      summary: exp.summary,
       matching_permissions: exp.matching_permissions,
       evaluated_permissions: exp.evaluated_permissions,
-      scope_filter_string: AshGrant.ExprStringify.to_string(exp.scope_filter),
+      scope_filter_string: exp.scope_filter_string,
       field_groups: exp.field_groups,
       field_group_defs: Enum.map(exp.field_group_defs, &field_group_to_map/1),
       resolve_arguments: exp.resolve_arguments
