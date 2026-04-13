@@ -50,6 +50,13 @@ defmodule AshGrant.Introspect do
           field_groups: [String.t()]
         }
 
+  @type resource_summary :: %{
+          resource: module(),
+          resource_key: String.t(),
+          allowed_actions: [atom()],
+          permissions: [permission_status()]
+        }
+
   @type available_permission :: %{
           permission_string: String.t(),
           action: String.t(),
@@ -279,6 +286,92 @@ defmodule AshGrant.Introspect do
         {:error, :actor_loader_not_implemented}
     end
   end
+
+  @doc """
+  Summarizes everything an actor can do across a set of resources.
+
+  Iterates the resource list, calls `actor_permissions/3` per resource,
+  and aggregates the results into a per-resource summary. This is the
+  "single question" admin dashboards and LLM tools ask to build a
+  user's global access overview in one call.
+
+  ## Options
+
+  - `:resources` - Explicit list of resource modules to summarize. When
+    omitted, uses `list_resources/1` (optionally scoped by `:domains`).
+  - `:domains` - Restrict auto-discovery to these Ash domains.
+    Ignored when `:resources` is given.
+  - `:context` - Context map passed through to each resource's resolver.
+  - `:only_with_access` - When `true`, drops resources where
+    `allowed_actions` is empty. Defaults to `false`.
+
+  ## Returns
+
+  A list of maps with:
+  - `:resource` - the resource module
+  - `:resource_key` - the resource name used in permission strings
+  - `:allowed_actions` - list of action atoms the actor is currently
+    allowed to perform
+  - `:permissions` - the full `actor_permissions/3` output for the
+    resource (one entry per action, with allowed/denied/scope details)
+
+  Returns `[]` when `actor` is `nil`.
+
+  ## Examples
+
+      iex> AshGrant.Introspect.summarize_actor(%{id: "u1", permissions: ["post:*:read:always"]})
+      [
+        %{
+          resource: MyApp.Blog.Post,
+          resource_key: "post",
+          allowed_actions: [:read],
+          permissions: [...]
+        },
+        ...
+      ]
+
+  """
+  @spec summarize_actor(term(), keyword()) :: [resource_summary()]
+  def summarize_actor(actor, opts \\ [])
+
+  def summarize_actor(nil, _opts), do: []
+
+  def summarize_actor(actor, opts) do
+    resources =
+      case Keyword.fetch(opts, :resources) do
+        {:ok, explicit} -> explicit
+        :error -> list_resources(Keyword.take(opts, [:domains]))
+      end
+
+    only_with_access = Keyword.get(opts, :only_with_access, false)
+    per_resource_opts = Keyword.take(opts, [:context])
+
+    resources
+    |> Enum.map(&build_resource_summary(&1, actor, per_resource_opts))
+    |> maybe_filter_with_access(only_with_access)
+  end
+
+  defp build_resource_summary(resource, actor, opts) do
+    permissions = actor_permissions(resource, actor, opts)
+
+    allowed_actions =
+      permissions
+      |> Enum.filter(& &1.allowed)
+      |> Enum.map(&String.to_atom(&1.action))
+
+    %{
+      resource: resource,
+      resource_key: Info.resource_name(resource),
+      allowed_actions: allowed_actions,
+      permissions: permissions
+    }
+  end
+
+  defp maybe_filter_with_access(summaries, true) do
+    Enum.reject(summaries, &(&1.allowed_actions == []))
+  end
+
+  defp maybe_filter_with_access(summaries, _false), do: summaries
 
   @doc """
   Returns all permissions for a resource with their status for a given actor.
