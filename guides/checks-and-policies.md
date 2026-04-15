@@ -124,6 +124,67 @@ members =
 The calculation handles RBAC scopes, instance permissions, deny-wins, and
 multi-scope OR combination — all identical to `FilterCheck`.
 
+#### Under the Hood
+
+`CanPerform` implements Ash's calculation `expression/2` callback, which
+means each loaded calculation becomes a SQL expression on the same
+query — **one round-trip, no N+1**, no per-record resolver calls.
+
+At load time, `expression/2` runs **once** with the actor in context:
+
+1. Call the configured `PermissionResolver` to get the actor's
+   permission strings.
+2. Get matching RBAC scopes via `AshGrant.Evaluator.get_all_scopes/4`,
+   resolve each to its filter expression, and combine with `OR`.
+3. Get matching instance IDs and build
+   `expr(id in ^instance_ids)` — or `^ref(instance_key) in ^instance_ids`
+   if the resource declares a non-default `instance_key`.
+4. For each `scope_through`, add
+   `expr(fk in ^parent_instance_ids)` (or an `exists()` subquery when
+   the parent's `instance_key` differs from the relationship's
+   destination attribute).
+5. Combine everything with `OR`. Shortcuts:
+   - Any scope resolves to `true` (`:always`, `:all`, `:global`) →
+     the calculation is literally `expr(true)` and collapses to a
+     `SELECT true`.
+   - No scopes, no instance IDs, no parent filters → `expr(false)`.
+   - Actor is `nil` → `expr(false)` (no permissions evaluated).
+
+Template references in scope expressions (`^actor(:id)`, `^tenant()`,
+`^context(:key)`) stay as templates in the returned expression — Ash
+fills them during query execution using the actor and tenant on the
+query, the same way it does for `FilterCheck`.
+
+Because the whole calculation is one expression, the database evaluates
+it in the same query that loads the records. Loading
+`[:can_update?, :can_destroy?, :can_publish?]` on 500 rows is still one
+SQL statement.
+
+#### Custom Resource Name
+
+When a resource uses `resource_name "custom"` (permissions match
+`"custom:*:..."` rather than the module-derived default), the DSL
+sugar picks that up automatically. Pass `:resource_name` explicitly only
+if you've bypassed the DSL and are writing an explicit calculation
+declaration:
+
+```elixir
+calculations do
+  calculate :can_update?, :boolean,
+    {AshGrant.Calculation.CanPerform,
+      action: "update",
+      resource: __MODULE__,
+      resource_name: "legacy_post"}
+end
+```
+
+#### Actor Context
+
+The actor comes from `context.actor` — the same actor you pass to
+`Ash.read!/2`. Without an actor the calculation short-circuits to
+`false`; unauthenticated queries do not need special handling at the
+call site.
+
 ## DSL Configuration
 
 ```elixir

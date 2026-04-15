@@ -168,3 +168,140 @@ All functions accept a `:context` option for passing additional resolver context
 ```elixir
 AshGrant.Introspect.actor_permissions(Post, user, context: %{tenant: tenant_id})
 ```
+
+## Identifier-Based Introspection
+
+The functions above all take a hydrated actor struct. External tools —
+admin dashboards, CLI commands, LLM agents, webhook handlers — often
+have only an **actor ID** plus string keys for the resource and action.
+The identifier-based variants take strings/IDs and do the lookup work
+themselves.
+
+**Provisional (v0.15):** signatures may tighten in a minor release. See
+[Public API Contract](public-api-contract.md) for stability tiers.
+
+### Opt in: implement `load_actor/1` on your resolver
+
+The identifier-based functions call your resolver module's optional
+`load_actor/1` callback to turn an ID into an actor. Implementing it is
+how a resolver declares it can be driven by ID:
+
+```elixir
+defmodule MyApp.PermissionResolver do
+  @behaviour AshGrant.PermissionResolver
+
+  @impl true
+  def resolve(actor, _context), do: actor.permissions
+
+  @impl true
+  def load_actor(user_id) do
+    case MyApp.Accounts.get_user(user_id) do
+      nil -> :error
+      user -> {:ok, user}
+    end
+  end
+end
+```
+
+Existing resolvers without `load_actor/1` keep working — the
+identifier-based functions return
+`{:error, :actor_loader_not_implemented}` and the rest of the API is
+unchanged.
+
+### `explain_by_identifier/1`
+
+Resolves the resource by key, loads the actor, and delegates to
+`AshGrant.explain/4`:
+
+```elixir
+AshGrant.Introspect.explain_by_identifier(
+  actor_id: "user_1",
+  resource_key: "post",    # matches AshGrant.Info.resource_name/1
+  action: :read,
+  context: %{tenant: "acme"}  # optional
+)
+# => {:ok, %AshGrant.Explanation{decision: :allow, ...}}
+```
+
+### `can_by_identifier/3`
+
+```elixir
+AshGrant.Introspect.can_by_identifier("user_1", "post", :read)
+# => {:allow, %{scope: "always", instance_ids: nil, field_groups: []}}
+
+AshGrant.Introspect.can_by_identifier("user_1", "post", :destroy)
+# => {:deny, %{reason: :no_permission}}
+```
+
+### `actor_permissions_by_id/2`
+
+```elixir
+AshGrant.Introspect.actor_permissions_by_id("user_1", "post")
+# => {:ok, [%{action: "read", allowed: true, ...}, ...]}
+```
+
+### Error returns
+
+All three never raise for predictable lookup failures. They return:
+
+| Return | Meaning |
+|---|---|
+| `{:error, :unknown_resource}` | No registered resource has `resource_key` as its `resource_name` |
+| `{:error, :actor_loader_not_implemented}` | Resolver is an anonymous function, or the module doesn't export `load_actor/1` |
+| `{:error, :actor_not_found}` | Resolver's `load_actor/1` returned `:error` |
+
+### CLI: `mix ash_grant.explain`
+
+A thin wrapper around `explain_by_identifier/1` for shell scripts and
+CI checks:
+
+```
+mix ash_grant.explain --actor USER_ID --resource RESOURCE_KEY --action ACTION \
+  [--format text|json] [--context '<json>']
+```
+
+Exit codes:
+
+| Code | Meaning |
+|---|---|
+| `0` | Explanation produced (allow or deny both exit 0) |
+| `1` | Lookup failure (unknown resource / actor loader / actor not found) |
+| `2` | Usage error (bad flag, malformed `--context`) |
+
+## Stringifying Scope Expressions
+
+**Provisional (v0.15).**
+
+Ash's default expression inspect is readable but uses internal
+references like `{:_actor, :id}` instead of the DSL-facing
+`^actor(:id)`. `AshGrant.ExprStringify.to_string/1` produces the
+human-facing form — the same form users write in their `ash_grant do`
+blocks.
+
+```elixir
+expr = AshGrant.Info.resolve_scope_filter(MyApp.Post, :own, %{})
+AshGrant.ExprStringify.to_string(expr)
+# => "author_id == ^actor(:id)"
+
+AshGrant.ExprStringify.to_string(true)   # => "true"
+AshGrant.ExprStringify.to_string(nil)    # => "nil"
+```
+
+Mappings:
+
+| Internal term | Stringified |
+|---|---|
+| `{:_actor, :id}` | `^actor(:id)` |
+| `{:_context, :reference_date}` | `^context(:reference_date)` |
+| `:_tenant` | `^tenant()` |
+
+Contract:
+
+- Always returns a binary.
+- Never raises — unknown terms fall back to `inspect/1`.
+- Display-only. The output is *not* round-trippable back into an
+  expression.
+
+The same function populates `Explanation.scope_filter_string`, so JSON
+consumers (LLM tools, dashboards) always receive a printable form
+without having to carry the raw AST.

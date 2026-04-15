@@ -106,10 +106,12 @@ Post |> Ash.read!(actor: viewer)
 - **[Scopes](guides/scopes.md)** — Scope DSL, inheritance, combination rules, multi-tenancy, relational scopes, business examples
 - **[Scope Naming Convention](guides/scope-naming-convention.md)** — Predicate naming, sentence test, RBAC/ABAC patterns, AND/OR composition
 - **[Argument-Based Scope](guides/argument-based-scope.md)** — Multi-hop authorization via action arguments + resource-local lazy loading, avoids DB-query fallback
+- **[Advanced Patterns](guides/advanced-patterns.md)** — Real-world recipes combining `resolve_argument` and `scope_through` (multi-hop writes, parent-shared children, both together)
 - **[Field-Level Permissions](guides/field-level-permissions.md)** — Field groups, whitelist/blacklist modes, inheritance, masking
 - **[Checks & Policies](guides/checks-and-policies.md)** — Check types, CanPerform calculations, DSL configuration, default_policies
-- **[Debugging & Introspection](guides/debugging-and-introspection.md)** — explain/4, permission introspection, scope descriptions, read vs write evaluation
+- **[Debugging & Introspection](guides/debugging-and-introspection.md)** — explain/4, permission introspection, identifier-based lookups, expression stringification
 - **[Policy Testing](guides/policy-testing.md)** — DSL and YAML tests, mix tasks, export/import
+- **[Migration Guide](guides/migration.md)** — Moving off deprecated `write:`, `scope_resolver`, and `owner_field`
 
 ## Architecture
 

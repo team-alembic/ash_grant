@@ -88,10 +88,12 @@ defmodule AshGrant.MixProject do
         "guides/field-level-permissions.md": [title: "Field-Level Permissions"],
         "guides/scope-naming-convention.md": [title: "Scope Naming Convention"],
         "guides/argument-based-scope.md": [title: "Argument-Based Scope"],
+        "guides/advanced-patterns.md": [title: "Advanced Patterns"],
         "guides/checks-and-policies.md": [title: "Checks & Policies"],
         "guides/debugging-and-introspection.md": [title: "Debugging & Introspection"],
         "guides/public-api-contract.md": [title: "Public API Contract"],
         "guides/policy-testing.md": [title: "Policy Testing"],
+        "guides/migration.md": [title: "Migration Guide"],
         "CHANGELOG.md": [title: "Changelog"],
         LICENSE: [title: "License"]
       ],
