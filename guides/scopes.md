@@ -19,9 +19,6 @@ ash_grant do
   # Inherited scope - combines parent with additional filter
   scope :own_draft, [:own], expr(status == :draft)
   # Result: author_id == actor.id AND status == :draft
-
-  # Relational scope - works for both reads and writes automatically
-  scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id)))
 end
 ```
 
