@@ -172,6 +172,60 @@ Post |> Ash.read!(actor: actor)
 - Scope inheritance works with tenant scopes (e.g., `[:same_tenant]`)
 - Both `filter_check` (reads) and `check` (writes) properly evaluate tenant scopes
 
+## Context Injection (`^context`)
+
+When a scope depends on a value that isn't on the actor, isn't the
+tenant, and isn't a database function — a reference date for a
+"recent" filter, a per-request threshold, a feature flag — inject it
+through `^context(:key)`:
+
+```elixir
+ash_grant do
+  scope :recent, expr(inserted_at > ^context(:cutoff))
+  scope :within_limit, expr(amount <= ^context(:max_amount))
+end
+```
+
+Callers set the value at query or changeset time:
+
+```elixir
+# Read
+Post
+|> Ash.Query.for_read(:read)
+|> Ash.Query.set_context(%{cutoff: DateTime.add(DateTime.utc_now(), -7, :day)})
+|> Ash.read!(actor: actor)
+
+# Write
+post
+|> Ash.Changeset.for_update(:update, %{amount: 500})
+|> Ash.Changeset.set_context(%{max_amount: 1_000})
+|> Ash.update!(actor: actor)
+```
+
+### Why `^context` over database functions
+
+Scope filters that embed database-side time or config calls are hard to
+test — every assertion has to mock the clock or the DB session. Pulling
+those values out to the caller makes scopes pure.
+
+```elixir
+# Avoid: only testable by freezing DB time
+scope :today, expr(fragment("DATE(inserted_at) = CURRENT_DATE"))
+
+# Prefer: caller supplies the reference date
+scope :on_date, expr(fragment("DATE(inserted_at) = ?", ^context(:reference_date)))
+```
+
+Policy tests can then assert different behaviors just by varying
+`context:` in the test harness — no clock manipulation required.
+
+### `^context` inside policies (not just scopes)
+
+`^context` is an Ash expression template — anywhere Ash accepts an
+expression, you can reference it. AshGrant scopes are one call site;
+`authorize_if expr(...)` in a `policies do` block is another. Both see
+the same injected value.
+
 ## Relational Scopes (`exists()` and Dot-Paths)
 
 You can use `exists()` and dot-path references in scope expressions for relationship-based filtering.

@@ -116,7 +116,9 @@ An actor with `confidential` permission can see everything that `sensitive` and 
 
 ## Field Masking
 
-Instead of hiding fields entirely, you can show masked values:
+Instead of hiding fields entirely, you can show masked values. The
+`mask:` option lists fields to mask at that group's level; `mask_with:`
+is the function that produces the displayed value.
 
 ```elixir
 field_group :sensitive, [:phone, :address],
@@ -127,12 +129,93 @@ field_group :sensitive, [:phone, :address],
   end
 ```
 
-**Masking rules:**
-- Masking is **not inherited** — a higher-level group sees original values
-- **Allow-wins**: if an actor has both a masking group and a non-masking group for the same field, the field is unmasked
-- Actors with 4-part permissions (no field_group) see all fields unmasked
+### `mask_with/2` signature
 
-**Example behavior:**
+`mask_with` is a 2-arity function called once per masked field, per
+record:
+
+```elixir
+@spec mask_with(value :: term(), field :: atom()) :: term()
+```
+
+- `value` — the attribute's current value on the record. May be `nil`.
+- `field` — the attribute name as an atom. Useful for one function that
+  masks multiple fields differently.
+
+The return value replaces the attribute in the emitted record. It does
+**not** have to be the same type as the input — returning a string
+`"***"` for a numeric field is fine. The consumer should treat a
+masked response as display-only.
+
+```elixir
+# Per-field logic via the second argument
+mask_with: fn
+  value, :phone when is_binary(value) ->
+    "***-****-" <> String.slice(value, -4..-1)
+
+  value, :email when is_binary(value) ->
+    [_, domain] = String.split(value, "@", parts: 2)
+    "***@" <> domain
+
+  _value, _field ->
+    "***"
+end
+```
+
+### Masking rules
+
+- **Not inherited.** Masking attaches to the group that declared it. A
+  child group inheriting from a masked parent does *not* inherit the
+  masking. An actor at the higher-level group sees raw values.
+- **Allow-wins across groups.** If an actor holds two field groups and
+  any one of them grants unmasked access to a field, that field is *not*
+  masked. You don't have to reason about permission order — explicit
+  unmasked access always wins.
+- **4-part permissions skip masking entirely.** An actor with
+  `"employee:*:read:always"` (no field_group) sees raw values, the same
+  way they see all fields.
+
+### Interaction with `%Ash.ForbiddenField{}`
+
+Masking runs in a read-time `after_action` hook, *before* Ash's native
+`restrict_field_access` step. If a field is outside the actor's field
+groups entirely, it becomes `%Ash.ForbiddenField{}` during restriction
+— masking does not touch those. `mask_with` never receives a
+`%Ash.ForbiddenField{}` and never runs on fields the actor cannot see.
+
+This means three levels exist:
+
+| Actor access to field | Result |
+|---|---|
+| Not in any granted field group | `%Ash.ForbiddenField{}` |
+| In a masked group only | `mask_with.(value, field)` — a displayable stand-in |
+| In any unmasked group | raw value |
+
+### Error handling
+
+`mask_with` is called inside the query's `after_action` pipeline. If the
+function raises, the read fails — the same way any other `after_action`
+raise would. Keep the function total:
+
+- Handle `nil` values explicitly if the column is nullable.
+- Handle unexpected types defensively — return a generic mask rather
+  than letting a pattern-match failure crash the read.
+- Avoid DB calls inside `mask_with` — it runs per record and bypasses
+  any batching.
+
+```elixir
+# DO: total and fast
+mask_with: fn
+  nil, _field -> nil
+  value, _field when is_binary(value) -> String.replace(value, ~r/./, "*")
+  _value, _field -> "***"
+end
+
+# DON'T: partial — raises on nil or non-binary values
+mask_with: fn value, _ -> String.replace(value, ~r/./, "*") end
+```
+
+### Example behavior
 
 | Actor Permission | phone | salary |
 |-----------------|-------|--------|
@@ -140,3 +223,10 @@ field_group :sensitive, [:phone, :address],
 | `...:sensitive` (with masking) | `"*************"` | `%Ash.ForbiddenField{}` |
 | `...:confidential` | `"010-1234-5678"` | `80000` |
 | `...` (4-part, no field_group) | `"010-1234-5678"` | `80000` |
+
+### Masking functions and JSON
+
+When an `AshGrant.Explanation` that references a masked field group is
+serialized via `Jason.encode!/1`, the `mask_with` function value is
+**stripped** — functions aren't JSON-representable. The rest of the
+field group (name, fields, masked field names) round-trips cleanly.
