@@ -67,7 +67,7 @@ See the [Argument-Based Scope guide](argument-based-scope.md) for the full patte
 
 **Resolution functions:**
 - `AshGrant.Info.resolve_scope_filter/3` — resolved read filter (inheritance applied)
-- `AshGrant.Info.resolve_write_scope_filter/3` — resolved write filter (inheritance applied, `write:` option honored if present)
+- `AshGrant.Info.resolve_write_scope_filter/3` — resolved write filter (inheritance applied; respects the deprecated `write:` override for backward compatibility — see below)
 
 ### `write:` option (deprecated)
 

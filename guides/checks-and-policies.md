@@ -144,9 +144,10 @@ At load time, `expression/2` runs **once** with the actor in context:
    the parent's `instance_key` differs from the relationship's
    destination attribute).
 5. Combine everything with `OR`. Shortcuts:
-   - Any scope resolves to `true` (`:always`, `:all`, `:global`) →
-     the calculation is literally `expr(true)` and collapses to a
-     `SELECT true`.
+   - Any scope resolves to `true` (`:always` — the recommended name; the
+     runtime also accepts `:all` and `:global` as synonyms for backward
+     compatibility) → the calculation is literally `expr(true)` and
+     collapses to a `SELECT true`.
    - No scopes, no instance IDs, no parent filters → `expr(false)`.
    - Actor is `nil` → `expr(false)` (no permissions evaluated).
 
