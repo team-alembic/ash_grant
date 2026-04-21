@@ -90,7 +90,8 @@ defmodule AshGrant.DomainGrantsTest do
     end
 
     test "unknown actor role yields no permissions" do
-      assert [] = AshGrant.GrantsResolver.resolve(%{role: :stranger}, %{resource: GrantsDomainPost})
+      assert [] =
+               AshGrant.GrantsResolver.resolve(%{role: :stranger}, %{resource: GrantsDomainPost})
     end
 
     test "admin can read through the full policy pipeline" do
@@ -211,9 +212,10 @@ defmodule AshGrant.DomainGrantsTest do
     test "resource's custom resolver still runs for its own recognised actor" do
       resolver = Info.resolver(GrantsDomainResolverPost)
 
-      assert resolver.(%{role: :custom_resolver_actor}, %{resource: GrantsDomainResolverPost}) == [
-               "grants_domain_resolver_post:*:*:always"
-             ]
+      assert resolver.(%{role: :custom_resolver_actor}, %{resource: GrantsDomainResolverPost}) ==
+               [
+                 "grants_domain_resolver_post:*:*:always"
+               ]
     end
   end
 
