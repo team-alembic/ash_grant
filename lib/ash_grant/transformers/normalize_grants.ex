@@ -68,9 +68,17 @@ defmodule AshGrant.Transformers.NormalizeGrants do
   defp inject_into_grant(grant, dsl_state, resource) do
     new_permissions = Enum.map(grant.permissions || [], &inject_permission_resource(&1, resource))
     new_grant = %{grant | permissions: new_permissions}
-    Transformer.replace_entity(dsl_state, [:ash_grant, :grants], new_grant, &(&1.name == grant.name))
+
+    Transformer.replace_entity(
+      dsl_state,
+      [:ash_grant, :grants],
+      new_grant,
+      &(&1.name == grant.name)
+    )
   end
 
-  defp inject_permission_resource(%{on: nil} = permission, resource), do: %{permission | on: resource}
+  defp inject_permission_resource(%{on: nil} = permission, resource),
+    do: %{permission | on: resource}
+
   defp inject_permission_resource(permission, _resource), do: permission
 end

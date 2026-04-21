@@ -29,9 +29,7 @@ defmodule AshGrant.GrantsDslTest do
         end
 
         grant :viewer, expr(^actor(:role) == :viewer) do
-          permission(:read_published, :read, :published,
-            description: "Read published posts"
-          )
+          permission(:read_published, :read, :published, description: "Read published posts")
         end
 
         grant :archived_guard, expr(^actor(:role) == :editor) do
