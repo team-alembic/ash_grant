@@ -13,10 +13,14 @@ defmodule AshGrant.Transformers.ValidateResolverPresent do
 
   @impl true
   def after?(AshGrant.Transformers.MergeDomainConfig), do: true
+  def after?(AshGrant.Transformers.NormalizeGrants), do: true
+  def after?(AshGrant.Transformers.SynthesizeGrantsResolver), do: true
   def after?(_), do: false
 
   @impl true
   def before?(AshGrant.Transformers.MergeDomainConfig), do: false
+  def before?(AshGrant.Transformers.NormalizeGrants), do: false
+  def before?(AshGrant.Transformers.SynthesizeGrantsResolver), do: false
   def before?(_), do: true
 
   @impl true

@@ -309,8 +309,13 @@ defmodule AshGrant do
 
   use Spark.Dsl.Extension,
     sections: AshGrant.Dsl.sections(),
+    verifiers: [
+      AshGrant.Verifiers.ValidateGrantReferences
+    ],
     transformers: [
       AshGrant.Transformers.MergeDomainConfig,
+      AshGrant.Transformers.NormalizeGrants,
+      AshGrant.Transformers.SynthesizeGrantsResolver,
       AshGrant.Transformers.ValidateResolverPresent,
       AshGrant.Transformers.ValidateScopes,
       AshGrant.Transformers.ValidateScopeThroughs,
