@@ -12,43 +12,38 @@ defmodule AshGrant.GrantsDslTest do
     ash_grant do
       resource_name("post")
 
-      purposes([:content_management, :fraud_investigation, :audit, :compliance])
-
       scope(:always, true)
       scope(:own, expr(author_id == ^actor(:id)))
       scope(:published, expr(status == :published))
 
       grants do
-        grant :admin, fn actor -> actor && Map.get(actor, :role) == :admin end do
+        grant :admin, expr(^actor(:role) == :admin) do
           description("Full administrative access")
-          purpose(:compliance)
-
-          permission(:manage_all, :*, :always,
-            description: "Any action on any post"
-          )
+          permission(:manage_all, :*, :always, description: "Any action on any post")
         end
 
-        grant :editor, fn actor -> actor && Map.get(actor, :role) == :editor end do
+        grant :editor, expr(^actor(:role) == :editor) do
           description("Editors manage content")
-          purpose(:content_management)
-
           permission(:read_all, :read, :always)
           permission(:update_own, :update, :own)
         end
 
-        grant :viewer, fn actor -> actor && Map.get(actor, :role) == :viewer end do
+        grant :viewer, expr(^actor(:role) == :viewer) do
           permission(:read_published, :read, :published,
-            purposes: [:audit],
             description: "Read published posts"
           )
         end
 
-        grant :archived_guard, fn actor -> actor && Map.get(actor, :role) == :editor end do
+        grant :archived_guard, expr(^actor(:role) == :editor) do
           permission(:no_destroy_archived, :destroy, :published, deny: true)
         end
 
-        grant :specific_admin, fn actor -> actor && Map.get(actor, :role) == :specific end do
+        grant :specific_admin, expr(^actor(:role) == :specific) do
           permission(:manage_root_post, :update, :always, instance: "root-post-id")
+        end
+
+        grant :paid_user, expr(^actor(:plan) == :pro and ^actor(:trial_expired) == false) do
+          permission(:create_pro, :create, :always)
         end
       end
     end
@@ -68,7 +63,7 @@ defmodule AshGrant.GrantsDslTest do
   describe "grants DSL parsing" do
     test "returns all declared grants" do
       grants = Info.grants(Post)
-      assert length(grants) == 5
+      assert length(grants) == 6
 
       names = Enum.map(grants, & &1.name)
       assert :admin in names
@@ -76,20 +71,21 @@ defmodule AshGrant.GrantsDslTest do
       assert :viewer in names
       assert :archived_guard in names
       assert :specific_admin in names
+      assert :paid_user in names
     end
 
-    test "grants carry predicates and metadata" do
+    test "grants carry predicate and metadata" do
       editor = Info.get_grant(Post, :editor)
 
       assert editor.name == :editor
-      assert is_function(editor.predicate, 1)
+      refute is_nil(editor.predicate)
       assert editor.description == "Editors manage content"
-      assert editor.purpose == :content_management
+      assert Enum.empty?(editor.permissions) == false
     end
 
     test "flattens to permissions list" do
       permissions = Info.permissions(Post)
-      assert length(permissions) == 6
+      assert length(permissions) == 7
 
       names = Enum.map(permissions, & &1.name)
       assert :manage_all in names
@@ -98,6 +94,15 @@ defmodule AshGrant.GrantsDslTest do
       assert :read_published in names
       assert :no_destroy_archived in names
       assert :manage_root_post in names
+      assert :create_pro in names
+    end
+
+    test "permission `on:` defaults to current resource" do
+      read_all = Info.permissions(Post) |> Enum.find(&(&1.name == :read_all))
+      assert read_all.on == Post
+      assert read_all.instance == :*
+      assert read_all.action == :read
+      assert read_all.scope == :always
     end
 
     test "instance defaults to :* when omitted" do
@@ -110,49 +115,11 @@ defmodule AshGrant.GrantsDslTest do
       assert specific.instance == "root-post-id"
     end
 
-    test "permission `on:` defaults to current resource" do
-      read_all = Info.permissions(Post) |> Enum.find(&(&1.name == :read_all))
-      assert read_all.on == Post
-      assert read_all.instance == :*
-      assert read_all.action == :read
-      assert read_all.scope == :always
-    end
-
     test "deny flag is preserved" do
       deny_perm =
         Info.permissions(Post) |> Enum.find(&(&1.name == :no_destroy_archived))
 
       assert deny_perm.deny == true
-    end
-  end
-
-  describe "purposes" do
-    test "declared vocabulary is introspectable" do
-      assert Info.declared_purposes(Post) ==
-               [:content_management, :fraud_investigation, :audit, :compliance]
-    end
-
-    test "effective purposes merge grant + permission purposes" do
-      viewer = Info.get_grant(Post, :viewer)
-      read_published = Enum.find(viewer.permissions, &(&1.name == :read_published))
-
-      assert Info.effective_purposes(viewer, read_published) == [:audit]
-    end
-
-    test "permissions_for_purpose returns matching pairs" do
-      pairs = Info.permissions_for_purpose(Post, :content_management)
-      assert length(pairs) == 2
-
-      perm_names = Enum.map(pairs, fn {_grant, perm} -> perm.name end)
-      assert :read_all in perm_names
-      assert :update_own in perm_names
-    end
-
-    test "permissions_for_purpose finds purpose via permission-level override" do
-      pairs = Info.permissions_for_purpose(Post, :audit)
-      assert [{grant, perm}] = pairs
-      assert grant.name == :viewer
-      assert perm.name == :read_published
     end
   end
 
@@ -175,7 +142,6 @@ defmodule AshGrant.GrantsDslTest do
 
       assert "post:*:read:always" in editor_perms
       assert "post:*:update:own" in editor_perms
-      # :editor role is also matched by :archived_guard grant
       assert "!post:*:destroy:published" in editor_perms
     end
 
@@ -200,11 +166,28 @@ defmodule AshGrant.GrantsDslTest do
     test "missing resource in context yields no permissions" do
       assert AshGrant.GrantsResolver.resolve(%{role: :admin}, %{}) == []
     end
+
+    test "compound predicates combine actor fields", %{context: context} do
+      pro_active = %{plan: :pro, trial_expired: false}
+      pro_expired = %{plan: :pro, trial_expired: true}
+      free = %{plan: :free, trial_expired: false}
+
+      assert "post:*:create:always" in AshGrant.GrantsResolver.resolve(pro_active, context)
+      refute "post:*:create:always" in AshGrant.GrantsResolver.resolve(pro_expired, context)
+      refute "post:*:create:always" in AshGrant.GrantsResolver.resolve(free, context)
+    end
+
+    test "actor missing predicate fields yields no permissions", %{context: context} do
+      # Actor has no :role or :plan keys at all
+      assert AshGrant.GrantsResolver.resolve(%{}, context) == []
+    end
   end
 
   describe "compile-time verification" do
-    test "rejects unknown purpose when vocabulary is declared" do
-      assert_raise Spark.Error.DslError, ~r/Unknown purpose/s, fn ->
+    test "rejects unknown purpose — removed" do
+      # purpose/purposes was removed from the DSL; this test asserts the
+      # schema no longer accepts it.
+      assert_raise Spark.Error.DslError, ~r/unknown options \[:purpose\]/, fn ->
         defmodule BadPurposePost do
           use Ash.Resource,
             domain: nil,
@@ -216,12 +199,11 @@ defmodule AshGrant.GrantsDslTest do
           end
 
           ash_grant do
-            purposes([:audit])
             scope(:always, true)
 
             grants do
-              grant :bad, fn _ -> true end do
-                permission(:audit_read, :read, :always, purpose: :typo_purpose)
+              grant :bad, expr(^actor(:role) == :admin) do
+                permission(:audit_read, :read, :always, purpose: :whatever)
               end
             end
           end
@@ -235,7 +217,7 @@ defmodule AshGrant.GrantsDslTest do
 
     test "rejects declaring both grants and explicit resolver" do
       assert_raise Spark.Error.DslError, ~r/both `grants` and `resolver`/s, fn ->
-        defmodule DuelResolverPost do
+        defmodule DualResolverPost do
           use Ash.Resource,
             domain: nil,
             validate_domain_inclusion?: false,
@@ -250,7 +232,7 @@ defmodule AshGrant.GrantsDslTest do
             scope(:always, true)
 
             grants do
-              grant :noop, fn _ -> true end do
+              grant :noop, expr(^actor(:role) == :admin) do
                 permission(:read_all, :read, :always)
               end
             end

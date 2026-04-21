@@ -463,15 +463,13 @@ defmodule AshGrant.Dsl do
     ## Examples
 
         permission :read_all_posts, :read, :always
-        permission :update_own, :update, :own, purpose: :content_management
-        permission :audit_access, :read, :always, purposes: [:audit, :compliance]
+        permission :update_own, :update, :own
 
         # Cross-resource (e.g. from a domain-level grant)
         permission :read_comments, :read, :always, on: Blog.Comment
 
         permission :read_tickets, :read, :assigned do
           description "Read tickets assigned to this agent"
-          purpose :ticket_triage
         end
 
     For deny rules, pass `deny: true`:
@@ -480,7 +478,7 @@ defmodule AshGrant.Dsl do
     """,
     examples: [
       "permission :read_all_posts, :read, :always",
-      "permission :update_own, :update, :own, purpose: :content_management",
+      "permission :update_own, :update, :own",
       "permission :audit_access, :read, :always, on: Blog.Post"
     ],
     target: AshGrant.Dsl.Permission,
@@ -515,16 +513,6 @@ defmodule AshGrant.Dsl do
         required: true,
         doc: "Scope name defined on the target resource (e.g. `:always`, `:own`)."
       ],
-      purpose: [
-        type: :atom,
-        required: false,
-        doc: "Single compliance-purpose atom. Sugar for `purposes: [value]`."
-      ],
-      purposes: [
-        type: {:list, :atom},
-        required: false,
-        doc: "List of compliance-purpose atoms this permission serves."
-      ],
       deny: [
         type: :boolean,
         default: false,
@@ -542,39 +530,38 @@ defmodule AshGrant.Dsl do
     name: :grant,
     describe: """
     Declares a named grant — an actor predicate paired with a set of
-    permissions. When the predicate returns `true` for an actor, every
+    permissions. When the predicate evaluates to `true` for an actor, every
     permission in the grant is awarded.
 
-    The predicate is a 1-arity function `(actor) -> boolean`. Prefer concise
-    predicates that inspect actor attributes (role, plan, group membership)
-    rather than performing IO; AshGrant evaluates the predicate on every
-    permission check.
+    The predicate is an `Ash.Expr` referencing `^actor(:key)` values. It is
+    evaluated at runtime via `Ash.Expr.eval/2` with the current actor bound.
 
     ## Examples
 
-        grant :admin, fn actor -> actor && actor.role == :admin end do
+        grant :admin, expr(^actor(:role) == :admin) do
           description "Full access for admins"
           permission :manage_all, :*, :always
         end
 
-        grant :editor, fn actor -> actor && actor.role == :editor end do
+        grant :editor, expr(^actor(:role) == :editor) do
           description "Editors publish and maintain their own posts"
-          purpose :content_management
-
           permission :read_all, :read, :always
           permission :update_own, :update, :own
+        end
+
+        grant :paid_user, expr(^actor(:plan) == :pro and not ^actor(:trial_expired)) do
+          permission :create_posts, :create, :always
         end
     """,
     examples: [
       """
-      grant :admin, fn actor -> actor && actor.role == :admin end do
+      grant :admin, expr(^actor(:role) == :admin) do
         permission :manage_all, :*, :always
       end
       """
     ],
     target: AshGrant.Dsl.Grant,
     args: [:name, :predicate],
-    entities: [permissions: [@permission]],
     schema: [
       name: [
         type: :atom,
@@ -582,27 +569,19 @@ defmodule AshGrant.Dsl do
         doc: "Stable identifier for this grant (e.g. `:admin`, `:editor`)."
       ],
       predicate: [
-        type: {:fun, 1},
+        type: {:or, [:boolean, :any]},
         required: true,
-        doc: "1-arity function `(actor) -> boolean` deciding grant membership."
+        doc:
+          "Ash expression over the actor, e.g. `expr(^actor(:role) == :admin)`. " <>
+            "Evaluated via `Ash.Expr.eval/2` with the current actor at permission-check time."
       ],
       description: [
         type: :string,
         required: false,
         doc: "Human-readable description of what this grant represents."
-      ],
-      purpose: [
-        type: :atom,
-        required: false,
-        doc:
-          "Single grant-level compliance-purpose atom. Inherited by every permission in the grant."
-      ],
-      purposes: [
-        type: {:list, :atom},
-        required: false,
-        doc: "List of grant-level compliance-purpose atoms inherited by every permission."
       ]
-    ]
+    ],
+    entities: [permissions: [@permission]]
   }
 
   @grants %Spark.Dsl.Section{
@@ -762,27 +741,6 @@ defmodule AshGrant.Dsl do
             can_perform_actions [:update, :destroy]
 
         Generates `:can_update?` and `:can_destroy?` calculations.
-        """
-      ],
-      purposes: [
-        type: {:list, :atom},
-        required: false,
-        doc: """
-        Declared vocabulary of compliance-purpose atoms.
-
-        When set, the `ValidateGrants` verifier rejects any `purpose:` / `purposes:`
-        value on a grant or permission that is not in this list, catching typos
-        like `:costumer_support` at compile time.
-
-        Leave unset (or set to `nil`) to allow any atom.
-
-        ## Example
-
-            ash_grant do
-              purposes [:customer_support, :fraud_investigation, :billing,
-                        :identity_verification, :audit, :compliance]
-              # ...
-            end
         """
       ],
       instance_key: [
@@ -962,8 +920,7 @@ defmodule AshGrant.Dsl.Permission do
   Permissions are structured, compile-time-verified equivalents of permission
   strings (`resource:instance:action:scope`). The verifier ensures that
   `on` is a real `Ash.Resource`, `action` exists on that resource, and
-  `scope` is defined on that resource. Purposes provide compliance metadata
-  that downstream projects (audit, RoPA generation) can consume.
+  `scope` is defined on that resource.
 
   ## Fields
 
@@ -972,8 +929,6 @@ defmodule AshGrant.Dsl.Permission do
   - `:instance` — instance id to match, or `:*` for RBAC (default `:*`)
   - `:action` — action name on the resource (or `:*`)
   - `:scope` — scope name defined on the resource
-  - `:purpose` — single compliance-purpose atom (sugar for `purposes: [x]`)
-  - `:purposes` — list of compliance-purpose atoms
   - `:deny` — when `true`, the permission is a deny rule (deny wins)
   - `:description` — human-readable description for docs/audits
   """
@@ -984,8 +939,6 @@ defmodule AshGrant.Dsl.Permission do
     :instance,
     :action,
     :scope,
-    :purpose,
-    :purposes,
     :deny,
     :description,
     :__spark_metadata__
@@ -997,8 +950,6 @@ defmodule AshGrant.Dsl.Permission do
           instance: atom() | String.t() | nil,
           action: atom(),
           scope: atom(),
-          purpose: atom() | nil,
-          purposes: [atom()] | nil,
           deny: boolean() | nil,
           description: String.t() | nil,
           __spark_metadata__: map() | nil
@@ -1009,18 +960,16 @@ defmodule AshGrant.Dsl.Grant do
   @moduledoc """
   Represents a named grant in the AshGrant DSL.
 
-  A grant pairs an actor predicate with a set of named permissions. At runtime,
-  if the predicate returns `true` for a given actor, every permission in the
-  grant is awarded to that actor.
+  A grant pairs an actor predicate (an `Ash.Expr`) with a set of named
+  permissions. At runtime, if the predicate evaluates to `true` for a given
+  actor, every permission in the grant is awarded.
 
   ## Fields
 
   - `:name` — stable identifier for the grant (e.g. `:editor`, `:admin`)
-  - `:predicate` — 1-arity function `(actor) -> boolean` deciding membership
+  - `:predicate` — an `Ash.Expr` over the actor (e.g.
+    `expr(^actor(:role) == :admin)`) deciding membership
   - `:description` — human-readable description for docs/audits
-  - `:purpose` — single compliance-purpose atom (sugar for `purposes: [x]`)
-  - `:purposes` — list of compliance-purpose atoms inherited by every
-    permission in this grant
   - `:permissions` — list of `AshGrant.Dsl.Permission` structs
   """
 
@@ -1028,18 +977,14 @@ defmodule AshGrant.Dsl.Grant do
     :name,
     :predicate,
     :description,
-    :purpose,
-    :purposes,
     :permissions,
     :__spark_metadata__
   ]
 
   @type t :: %__MODULE__{
           name: atom(),
-          predicate: (any() -> boolean()),
+          predicate: boolean() | Ash.Expr.t(),
           description: String.t() | nil,
-          purpose: atom() | nil,
-          purposes: [atom()] | nil,
           permissions: [AshGrant.Dsl.Permission.t()],
           __spark_metadata__: map() | nil
         }

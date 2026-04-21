@@ -214,64 +214,12 @@ defmodule AshGrant.Info do
 
   @doc """
   Gets all permissions from all grants on a resource as a flat list.
-
-  Each permission's effective purposes (grant purposes + permission purposes)
-  are attached under the `__effective_purposes__/1` helper — use that accessor
-  rather than reading `:purposes` directly if you need the merged set.
   """
   @spec permissions(Ash.Resource.t()) :: [AshGrant.Dsl.Permission.t()]
   def permissions(resource) do
     grants(resource)
     |> Enum.flat_map(fn grant -> grant.permissions || [] end)
   end
-
-  @doc """
-  Returns every `{grant, permission}` pair touching the given compliance purpose.
-
-  Suitable for compliance projects that need Records of Processing Activities
-  (GDPR Article 30), access reviews, or "which capabilities invoke purpose X"
-  lookups.
-  """
-  @spec permissions_for_purpose(Ash.Resource.t(), atom()) ::
-          [{AshGrant.Dsl.Grant.t(), AshGrant.Dsl.Permission.t()}]
-  def permissions_for_purpose(resource, purpose) do
-    grants(resource)
-    |> Enum.flat_map(fn grant ->
-      grant.permissions
-      |> List.wrap()
-      |> Enum.filter(&permission_has_purpose?(grant, &1, purpose))
-      |> Enum.map(&{grant, &1})
-    end)
-  end
-
-  @doc """
-  Returns the declared compliance-purpose vocabulary for a resource, or `nil`
-  if the vocabulary is unconstrained.
-  """
-  @spec declared_purposes(Ash.Resource.t()) :: [atom()] | nil
-  def declared_purposes(resource) do
-    Spark.Dsl.Extension.get_opt(resource, [:ash_grant], :purposes)
-  end
-
-  @doc """
-  Returns the effective purposes for a permission — the union of its grant's
-  purposes and its own purposes.
-  """
-  @spec effective_purposes(AshGrant.Dsl.Grant.t(), AshGrant.Dsl.Permission.t()) :: [atom()]
-  def effective_purposes(grant, permission) do
-    (purpose_list(grant.purpose, grant.purposes) ++
-       purpose_list(permission.purpose, permission.purposes))
-    |> Enum.uniq()
-  end
-
-  defp permission_has_purpose?(grant, permission, purpose) do
-    purpose in effective_purposes(grant, permission)
-  end
-
-  defp purpose_list(nil, nil), do: []
-  defp purpose_list(single, nil), do: [single]
-  defp purpose_list(nil, list), do: list
-  defp purpose_list(single, list), do: [single | list]
 
   @doc """
   Gets a specific field group by name.
