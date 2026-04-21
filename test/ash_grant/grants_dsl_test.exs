@@ -181,6 +181,16 @@ defmodule AshGrant.GrantsDslTest do
       # Actor has no :role or :plan keys at all
       assert AshGrant.GrantsResolver.resolve(%{}, context) == []
     end
+
+    test "context from caller is threaded into predicate evaluation" do
+      # Sanity check the plumbing — the resolver reads context.context and
+      # passes it to Ash.Expr.fill_template so predicates can reference
+      # ^context(:key) values. This test uses the existing :admin grant
+      # (whose predicate doesn't touch context) to confirm the call path
+      # does not crash when a caller-provided context map is present.
+      caller_ctx = %{resource: Post, context: %{request_id: "abc"}}
+      assert "post:*:*:always" in AshGrant.GrantsResolver.resolve(%{role: :admin}, caller_ctx)
+    end
   end
 
   describe "compile-time verification" do

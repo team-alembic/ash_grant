@@ -497,7 +497,7 @@ defmodule AshGrant.Dsl do
             "when declared inside a resource's `ash_grant do` block."
       ],
       instance: [
-        type: :any,
+        type: {:or, [{:in, [:*]}, :atom, :string]},
         default: :*,
         doc:
           "Instance id this permission targets. Defaults to `:*` (RBAC). " <>
@@ -603,11 +603,11 @@ defmodule AshGrant.Dsl do
     examples: [
       """
       grants do
-        grant :admin, fn actor -> actor && actor.role == :admin end do
+        grant :admin, expr(^actor(:role) == :admin) do
           permission :manage_all, :*, :always
         end
 
-        grant :editor, fn actor -> actor && actor.role == :editor end do
+        grant :editor, expr(^actor(:role) == :editor) do
           permission :read_all, :read, :always
           permission :update_own, :update, :own
         end
@@ -931,6 +931,23 @@ defmodule AshGrant.Dsl.Permission do
   - `:scope` — scope name defined on the resource
   - `:deny` — when `true`, the permission is a deny rule (deny wins)
   - `:description` — human-readable description for docs/audits
+
+  ## Deny rules — known limitation
+
+  A `deny: true` permission emits the `!` prefix (e.g.
+  `"!post:*:destroy:published"`) and `AshGrant.Evaluator.has_access?/3`
+  honors deny-wins semantics when a sibling allow covers the same action
+  with a broader scope (e.g. allow `destroy:*` + deny `destroy:published`).
+
+  There is a narrower combination that does not currently behave as
+  expected: when an allow permission narrows scope to `:own` and a sibling
+  deny permission narrows scope to `:published`, `AshGrant.Check` does not
+  always surface the deny for per-record evaluation. The resolver output
+  is correct; the interaction with `Check` is the gap. If you need this
+  specific combination today, keep using the function-form `resolver`
+  escape hatch, or express the deny by omitting the allow rather than
+  layering an explicit deny on top. A follow-up PR will address the
+  Check-level evaluation.
   """
 
   defstruct [
