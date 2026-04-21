@@ -176,18 +176,21 @@ ash_grant do
   scope :same_tenant, expr(tenant_id == ^actor(:tenant_id))
 
   # Own + draft status = "my drafts only"
-  scope :own_draft, [:own], expr(status == :draft)
+  scope :own_draft, expr(author_id == ^actor(:id) and status == :draft)
 
   # Same tenant + active = "active records in my tenant"
-  scope :tenant_active, [:same_tenant], expr(status == :active)
+  scope :tenant_active,
+    expr(tenant_id == ^actor(:tenant_id) and status == :active)
 
   # Same tenant + own = "my records in my tenant"
-  scope :tenant_own, [:same_tenant], expr(created_by_id == ^actor(:id))
+  scope :tenant_own,
+    expr(tenant_id == ^actor(:tenant_id) and created_by_id == ^actor(:id))
 end
 ```
 
-> **Remember:** Scope inheritance = AND (restricts access). Multiple permissions = OR
-> (expands access). See the [Scopes guide](scopes.md#scope-combination-rules) for details.
+> **Remember:** Combining conditions in one scope = AND (restricts access).
+> Multiple permissions on the same action = OR (expands access). See the
+> [Scopes guide](scopes.md#scope-combination-rules) for details.
 
 ### Example: Amount-Based Authorization
 
@@ -402,7 +405,7 @@ ash_grant do
   scope :always, true
   scope :same_tenant, expr(tenant_id == ^tenant())
   scope :own, expr(author_id == ^actor(:id))
-  scope :own_in_tenant, [:same_tenant], expr(author_id == ^actor(:id))
+  scope :own_in_tenant, expr(tenant_id == ^tenant() and author_id == ^actor(:id))
 end
 ```
 
@@ -533,7 +536,8 @@ ash_grant do
   # ABAC scopes
   scope :same_tenant, expr(tenant_id == ^actor(:tenant_id))
   scope :active, expr(status == :active)
-  scope :tenant_own, [:same_tenant], expr(author_id == ^actor(:id))
+  scope :tenant_own,
+    expr(tenant_id == ^actor(:tenant_id) and author_id == ^actor(:id))
 
   # ReBAC
   scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id)))

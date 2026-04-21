@@ -43,22 +43,28 @@ defmodule AshGrant.Test.BulkItem do
 
     scope(:always, true)
     scope(:own, expr(author_id == ^actor(:id)))
-    scope(:team_member, [], expr(exists(team.memberships, user_id == ^actor(:id))))
+    scope(:team_member, expr(exists(team.memberships, user_id == ^actor(:id))))
 
     scope(
       :own_in_team,
-      [],
       expr(author_id == ^actor(:id) and exists(team.memberships, user_id == ^actor(:id)))
     )
 
-    scope(:named_team, [], expr(team.name == ^actor(:team_name)))
+    scope(:named_team, expr(team.name == ^actor(:team_name)))
 
-    # Composite scopes: inherit from a relational parent + add direct-attribute check.
-    # These reproduce a bug where should_use_db_query? checks only the child's own
-    # filter (no relationship ref) instead of the resolved filter (with inherited
-    # relationship refs), causing in-memory eval to fail on create actions.
-    scope(:team_member_and_own, [:team_member], expr(author_id == ^actor(:id)))
-    scope(:named_team_and_own, [:named_team], expr(author_id == ^actor(:id)))
+    # Composite scopes: combine a relational parent + direct-attribute check.
+    # These reproduce a bug where should_use_db_query? checks only the direct-attr
+    # part of the filter (no relationship ref) and causes in-memory eval to fail
+    # on create actions when the real filter traverses relationships.
+    scope(
+      :team_member_and_own,
+      expr(author_id == ^actor(:id) and exists(team.memberships, user_id == ^actor(:id)))
+    )
+
+    scope(
+      :named_team_and_own,
+      expr(author_id == ^actor(:id) and team.name == ^actor(:team_name))
+    )
   end
 
   attributes do

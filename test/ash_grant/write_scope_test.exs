@@ -4,7 +4,7 @@ defmodule AshGrant.WriteScopeTest do
 
   Covers:
   - DSL: `write:` option on scope entity
-  - Info: `resolve_write_scope_filter/3` with fallback and inheritance
+  - Info: `resolve_write_scope_filter/3` with fallback to `filter`
   - Check: write actions use write scope resolution
   - FilterCheck: read actions are unaffected (still use `filter`)
   - Transformer: warnings for relationship scopes without `write:`
@@ -38,18 +38,18 @@ defmodule AshGrant.WriteScopeTest do
       scope(:always, true)
 
       # Same expression for read and write (simple ownership)
-      scope(:own, [], expr(author_id == ^actor(:id)), write: expr(author_id == ^actor(:id)))
+      scope(:own, expr(author_id == ^actor(:id)), write: expr(author_id == ^actor(:id)))
 
       # Different expressions: read uses equality, write uses `in` list
-      scope(:team_visible, [], expr(team_id == ^actor(:team_id)),
+      scope(:team_visible, expr(team_id == ^actor(:team_id)),
         write: expr(team_id in ^actor(:team_ids))
       )
 
       # Explicitly deny writes
-      scope(:readonly, [], expr(status == :published), write: false)
+      scope(:readonly, expr(status == :published), write: false)
 
       # Explicitly allow all writes (write: true)
-      scope(:write_all, [], expr(status == :draft), write: true)
+      scope(:write_all, expr(status == :draft), write: true)
 
       # No write: option — should fall back to filter
       scope(:simple, expr(status == :draft))
@@ -60,62 +60,6 @@ defmodule AshGrant.WriteScopeTest do
       attribute(:title, :string, public?: true)
       attribute(:status, :atom, constraints: [one_of: [:draft, :published]])
       attribute(:author_id, :uuid)
-      attribute(:team_id, :uuid)
-    end
-  end
-
-  # Resource with write scope inheritance scenarios:
-  # - :team          → parent with write: expr(...)
-  # - :team_draft    → child inherits parent write, no own write:
-  # - :team_blog     → child inherits parent write, has own write:
-  # - :readonly_base → parent with write: false
-  # - :readonly_child → child inherits parent's write: false (propagation)
-  # - :deny_child    → child with write: false, parent with write: expr
-  # - :always_draft     → inherits from :always (filter=true)
-  # - :multi_parent  → inherits from multiple parents
-  # - :simple_scope  → no write: (used as second parent in multi_parent)
-  defmodule InheritedWritePost do
-    use Ash.Resource,
-      domain: nil,
-      validate_domain_inclusion?: false,
-      extensions: [AshGrant]
-
-    ash_grant do
-      resolver(fn _actor, _context -> [] end)
-
-      scope(:always, true)
-
-      # Parent with write expression
-      scope(:team, [], expr(team_id == ^actor(:team_id)),
-        write: expr(team_id in ^actor(:team_ids))
-      )
-
-      # Child inherits from :team — no own write:, should use parent's write + own filter
-      scope(:team_draft, [:team], expr(status == :draft))
-
-      # Child inherits from :team AND has its own write:
-      scope(:team_blog, [:team], expr(category == :blog), write: expr(category == :blog))
-
-      # Parent with write: false — should propagate to children
-      scope(:readonly_base, [], expr(status == :published), write: false)
-
-      scope(:readonly_child, [:readonly_base], expr(category == :blog))
-
-      # Child with write: false, parent with write expression
-      scope(:deny_child, [:team], expr(status == :archived), write: false)
-
-      # Parent with all scope (true filter, no write: → fallback to true)
-      scope(:always_draft, [:always], expr(status == :draft))
-
-      # Multiple parents: one has write:, one doesn't
-      scope(:simple_scope, expr(category == :news))
-      scope(:multi_parent, [:team, :simple_scope], expr(status == :draft))
-    end
-
-    attributes do
-      uuid_primary_key(:id)
-      attribute(:status, :atom, constraints: [one_of: [:draft, :published, :archived]])
-      attribute(:category, :atom, constraints: [one_of: [:blog, :news]])
       attribute(:team_id, :uuid)
     end
   end
@@ -154,7 +98,6 @@ defmodule AshGrant.WriteScopeTest do
       assert Map.has_key?(scope, :name)
       assert Map.has_key?(scope, :filter)
       assert Map.has_key?(scope, :write)
-      assert Map.has_key?(scope, :inherits)
       assert Map.has_key?(scope, :description)
     end
   end
@@ -188,18 +131,6 @@ defmodule AshGrant.WriteScopeTest do
       # Read filter should be expr(status == :draft), not true
       refute filter == true
       assert inspect(filter) =~ "status"
-    end
-
-    test "inherited read path ignores parent write: option" do
-      # :team_draft inherits from :team. Read path should use parent's filter,
-      # not parent's write expression
-      filter = Info.resolve_scope_filter(InheritedWritePost, :team_draft, %{})
-      filter_str = inspect(filter)
-      # Should contain team_id (from parent filter) and status (from own filter)
-      assert filter_str =~ "team_id"
-      assert filter_str =~ "status"
-      # Read path uses equality from parent, not `in`
-      refute filter_str =~ ":in"
     end
   end
 
@@ -258,86 +189,6 @@ defmodule AshGrant.WriteScopeTest do
   end
 
   # ============================================================
-  # Write path: inheritance
-  # ============================================================
-
-  describe "resolve_write_scope_filter/3 inheritance" do
-    test "child inherits parent's write expression (not parent's read filter)" do
-      # :team_draft inherits from :team which has:
-      #   filter: team_id == ^actor(:team_id)
-      #   write:  team_id in ^actor(:team_ids)
-      # :team_draft has no write:, own filter is status == :draft
-      # Expected: parent's WRITE expr AND child's filter
-      filter = Info.resolve_write_scope_filter(InheritedWritePost, :team_draft, %{})
-      refute filter == false
-      refute filter == true
-
-      filter_str = inspect(filter)
-      # Should contain the `in` operator from parent's write (not equality from read)
-      assert filter_str =~ "team_ids" or filter_str =~ ":in"
-      # Should also contain the child's own filter
-      assert filter_str =~ "status"
-    end
-
-    test "child with own write: overrides fallback to filter" do
-      # :team_blog inherits from :team, has its own write: expr(category == :blog)
-      # Expected: parent's write AND child's write
-      filter = Info.resolve_write_scope_filter(InheritedWritePost, :team_blog, %{})
-      refute filter == false
-      refute filter == true
-
-      filter_str = inspect(filter)
-      assert filter_str =~ "team_id" or filter_str =~ "team_ids"
-      assert filter_str =~ "category"
-    end
-
-    test "parent write: false propagates to child" do
-      # :readonly_child inherits from :readonly_base which has write: false
-      assert Info.resolve_write_scope_filter(InheritedWritePost, :readonly_child, %{}) == false
-    end
-
-    test "child write: false overrides parent's write expression" do
-      # :deny_child inherits from :team (has write: expr(...)), but has write: false
-      assert Info.resolve_write_scope_filter(InheritedWritePost, :deny_child, %{}) == false
-    end
-
-    test "inheriting from :always (filter=true, no write) works" do
-      # :always_draft inherits from :always (true). Parent write fallback = true (skipped).
-      # Result should be child's own filter (status == :draft)
-      filter = Info.resolve_write_scope_filter(InheritedWritePost, :always_draft, %{})
-      refute filter == true
-      refute filter == false
-      assert inspect(filter) =~ "status"
-    end
-
-    test "multiple parents: write expressions are combined with AND" do
-      # :multi_parent inherits from [:team, :simple_scope]
-      # :team has write: expr(team_id in ^actor(:team_ids))
-      # :simple_scope has no write: → fallback to filter: category == :news
-      # :multi_parent own filter is status == :draft (no write:)
-      # Expected: team_write AND simple_filter AND own_filter
-      filter = Info.resolve_write_scope_filter(InheritedWritePost, :multi_parent, %{})
-      refute filter == false
-      refute filter == true
-
-      filter_str = inspect(filter)
-      assert filter_str =~ "team_id" or filter_str =~ "team_ids"
-    end
-
-    test "parent write expression is used, not parent read filter" do
-      # Verify the parent's write expression is actually different from read
-      team_write = Info.resolve_write_scope_filter(InheritedWritePost, :team, %{})
-      team_read = Info.resolve_scope_filter(InheritedWritePost, :team, %{})
-
-      refute inspect(team_write) == inspect(team_read)
-
-      # Write should use `in`, read should use equality
-      assert inspect(team_write) =~ "team_ids" or inspect(team_write) =~ ":in"
-      refute inspect(team_read) =~ "team_ids"
-    end
-  end
-
-  # ============================================================
   # Check integration: write scope values flow correctly to Check
   # ============================================================
 
@@ -384,17 +235,6 @@ defmodule AshGrant.WriteScopeTest do
       assert write_str =~ "team_ids"
       # Read should reference team_id (singular — the equality field)
       refute read_str =~ "team_ids"
-    end
-
-    test "inherited write expression combines parent write and child filter" do
-      filter = Info.resolve_write_scope_filter(InheritedWritePost, :team_draft, %{})
-      filter_str = inspect(filter)
-
-      # Must be a combined AND expression with:
-      # - parent's write: team_id in ^actor(:team_ids)
-      # - child's filter: status == :draft
-      assert filter_str =~ "team_ids" or filter_str =~ ":in"
-      assert filter_str =~ "status" or filter_str =~ "draft"
     end
   end
 

@@ -20,7 +20,6 @@ defmodule AshGrant.Transformers.NormalizeGrants do
   alias Spark.Error.DslError
 
   @impl true
-  def after?(AshGrant.Transformers.MergeDomainConfig), do: true
   def after?(_), do: false
 
   @impl true

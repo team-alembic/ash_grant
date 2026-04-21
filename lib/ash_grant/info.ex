@@ -40,10 +40,26 @@ defmodule AshGrant.Info do
 
   @doc """
   Gets the permission resolver for a resource.
+
+  Falls back to the resolver on the resource's domain (if the domain uses the
+  `AshGrant.Domain` extension) when the resource does not define its own.
+  Merging at runtime avoids a compile-time cycle between resource and domain
+  that occurs when the domain also has `code_interface` declarations.
   """
-  @spec resolver(Ash.Resource.t()) :: module() | function() | nil
+  @spec resolver(resource :: Ash.Resource.t()) :: module() | function() | nil
   def resolver(resource) do
-    Spark.Dsl.Extension.get_opt(resource, [:ash_grant], :resolver)
+    case Spark.Dsl.Extension.get_opt(resource, [:ash_grant], :resolver) do
+      nil -> domain_resolver(resource)
+      resolver -> resolver
+    end
+  end
+
+  @spec domain_resolver(resource :: Ash.Resource.t()) :: module() | function() | nil
+  defp domain_resolver(resource) do
+    case Ash.Resource.Info.domain(resource) do
+      nil -> nil
+      domain -> AshGrant.Domain.Info.resolver(domain)
+    end
   end
 
   @doc """
@@ -159,11 +175,42 @@ defmodule AshGrant.Info do
 
   @doc """
   Gets all scope definitions for a resource.
+
+  Merges resource-defined scopes with scopes inherited from the domain (if the
+  domain uses the `AshGrant.Domain` extension). Resource scopes take precedence
+  over domain scopes with the same name. Merging at runtime avoids a
+  compile-time cycle between resource and domain that occurs when the domain
+  also has `code_interface` declarations.
   """
-  @spec scopes(Ash.Resource.t()) :: [AshGrant.Dsl.Scope.t()]
+  @spec scopes(resource :: Ash.Resource.t()) :: [AshGrant.Dsl.Scope.t()]
   def scopes(resource) do
-    Spark.Dsl.Extension.get_entities(resource, [:ash_grant])
-    |> Enum.filter(&match?(%AshGrant.Dsl.Scope{}, &1))
+    resource_scopes =
+      Spark.Dsl.Extension.get_entities(resource, [:ash_grant])
+      |> Enum.filter(&match?(%AshGrant.Dsl.Scope{}, &1))
+
+    merge_domain_scopes(resource, resource_scopes)
+  end
+
+  @spec merge_domain_scopes(
+          resource :: Ash.Resource.t(),
+          resource_scopes :: [AshGrant.Dsl.Scope.t()]
+        ) :: [AshGrant.Dsl.Scope.t()]
+  defp merge_domain_scopes(resource, resource_scopes) do
+    case Ash.Resource.Info.domain(resource) do
+      nil ->
+        resource_scopes
+
+      domain ->
+        resource_names = MapSet.new(resource_scopes, & &1.name)
+
+        domain_only =
+          Enum.reject(
+            AshGrant.Domain.Info.scopes(domain),
+            &MapSet.member?(resource_names, &1.name)
+          )
+
+        resource_scopes ++ domain_only
+    end
   end
 
   @doc """
@@ -255,7 +302,6 @@ defmodule AshGrant.Info do
   Resolves a scope to its read filter expression.
 
   Uses the scope's `filter` field (ignoring any `write:` option).
-  If the scope has inheritance, the parent scopes are combined with AND.
   Returns `false` for unknown scopes.
 
   For write action scope resolution, use `resolve_write_scope_filter/3` instead.
@@ -271,7 +317,7 @@ defmodule AshGrant.Info do
         end
 
       scope ->
-        resolve_scope_with_inheritance(resource, scope, context)
+        scope.filter
     end
   end
 
@@ -283,13 +329,6 @@ defmodule AshGrant.Info do
   when relationship traversal (exists/dot-paths) cannot be evaluated in-memory.
 
   Returns `false` for unknown scopes, or when `write: false` is explicitly set.
-
-  ## Resolution Order
-
-  1. If scope has `write:` set → use `write` value (`false`, `true`, or expression)
-  2. If scope has no `write:` → fall back to `scope.filter` (backward compatible)
-  3. Inheritance: parent `write:` values are resolved recursively and combined with AND
-  4. If any parent returns `false` → short-circuit to `false` (deny propagation)
 
   ## Examples
 
@@ -315,7 +354,7 @@ defmodule AshGrant.Info do
         end
 
       scope ->
-        resolve_write_scope_with_inheritance(resource, scope, context)
+        if scope.write == nil, do: scope.filter, else: scope.write
     end
   end
 
@@ -384,77 +423,5 @@ defmodule AshGrant.Info do
 
   defp resolve_with_legacy_resolver(resolver, scope, context) when is_atom(resolver) do
     resolver.resolve(scope, context)
-  end
-
-  defp resolve_scope_with_inheritance(resource, scope, context) do
-    # First, get the base filter for this scope
-    base_filter = scope.filter
-
-    # If there's inheritance, combine with parent scope(s)
-    case scope.inherits do
-      nil ->
-        base_filter
-
-      [] ->
-        base_filter
-
-      parent_names when is_list(parent_names) ->
-        parent_filters =
-          parent_names
-          |> Enum.map(&resolve_scope_filter(resource, &1, context))
-          |> Enum.reject(&(&1 == true))
-
-        case {parent_filters, base_filter} do
-          {[], filter} ->
-            filter
-
-          {filters, true} ->
-            combine_filters_with_and(filters)
-
-          {filters, filter} ->
-            combine_filters_with_and(filters ++ [filter])
-        end
-    end
-  end
-
-  defp resolve_write_scope_with_inheritance(resource, scope, context) do
-    base_filter = if scope.write == nil, do: scope.filter, else: scope.write
-
-    if base_filter == false do
-      false
-    else
-      resolve_write_parents(resource, scope.inherits, base_filter, context)
-    end
-  end
-
-  defp resolve_write_parents(_resource, nil, base_filter, _context), do: base_filter
-  defp resolve_write_parents(_resource, [], base_filter, _context), do: base_filter
-
-  defp resolve_write_parents(resource, parent_names, base_filter, context) do
-    parent_filters = Enum.map(parent_names, &resolve_write_scope_filter(resource, &1, context))
-
-    if Enum.any?(parent_filters, &(&1 == false)) do
-      false
-    else
-      merge_parent_and_base_filters(parent_filters, base_filter)
-    end
-  end
-
-  defp merge_parent_and_base_filters(parent_filters, base_filter) do
-    non_true_filters = Enum.reject(parent_filters, &(&1 == true))
-
-    case {non_true_filters, base_filter} do
-      {[], filter} -> filter
-      {filters, true} -> combine_filters_with_and(filters)
-      {filters, filter} -> combine_filters_with_and(filters ++ [filter])
-    end
-  end
-
-  defp combine_filters_with_and([single]), do: single
-
-  defp combine_filters_with_and([first | rest]) do
-    Enum.reduce(rest, first, fn filter, acc ->
-      Ash.Expr.expr(^acc and ^filter)
-    end)
   end
 end

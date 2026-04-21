@@ -210,7 +210,7 @@ defmodule AshGrant do
         scope :always, true
         scope :own, expr(author_id == ^actor(:id))
         scope :published, expr(status == :published)
-        scope :own_draft, [:own], expr(status == :draft)  # Inheritance
+        scope :own_draft, expr(author_id == ^actor(:id) and status == :draft)
       end
 
   ### Context Injection for Testable Scopes
@@ -309,15 +309,9 @@ defmodule AshGrant do
 
   use Spark.Dsl.Extension,
     sections: AshGrant.Dsl.sections(),
-    verifiers: [
-      AshGrant.Verifiers.ValidateGrantReferences
-    ],
     transformers: [
-      AshGrant.Transformers.MergeDomainConfig,
       AshGrant.Transformers.NormalizeGrants,
       AshGrant.Transformers.SynthesizeGrantsResolver,
-      AshGrant.Transformers.ValidateResolverPresent,
-      AshGrant.Transformers.ValidateScopes,
       AshGrant.Transformers.ValidateScopeThroughs,
       AshGrant.Transformers.ResolveFieldGroupFields,
       AshGrant.Transformers.ValidateFieldGroups,
@@ -326,6 +320,11 @@ defmodule AshGrant do
       AshGrant.Transformers.AddFieldPolicies,
       AshGrant.Transformers.AddMaskingPreparation,
       AshGrant.Transformers.AddCanPerformCalculations
+    ],
+    verifiers: [
+      AshGrant.Verifiers.ValidateResolverPresent,
+      AshGrant.Verifiers.ValidateScopes,
+      AshGrant.Verifiers.ValidateGrantReferences
     ]
 
   @doc """

@@ -24,11 +24,9 @@ defmodule AshGrant.Transformers.SynthesizeGrantsResolver do
 
   @impl true
   def after?(AshGrant.Transformers.NormalizeGrants), do: true
-  def after?(AshGrant.Transformers.MergeDomainConfig), do: true
   def after?(_), do: false
 
   @impl true
-  def before?(AshGrant.Transformers.ValidateResolverPresent), do: true
   def before?(_), do: false
 
   @impl true

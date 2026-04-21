@@ -29,7 +29,7 @@ defmodule AshGrant.Test.Post do
     scope(:own, expr(author_id == ^actor(:id)))
     scope(:published, expr(status == :published))
     scope(:draft, expr(status == :draft))
-    scope(:own_draft, [:own], expr(status == :draft))
+    scope(:own_draft, expr(author_id == ^actor(:id) and status == :draft))
     scope(:today, expr(fragment("DATE(inserted_at) = CURRENT_DATE")))
 
     # Injectable temporal scope - uses context for testability

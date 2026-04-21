@@ -28,7 +28,6 @@ defmodule AshGrant.Dsl do
 
   | Option | Type | Description |
   |--------|------|-------------|
-  | `inherits` | list of atoms | Parent scopes to inherit and combine with |
   | `description` | string | Human-readable description for explain/4 output |
   | `write` | expression, boolean, or nil | **Deprecated.** Prefer argument-based scopes + `resolve_argument`. See below. |
 
@@ -94,7 +93,7 @@ defmodule AshGrant.Dsl do
           scope :always, true
           scope :own, expr(author_id == ^actor(:id))
           scope :published, expr(status == :published)
-          scope :own_draft, [:own], expr(status == :draft)
+          scope :own_draft, expr(author_id == ^actor(:id) and status == :draft)
 
           # Relational scope — works for reads and writes automatically
           scope :team_visible, expr(exists(team.members, user_id == ^actor(:id)))
@@ -161,19 +160,22 @@ defmodule AshGrant.Dsl do
     ## Examples
 
         # No filtering - access to all records
-        scope :always, true, description: "All records without restriction"
+        scope :always, true
 
         # Filter to records owned by the actor
-        scope :own, expr(author_id == ^actor(:id)),
-          description: "Records owned by the current user"
+        scope :own, expr(author_id == ^actor(:id))
 
-        # Filter to published records
+        # Description via keyword option
         scope :published, expr(status == :published),
           description: "Published records visible to everyone"
 
-        # Inheritance: combines parent scope(s) with this filter
-        scope :own_draft, [:own], expr(status == :draft),
-          description: "User's own records that are in draft status"
+        # Description via do-block
+        scope :own, expr(author_id == ^actor(:id)) do
+          description "Records owned by the current user"
+        end
+
+        # Combine conditions directly — scopes don't inherit
+        scope :own_draft, expr(author_id == ^actor(:id) and status == :draft)
 
         # Context injection for testable temporal scopes
         scope :today, expr(fragment("DATE(inserted_at) = ?", ^context(:reference_date))),
@@ -182,8 +184,8 @@ defmodule AshGrant.Dsl do
         # Relational scope — DB query fallback handles writes automatically
         scope :team_member, expr(exists(team.members, user_id == ^actor(:id)))
 
-        # Description is optional - backward compatible
-        scope :archived, expr(status == :archived)
+    Each scope is standalone: if you want a combined filter, write the combined
+    expression directly with `and`.
 
     For multi-hop authorization (e.g., "refund.order.center_id"), prefer
     argument-based scopes paired with `resolve_argument`:
@@ -197,14 +199,14 @@ defmodule AshGrant.Dsl do
       "scope :always, true",
       "scope :own, expr(author_id == ^actor(:id))",
       "scope :published, expr(status == :published)",
-      "scope :own_draft, [:own], expr(status == :draft)",
+      "scope :own_draft, expr(author_id == ^actor(:id) and status == :draft)",
       ~s|scope :today, expr(fragment("DATE(inserted_at) = ?", ^context(:reference_date)))|,
       ~s|scope :own, expr(author_id == ^actor(:id)), description: "Records owned by the current user"|,
       "scope :team_member, expr(exists(team.members, user_id == ^actor(:id)))",
       "scope :at_own_unit, expr(^arg(:center_id) in ^actor(:own_org_unit_ids))"
     ],
     target: AshGrant.Dsl.Scope,
-    args: [:name, {:optional, :inherits}, :filter],
+    args: [:name, :filter],
     deprecations: [
       write:
         "`write:` is deprecated. Prefer argument-based scopes + `resolve_argument` " <>
@@ -216,10 +218,6 @@ defmodule AshGrant.Dsl do
         type: :atom,
         required: true,
         doc: "The name of the scope"
-      ],
-      inherits: [
-        type: {:list, :atom},
-        doc: "List of parent scopes to inherit from"
       ],
       filter: [
         type: {:or, [:boolean, :any]},
@@ -779,17 +777,15 @@ defmodule AshGrant.Dsl.Scope do
   ## Fields
 
   - `:name` - The atom name of the scope (e.g., `:own`, `:published`)
-  - `:inherits` - List of parent scope names to inherit from
   - `:filter` - The filter expression (`true` for no filtering, or an Ash.Expr)
   - `:write` - **Deprecated.** Optional write-specific expression. Prefer argument-based scopes with `resolve_argument`.
   - `:description` - Optional human-readable description for debugging/explain
   """
 
-  defstruct [:name, :inherits, :filter, :write, :description, :__spark_metadata__]
+  defstruct [:name, :filter, :write, :description, :__spark_metadata__]
 
   @type t :: %__MODULE__{
           name: atom(),
-          inherits: [atom()] | nil,
           filter: boolean() | Ash.Expr.t(),
           write: boolean() | Ash.Expr.t() | nil,
           description: String.t() | nil,

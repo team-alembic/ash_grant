@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Breaking
+
+- **Scope inheritance removed.** `inherits` (and the old 3-argument positional form `scope :name, [:parent], filter`) is no longer supported. Write each scope as a standalone expression; combine conditions with `and`:
+
+  ```elixir
+  # Before
+  scope :own, expr(author_id == ^actor(:id))
+  scope :own_draft, [:own], expr(status == :draft)
+  # or: scope :own_draft, expr(status == :draft), inherits: [:own]
+
+  # After
+  scope :own, expr(author_id == ^actor(:id))
+  scope :own_draft, expr(author_id == ^actor(:id) and status == :draft)
+  ```
+
+  Domain-defined scopes still merge into resources that share the domain — only scope-to-scope `inherits` is gone. The `AshGrant.Dsl.Scope` struct no longer has an `:inherits` field.
+
+### Added
+
+- `scope` now supports a do-block form for setting `description` and any other scope option:
+
+  ```elixir
+  scope :own, expr(author_id == ^actor(:id)) do
+    description "Records owned by the current user"
+  end
+  ```
+
 ## [0.14.1] - 2026-04-13
 
 Two fixes that make `resolve_argument` (introduced in 0.14.0) actually
