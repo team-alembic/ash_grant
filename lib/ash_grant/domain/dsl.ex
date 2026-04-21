@@ -5,7 +5,7 @@ defmodule AshGrant.Domain.Dsl do
   This module defines the `ash_grant` DSL section that can be added to
   Ash domains to configure shared permission settings inherited by resources.
 
-  Only `resolver` and `scope` entities are supported at the domain level.
+  Supported at the domain level: `resolver`, `scope`, and `grants`.
   Resource-specific options like `resource_name`, `default_policies`, and
   `field_group` must be configured on each resource.
 
@@ -16,28 +16,38 @@ defmodule AshGrant.Domain.Dsl do
           extensions: [AshGrant.Domain]
 
         ash_grant do
-          resolver MyApp.PermissionResolver
-
           scope :always, true
           scope :own, expr(author_id == ^actor(:id))
+
+          grants do
+            grant :admin, expr(^actor(:role) == :admin) do
+              permission :manage_posts, :*, :always, on: MyApp.Blog.Post
+              permission :manage_comments, :*, :always, on: MyApp.Blog.Comment
+            end
+          end
         end
 
         resources do
-          resource MyApp.Blog.Post   # inherits resolver + scopes
-          resource MyApp.Blog.Comment # inherits resolver + scopes
+          resource MyApp.Blog.Post    # inherits domain grants + scopes
+          resource MyApp.Blog.Comment
         end
       end
+
+  Resources may still declare their own `grants` block — both levels
+  contribute, with the resource winning on grant-name conflicts.
   """
 
   @ash_grant %Spark.Dsl.Section{
     name: :ash_grant,
     top_level?: false,
     imports: [Ash.Expr],
+    sections: [AshGrant.Dsl.grants_section()],
     describe: """
     Shared AshGrant configuration inherited by resources in this domain.
 
-    Resources using the `AshGrant` extension will inherit the `resolver` and
-    `scope` definitions from their domain, unless they define their own.
+    Resources using the `AshGrant` extension inherit the `resolver`, `scope`
+    definitions, and `grants` from their domain. Resources can add their own
+    `grants` and `scope` entries on top — both levels contribute.
     """,
     examples: [
       """
@@ -46,6 +56,17 @@ defmodule AshGrant.Domain.Dsl do
 
         scope :always, true
         scope :own, expr(author_id == ^actor(:id))
+      end
+      """,
+      """
+      ash_grant do
+        scope :always, true
+
+        grants do
+          grant :admin, expr(^actor(:role) == :admin) do
+            permission :manage_posts, :*, :always, on: MyApp.Blog.Post
+          end
+        end
       end
       """
     ],
@@ -60,6 +81,9 @@ defmodule AshGrant.Domain.Dsl do
 
         This resolver is inherited by all resources in the domain that
         use the `AshGrant` extension and don't define their own resolver.
+
+        Mutually exclusive with a `grants` block on the same domain — if
+        grants are declared, the extension synthesizes the resolver for you.
         """
       ]
     ]

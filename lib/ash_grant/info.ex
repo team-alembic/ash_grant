@@ -243,11 +243,39 @@ defmodule AshGrant.Info do
   @doc """
   Gets all `grant` declarations for a resource.
 
-  Returns an empty list if none are configured.
+  Merges grants declared on the resource with grants declared on the resource's
+  domain (if the domain uses the `AshGrant.Domain` extension). Resource grants
+  take precedence over domain grants with the same name. Merging at runtime
+  avoids the same compile-time cycle that scope/resolver inheritance avoids.
+
+  Returns an empty list if neither resource nor domain declare grants.
   """
   @spec grants(Ash.Resource.t()) :: [AshGrant.Dsl.Grant.t()]
   def grants(resource) do
-    Spark.Dsl.Extension.get_entities(resource, [:ash_grant, :grants])
+    resource_grants = Spark.Dsl.Extension.get_entities(resource, [:ash_grant, :grants])
+    merge_domain_grants(resource, resource_grants)
+  end
+
+  @spec merge_domain_grants(
+          resource :: Ash.Resource.t(),
+          resource_grants :: [AshGrant.Dsl.Grant.t()]
+        ) :: [AshGrant.Dsl.Grant.t()]
+  defp merge_domain_grants(resource, resource_grants) do
+    case Ash.Resource.Info.domain(resource) do
+      nil ->
+        resource_grants
+
+      domain ->
+        resource_names = MapSet.new(resource_grants, & &1.name)
+
+        domain_only =
+          Enum.reject(
+            AshGrant.Domain.Info.grants(domain),
+            &MapSet.member?(resource_names, &1.name)
+          )
+
+        resource_grants ++ domain_only
+    end
   end
 
   @doc """

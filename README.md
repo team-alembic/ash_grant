@@ -120,6 +120,40 @@ ash_grant do
 end
 ```
 
+### Declare grants on the domain (or on resources — or both)
+
+You can also put the `grants` block on an `Ash.Domain` using the
+`AshGrant.Domain` extension. Every resource in the domain inherits the
+domain's grants (and scopes), which is a clean way to centralize RBAC across
+a bounded context without repeating the same grant on each resource:
+
+```elixir
+defmodule MyApp.Blog do
+  use Ash.Domain, extensions: [AshGrant.Domain]
+
+  ash_grant do
+    scope :always, true
+    scope :own, expr(author_id == ^actor(:id))
+
+    grants do
+      grant :admin, expr(^actor(:role) == :admin) do
+        permission :manage_posts,    :*, :always, on: MyApp.Blog.Post
+        permission :manage_comments, :*, :always, on: MyApp.Blog.Comment
+      end
+    end
+  end
+
+  resources do
+    resource MyApp.Blog.Post
+    resource MyApp.Blog.Comment
+  end
+end
+```
+
+Resources and domains can both declare grants — they merge, with the
+resource winning on grant-name conflicts. A domain grant's permissions must
+specify `on:` (there's no enclosing resource to default from).
+
 ## Guides
 
 - **[Getting Started](guides/getting-started.md)** — Module-based resolvers, explicit policies, domain-level DSL, resolver patterns

@@ -615,6 +615,15 @@ defmodule AshGrant.Dsl do
     entities: [@grant]
   }
 
+  @doc """
+  Returns the `grants` section definition for reuse by `AshGrant.Domain.Dsl`.
+
+  The same section (and its nested `grant` + `permission` entities) is used
+  unchanged on both resources and domains — only the surrounding DSL context
+  differs.
+  """
+  def grants_section, do: @grants
+
   @ash_grant %Spark.Dsl.Section{
     name: :ash_grant,
     top_level?: false,
