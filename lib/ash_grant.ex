@@ -210,7 +210,7 @@ defmodule AshGrant do
         scope :always, true
         scope :own, expr(author_id == ^actor(:id))
         scope :published, expr(status == :published)
-        scope :own_draft, [:own], expr(status == :draft)  # Inheritance
+        scope :own_draft, expr(author_id == ^actor(:id) and status == :draft)
       end
 
   ### Context Injection for Testable Scopes

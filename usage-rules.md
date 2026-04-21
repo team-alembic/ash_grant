@@ -182,13 +182,17 @@ When a user has `"feed:feed_abc:read:"`, they can read all posts where
 
 ```elixir
 scope :name, filter_expression
-scope :name, [:parent_scopes], filter_expression
 scope :name, filter_expression, description: "Human-readable text"
+
+scope :name, filter_expression do
+  description "Human-readable text"
+end
 ```
 
 - Use `true` for a scope that matches all records (no filtering).
 - Use `expr(...)` for attribute-based filtering.
-- Use the optional second argument (list of atoms) to inherit from parent scopes.
+- Scopes do **not** inherit from other scopes — combine conditions directly
+  with `and` in the expression.
 - `write:` option exists but is **deprecated** (see "DON'T: Use the `write:`
   scope option" below) — prefer `resolve_argument` for multi-hop cases.
 
@@ -199,7 +203,7 @@ ash_grant do
   scope :always, true
   scope :own, expr(author_id == ^actor(:id))
   scope :published, expr(status == :published)
-  scope :own_draft, [:own], expr(status == :draft)  # own AND draft
+  scope :own_draft, expr(author_id == ^actor(:id) and status == :draft)
   scope :same_tenant, expr(tenant_id == ^tenant())  # Multi-tenancy
 end
 ```
@@ -321,15 +325,22 @@ scope :today, expr(fragment("DATE(inserted_at) = ?", ^context(:reference_date)))
 scope :today, expr(fragment("DATE(inserted_at) = CURRENT_DATE"))
 ```
 
-### Scope inheritance
+### DO: Combine conditions inline rather than via scope inheritance
 
-Child scopes combine parent filters with AND logic:
+Scopes are standalone. If multiple conditions must all hold, write them with
+`and` in one expression:
 
 ```elixir
+# DO
 scope :own, expr(author_id == ^actor(:id))
-scope :own_draft, [:own], expr(status == :draft)
-# Effective filter: author_id == ^actor(:id) AND status == :draft
+scope :own_draft, expr(author_id == ^actor(:id) and status == :draft)
+
+# DON'T — `inherits` is not supported
+# scope :own_draft, expr(status == :draft), inherits: [:own]
 ```
+
+Multiple permissions on the same action are still OR'd together by the
+policy layer — use that for disjunctive access.
 
 ## Check Types
 

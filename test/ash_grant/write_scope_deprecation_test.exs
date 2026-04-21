@@ -26,7 +26,7 @@ defmodule AshGrant.WriteScopeDeprecationTest do
 
           ash_grant do
             resolver(fn _, _ -> [] end)
-            scope(:readonly, [], expr(author_id == ^actor(:id)), write: false)
+            scope(:readonly, expr(author_id == ^actor(:id)), write: false)
           end
 
           attributes do

@@ -49,13 +49,13 @@ defmodule AshGrant.ExplainTest do
 
       resource_name("post")
 
-      scope(:always, [], true, description: "All records without restriction")
+      scope(:always, true, description: "All records without restriction")
 
-      scope(:own, [], expr(author_id == ^actor(:id)),
+      scope(:own, expr(author_id == ^actor(:id)),
         description: "Records owned by the current user"
       )
 
-      scope(:published, [], expr(status == :published),
+      scope(:published, expr(status == :published),
         description: "Published records visible to everyone"
       )
     end

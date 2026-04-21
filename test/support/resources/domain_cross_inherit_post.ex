@@ -9,8 +9,7 @@ defmodule AshGrant.Test.DomainCrossInheritPost do
   ash_grant do
     default_policies(true)
 
-    # Inherits from :own which is defined at domain level
-    scope(:own_draft, [:own], expr(status == :draft))
+    scope(:own_draft, expr(author_id == ^actor(:id) and status == :draft))
   end
 
   attributes do

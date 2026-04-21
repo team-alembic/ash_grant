@@ -274,7 +274,6 @@ defmodule AshGrant.Info do
   Resolves a scope to its read filter expression.
 
   Uses the scope's `filter` field (ignoring any `write:` option).
-  If the scope has inheritance, the parent scopes are combined with AND.
   Returns `false` for unknown scopes.
 
   For write action scope resolution, use `resolve_write_scope_filter/3` instead.
@@ -290,7 +289,7 @@ defmodule AshGrant.Info do
         end
 
       scope ->
-        resolve_scope_with_inheritance(resource, scope, context)
+        scope.filter
     end
   end
 
@@ -302,13 +301,6 @@ defmodule AshGrant.Info do
   when relationship traversal (exists/dot-paths) cannot be evaluated in-memory.
 
   Returns `false` for unknown scopes, or when `write: false` is explicitly set.
-
-  ## Resolution Order
-
-  1. If scope has `write:` set → use `write` value (`false`, `true`, or expression)
-  2. If scope has no `write:` → fall back to `scope.filter` (backward compatible)
-  3. Inheritance: parent `write:` values are resolved recursively and combined with AND
-  4. If any parent returns `false` → short-circuit to `false` (deny propagation)
 
   ## Examples
 
@@ -334,7 +326,7 @@ defmodule AshGrant.Info do
         end
 
       scope ->
-        resolve_write_scope_with_inheritance(resource, scope, context)
+        if scope.write == nil, do: scope.filter, else: scope.write
     end
   end
 
@@ -403,77 +395,5 @@ defmodule AshGrant.Info do
 
   defp resolve_with_legacy_resolver(resolver, scope, context) when is_atom(resolver) do
     resolver.resolve(scope, context)
-  end
-
-  defp resolve_scope_with_inheritance(resource, scope, context) do
-    # First, get the base filter for this scope
-    base_filter = scope.filter
-
-    # If there's inheritance, combine with parent scope(s)
-    case scope.inherits do
-      nil ->
-        base_filter
-
-      [] ->
-        base_filter
-
-      parent_names when is_list(parent_names) ->
-        parent_filters =
-          parent_names
-          |> Enum.map(&resolve_scope_filter(resource, &1, context))
-          |> Enum.reject(&(&1 == true))
-
-        case {parent_filters, base_filter} do
-          {[], filter} ->
-            filter
-
-          {filters, true} ->
-            combine_filters_with_and(filters)
-
-          {filters, filter} ->
-            combine_filters_with_and(filters ++ [filter])
-        end
-    end
-  end
-
-  defp resolve_write_scope_with_inheritance(resource, scope, context) do
-    base_filter = if scope.write == nil, do: scope.filter, else: scope.write
-
-    if base_filter == false do
-      false
-    else
-      resolve_write_parents(resource, scope.inherits, base_filter, context)
-    end
-  end
-
-  defp resolve_write_parents(_resource, nil, base_filter, _context), do: base_filter
-  defp resolve_write_parents(_resource, [], base_filter, _context), do: base_filter
-
-  defp resolve_write_parents(resource, parent_names, base_filter, context) do
-    parent_filters = Enum.map(parent_names, &resolve_write_scope_filter(resource, &1, context))
-
-    if Enum.any?(parent_filters, &(&1 == false)) do
-      false
-    else
-      merge_parent_and_base_filters(parent_filters, base_filter)
-    end
-  end
-
-  defp merge_parent_and_base_filters(parent_filters, base_filter) do
-    non_true_filters = Enum.reject(parent_filters, &(&1 == true))
-
-    case {non_true_filters, base_filter} do
-      {[], filter} -> filter
-      {filters, true} -> combine_filters_with_and(filters)
-      {filters, filter} -> combine_filters_with_and(filters ++ [filter])
-    end
-  end
-
-  defp combine_filters_with_and([single]), do: single
-
-  defp combine_filters_with_and([first | rest]) do
-    Enum.reduce(rest, first, fn filter, acc ->
-      Ash.Expr.expr(^acc and ^filter)
-    end)
   end
 end

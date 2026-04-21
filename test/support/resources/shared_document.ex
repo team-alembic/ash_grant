@@ -63,8 +63,12 @@ defmodule AshGrant.Test.SharedDocument do
 
     # Multi-tenant scopes
     scope(:tenant, expr(tenant_id == ^actor(:tenant_id)))
-    scope(:tenant_active, [:tenant], expr(status == :active))
-    scope(:tenant_own, [:tenant], expr(created_by_id == ^actor(:id)))
+    scope(:tenant_active, expr(tenant_id == ^actor(:tenant_id) and status == :active))
+
+    scope(
+      :tenant_own,
+      expr(tenant_id == ^actor(:tenant_id) and created_by_id == ^actor(:id))
+    )
 
     # Status scopes
     scope(:active, expr(status == :active))

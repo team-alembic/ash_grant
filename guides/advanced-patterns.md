@@ -96,10 +96,11 @@ end
 - `:at_own_unit` evaluates in memory against a resource-computed value —
   the caller cannot tamper with `:center_id` because the resource reads
   it off its own FK.
-- Composite scopes work cleanly:
+- Composite scopes are written directly with `and`:
 
   ```elixir
-  scope :at_own_unit_and_small, [:at_own_unit], expr(total_amount <= 100)
+  scope :at_own_unit_and_small,
+    expr(^arg(:center_id) in ^actor(:own_org_unit_ids) and total_amount <= 100)
   ```
 
 - Multi-hop is the same declaration shape:
