@@ -45,7 +45,7 @@ defmodule AshGrant.Transformers.AddDefaultPolicies do
 
   This transformer:
   - Runs **before** `Ash.Policy.Authorizer` to inject policies
-  - Uses `Spark.Dsl.Transformer.add_entity/3` to add policy entities
+  - Appends policies after user-defined ones so that user `bypass` policies take precedence
   - Sets appropriate `access_type` (`:filter` for read, `:strict` for write)
 
   ## See Also
@@ -104,7 +104,7 @@ defmodule AshGrant.Transformers.AddDefaultPolicies do
       ]
     }
 
-    {:ok, Transformer.add_entity(dsl_state, [:policies], read_policy)}
+    {:ok, Transformer.add_entity(dsl_state, [:policies], read_policy, type: :append)}
   end
 
   defp add_write_policy(dsl_state) do
@@ -122,7 +122,7 @@ defmodule AshGrant.Transformers.AddDefaultPolicies do
       ]
     }
 
-    {:ok, Transformer.add_entity(dsl_state, [:policies], write_policy)}
+    {:ok, Transformer.add_entity(dsl_state, [:policies], write_policy, type: :append)}
   end
 
   defp add_generic_action_policy(dsl_state) do
