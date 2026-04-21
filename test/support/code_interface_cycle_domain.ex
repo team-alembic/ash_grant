@@ -28,8 +28,8 @@ defmodule AshGrant.Test.CodeInterfaceCycleDomain do
 
   resources do
     resource AshGrant.Test.CodeInterfaceCyclePost do
-      define :create_code_interface_cycle_post, action: :create
-      define :read_code_interface_cycle_post, action: :read
+      define(:create_code_interface_cycle_post, action: :create)
+      define(:read_code_interface_cycle_post, action: :read)
     end
   end
 end

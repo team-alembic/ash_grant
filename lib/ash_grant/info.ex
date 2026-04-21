@@ -202,7 +202,13 @@ defmodule AshGrant.Info do
 
       domain ->
         resource_names = MapSet.new(resource_scopes, & &1.name)
-        domain_only = Enum.reject(AshGrant.Domain.Info.scopes(domain), &MapSet.member?(resource_names, &1.name))
+
+        domain_only =
+          Enum.reject(
+            AshGrant.Domain.Info.scopes(domain),
+            &MapSet.member?(resource_names, &1.name)
+          )
+
         resource_scopes ++ domain_only
     end
   end
