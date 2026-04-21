@@ -241,6 +241,34 @@ defmodule AshGrant.Info do
   end
 
   @doc """
+  Gets all `grant` declarations for a resource.
+
+  Returns an empty list if none are configured.
+  """
+  @spec grants(Ash.Resource.t()) :: [AshGrant.Dsl.Grant.t()]
+  def grants(resource) do
+    Spark.Dsl.Extension.get_entities(resource, [:ash_grant, :grants])
+  end
+
+  @doc """
+  Gets a specific grant by name.
+  """
+  @spec get_grant(Ash.Resource.t(), atom()) :: AshGrant.Dsl.Grant.t() | nil
+  def get_grant(resource, name) do
+    grants(resource)
+    |> Enum.find(&(&1.name == name))
+  end
+
+  @doc """
+  Gets all permissions from all grants on a resource as a flat list.
+  """
+  @spec permissions(Ash.Resource.t()) :: [AshGrant.Dsl.Permission.t()]
+  def permissions(resource) do
+    grants(resource)
+    |> Enum.flat_map(fn grant -> grant.permissions || [] end)
+  end
+
+  @doc """
   Gets a specific field group by name.
   """
   @spec get_field_group(Ash.Resource.t(), atom()) :: AshGrant.Dsl.FieldGroup.t() | nil

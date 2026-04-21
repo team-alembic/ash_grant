@@ -444,10 +444,182 @@ defmodule AshGrant.Dsl do
     ]
   }
 
+  @permission %Spark.Dsl.Entity{
+    name: :permission,
+    describe: """
+    Declares a single permission within a `grant`.
+
+    Positional form: `permission :name, :action, :scope`. The target resource
+    is inferred from the enclosing resource's `ash_grant` block, or supplied
+    via `on:`. Instance defaults to `:*` (RBAC) and can be set with the
+    `instance:` keyword option.
+
+    `AshGrant.Verifiers.ValidateGrantReferences` runs at compile time and
+    checks that `on` is an `Ash.Resource`, that `action` exists on it (or is
+    `:*`), and that `scope` is defined in its `ash_grant` block.
+
+    ## Examples
+
+        permission :read_all_posts, :read, :always
+        permission :update_own, :update, :own
+
+        # Cross-resource (e.g. from a domain-level grant)
+        permission :read_comments, :read, :always, on: Blog.Comment
+
+        permission :read_tickets, :read, :assigned do
+          description "Read tickets assigned to this agent"
+        end
+
+    For deny rules, pass `deny: true`:
+
+        permission :block_archived_destroy, :destroy, :archived, deny: true
+    """,
+    examples: [
+      "permission :read_all_posts, :read, :always",
+      "permission :update_own, :update, :own",
+      "permission :audit_access, :read, :always, on: Blog.Post"
+    ],
+    target: AshGrant.Dsl.Permission,
+    args: [:name, :action, :scope],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "Stable identifier for this permission within its grant."
+      ],
+      on: [
+        type: :atom,
+        required: false,
+        doc:
+          "The resource module this permission applies to. Defaults to the enclosing resource " <>
+            "when declared inside a resource's `ash_grant do` block."
+      ],
+      instance: [
+        type: {:or, [{:in, [:*]}, :atom, :string]},
+        default: :*,
+        doc:
+          "Instance id this permission targets. Defaults to `:*` (RBAC). " <>
+            "Hardcoded instance ids are rare; dynamic instance permissions should use a resolver function."
+      ],
+      action: [
+        type: :atom,
+        required: true,
+        doc: "The action this permission covers. Use `:*` for all actions."
+      ],
+      scope: [
+        type: :atom,
+        required: true,
+        doc: "Scope name defined on the target resource (e.g. `:always`, `:own`)."
+      ],
+      deny: [
+        type: :boolean,
+        default: false,
+        doc: "When `true`, the permission becomes a deny rule. Deny always wins."
+      ],
+      description: [
+        type: :string,
+        required: false,
+        doc: "Human-readable description used in docs, audits, and explain output."
+      ]
+    ]
+  }
+
+  @grant %Spark.Dsl.Entity{
+    name: :grant,
+    describe: """
+    Declares a named grant — an actor predicate paired with a set of
+    permissions. When the predicate evaluates to `true` for an actor, every
+    permission in the grant is awarded.
+
+    The predicate is an `Ash.Expr` referencing `^actor(:key)` values. It is
+    evaluated at runtime via `Ash.Expr.eval/2` with the current actor bound.
+
+    ## Examples
+
+        grant :admin, expr(^actor(:role) == :admin) do
+          description "Full access for admins"
+          permission :manage_all, :*, :always
+        end
+
+        grant :editor, expr(^actor(:role) == :editor) do
+          description "Editors publish and maintain their own posts"
+          permission :read_all, :read, :always
+          permission :update_own, :update, :own
+        end
+
+        grant :paid_user, expr(^actor(:plan) == :pro and not ^actor(:trial_expired)) do
+          permission :create_posts, :create, :always
+        end
+    """,
+    examples: [
+      """
+      grant :admin, expr(^actor(:role) == :admin) do
+        permission :manage_all, :*, :always
+      end
+      """
+    ],
+    target: AshGrant.Dsl.Grant,
+    args: [:name, :predicate],
+    schema: [
+      name: [
+        type: :atom,
+        required: true,
+        doc: "Stable identifier for this grant (e.g. `:admin`, `:editor`)."
+      ],
+      predicate: [
+        type: {:or, [:boolean, :any]},
+        required: true,
+        doc:
+          "Ash expression over the actor, e.g. `expr(^actor(:role) == :admin)`. " <>
+            "Evaluated via `Ash.Expr.eval/2` with the current actor at permission-check time."
+      ],
+      description: [
+        type: :string,
+        required: false,
+        doc: "Human-readable description of what this grant represents."
+      ]
+    ],
+    entities: [permissions: [@permission]]
+  }
+
+  @grants %Spark.Dsl.Section{
+    name: :grants,
+    top_level?: false,
+    describe: """
+    Declarative grants for permission-based authorization.
+
+    Each `grant` pairs an actor predicate with a list of named permissions.
+    AshGrant synthesizes a resolver from the declared grants at compile time,
+    so resources using `grants` do not need to provide an explicit `resolver`
+    function.
+
+    Grants are mutually exclusive with an explicit `resolver` — use one or the
+    other, not both. Use an explicit resolver when permissions need to be
+    fetched from a database or external system (e.g. runtime instance-specific
+    grants).
+    """,
+    examples: [
+      """
+      grants do
+        grant :admin, expr(^actor(:role) == :admin) do
+          permission :manage_all, :*, :always
+        end
+
+        grant :editor, expr(^actor(:role) == :editor) do
+          permission :read_all, :read, :always
+          permission :update_own, :update, :own
+        end
+      end
+      """
+    ],
+    entities: [@grant]
+  }
+
   @ash_grant %Spark.Dsl.Section{
     name: :ash_grant,
     top_level?: false,
     imports: [Ash.Expr],
+    sections: [@grants],
     describe: """
     Configuration for permission-based authorization.
 
@@ -733,6 +905,100 @@ defmodule AshGrant.Dsl.ScopeThrough do
           relationship: atom(),
           resource: module() | nil,
           actions: [atom()] | nil,
+          __spark_metadata__: map() | nil
+        }
+end
+
+defmodule AshGrant.Dsl.Permission do
+  @moduledoc """
+  Represents a single permission nested inside a `grant` in the AshGrant DSL.
+
+  Permissions are structured, compile-time-verified equivalents of permission
+  strings (`resource:instance:action:scope`). The verifier ensures that
+  `on` is a real `Ash.Resource`, `action` exists on that resource, and
+  `scope` is defined on that resource.
+
+  ## Fields
+
+  - `:name` — stable identifier for this permission within its grant
+  - `:on` — the resource module this permission applies to
+  - `:instance` — instance id to match, or `:*` for RBAC (default `:*`)
+  - `:action` — action name on the resource (or `:*`)
+  - `:scope` — scope name defined on the resource
+  - `:deny` — when `true`, the permission is a deny rule (deny wins)
+  - `:description` — human-readable description for docs/audits
+
+  ## Deny rules — known limitation
+
+  A `deny: true` permission emits the `!` prefix (e.g.
+  `"!post:*:destroy:published"`) and `AshGrant.Evaluator.has_access?/3`
+  honors deny-wins semantics when a sibling allow covers the same action
+  with a broader scope (e.g. allow `destroy:*` + deny `destroy:published`).
+
+  There is a narrower combination that does not currently behave as
+  expected: when an allow permission narrows scope to `:own` and a sibling
+  deny permission narrows scope to `:published`, `AshGrant.Check` does not
+  always surface the deny for per-record evaluation. The resolver output
+  is correct; the interaction with `Check` is the gap. If you need this
+  specific combination today, keep using the function-form `resolver`
+  escape hatch, or express the deny by omitting the allow rather than
+  layering an explicit deny on top. A follow-up PR will address the
+  Check-level evaluation.
+  """
+
+  defstruct [
+    :name,
+    :on,
+    :instance,
+    :action,
+    :scope,
+    :deny,
+    :description,
+    :__spark_metadata__
+  ]
+
+  @type t :: %__MODULE__{
+          name: atom(),
+          on: module() | nil,
+          instance: atom() | String.t() | nil,
+          action: atom(),
+          scope: atom(),
+          deny: boolean() | nil,
+          description: String.t() | nil,
+          __spark_metadata__: map() | nil
+        }
+end
+
+defmodule AshGrant.Dsl.Grant do
+  @moduledoc """
+  Represents a named grant in the AshGrant DSL.
+
+  A grant pairs an actor predicate (an `Ash.Expr`) with a set of named
+  permissions. At runtime, if the predicate evaluates to `true` for a given
+  actor, every permission in the grant is awarded.
+
+  ## Fields
+
+  - `:name` — stable identifier for the grant (e.g. `:editor`, `:admin`)
+  - `:predicate` — an `Ash.Expr` over the actor (e.g.
+    `expr(^actor(:role) == :admin)`) deciding membership
+  - `:description` — human-readable description for docs/audits
+  - `:permissions` — list of `AshGrant.Dsl.Permission` structs
+  """
+
+  defstruct [
+    :name,
+    :predicate,
+    :description,
+    :permissions,
+    :__spark_metadata__
+  ]
+
+  @type t :: %__MODULE__{
+          name: atom(),
+          predicate: boolean() | Ash.Expr.t(),
+          description: String.t() | nil,
+          permissions: [AshGrant.Dsl.Permission.t()],
           __spark_metadata__: map() | nil
         }
 end

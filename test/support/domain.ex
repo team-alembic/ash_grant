@@ -72,5 +72,9 @@ defmodule AshGrant.Test.Domain do
     # and without the optional `load_actor/1` callback)
     resource(AshGrant.Test.IdLoadablePost)
     resource(AshGrant.Test.NoLoadActorPost)
+
+    # Declarative `grants` DSL end-to-end test resource (DB-backed policies
+    # driven by the synthesized GrantsResolver)
+    resource(AshGrant.Test.GrantsPost)
   end
 end

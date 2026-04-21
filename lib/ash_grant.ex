@@ -310,6 +310,8 @@ defmodule AshGrant do
   use Spark.Dsl.Extension,
     sections: AshGrant.Dsl.sections(),
     transformers: [
+      AshGrant.Transformers.NormalizeGrants,
+      AshGrant.Transformers.SynthesizeGrantsResolver,
       AshGrant.Transformers.ValidateScopeThroughs,
       AshGrant.Transformers.ResolveFieldGroupFields,
       AshGrant.Transformers.ValidateFieldGroups,
@@ -321,7 +323,8 @@ defmodule AshGrant do
     ],
     verifiers: [
       AshGrant.Verifiers.ValidateResolverPresent,
-      AshGrant.Verifiers.ValidateScopes
+      AshGrant.Verifiers.ValidateScopes,
+      AshGrant.Verifiers.ValidateGrantReferences
     ]
 
   @doc """
