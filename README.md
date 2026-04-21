@@ -7,6 +7,7 @@ AshGrant connects three Ash-native concepts — **resources**, **actions**, and
 Permissions resolve to native Ash filters and policy checks, with deny-wins semantics.
 
 **Authorization:**
+- **Declarative `grants` DSL** — named grants pair an actor predicate (`expr(^actor(:role) == :admin)`) with a set of compile-time-verified permissions. The resolver is synthesized for you.
 - **Domain-level DSL** — shared resolver and scopes inherited by all resources in a domain
 - **Scope DSL** with `expr()` — row-level filters, `^tenant()` support
 - **Argument-based scopes** with `resolve_argument` — multi-hop authorization via action arguments populated from the resource's own relationships, with lazy loading
@@ -49,26 +50,30 @@ defmodule MyApp.Blog.Post do
     extensions: [AshGrant]
 
   ash_grant do
-    # Resolver converts actor to permission strings
-    resolver fn actor, _context ->
-      case actor do
-        %{role: :admin} -> ["post:*:*:always"]           # Full access
-        %{role: :editor} -> [
-          "post:*:read:always",                          # Read all posts
-          "post:*:create:always",                        # Create posts
-          "post:*:update:own"                         # Update own posts only
-        ]
-        %{role: :viewer} -> ["post:*:read:published"] # Read published only
-        _ -> []
-      end
-    end
-
     default_policies true  # Auto-generates read/write policies
 
-    # Scopes define row-level filters (referenced by permission strings)
+    # Scopes define row-level filters (referenced by grants below)
     scope :always, true
     scope :own, expr(author_id == ^actor(:id))
     scope :published, expr(status == :published)
+
+    # Grants pair an actor predicate with a set of compile-time-verified
+    # permissions. AshGrant synthesizes the resolver from these.
+    grants do
+      grant :admin, expr(^actor(:role) == :admin) do
+        permission :manage_all, :*, :always
+      end
+
+      grant :editor, expr(^actor(:role) == :editor) do
+        permission :read_all,   :read,   :always
+        permission :create_any, :create, :always
+        permission :update_own, :update, :own
+      end
+
+      grant :viewer, expr(^actor(:role) == :viewer) do
+        permission :read_published, :read, :published
+      end
+    end
   end
 
   # ... attributes, actions, etc.
@@ -76,10 +81,10 @@ end
 ```
 
 **How it works:**
-1. Actor (`%{role: :editor, id: "user_123"}`) is passed to the resolver
-2. Resolver returns permission strings like `"post:*:update:own"`
-3. Permission `post:*:update:own` references scope `:own`
-4. Scope `:own` adds filter `author_id == actor.id` to queries
+1. Actor (`%{role: :editor, id: "user_123"}`) matches the `:editor` grant's predicate
+2. Each permission compiles to a string like `"post:*:update:own"` and references a scope by name
+3. Compile-time verifier checks that every permission's action and scope exist on the resource
+4. Scope `:own` adds filter `author_id == actor.id` to queries, Scope `:published` filters by status
 
 ### 2. Use It
 
@@ -97,6 +102,22 @@ Ash.update!(post, %{title: "New Title"}, actor: editor)
 viewer = %{id: "user_456", role: :viewer}
 Post |> Ash.read!(actor: viewer)
 # => Returns only posts where status == :published
+```
+
+### Function-form resolver (escape hatch)
+
+The `grants` DSL covers RBAC and most ABAC cases declaratively. For runtime
+instance-specific permissions (e.g. per-row sharing fetched from a database),
+use a `resolver` function instead — it's mutually exclusive with `grants`:
+
+```elixir
+ash_grant do
+  resolver fn actor, _context ->
+    MyApp.Accounts.load_permissions(actor)  # returns list of permission strings
+  end
+
+  scope :always, true
+end
 ```
 
 ## Guides
