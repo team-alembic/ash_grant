@@ -120,29 +120,26 @@ defmodule AshGrant.DomainInheritanceTest do
     end
   end
 
-  # ── cross-boundary scope inheritance ─────────────────────
+  # ── cross-boundary scope merging ─────────────────────────
 
-  describe "cross-boundary scope inheritance" do
-    test "resource scope inherits from domain-defined parent" do
-      scope = Info.get_scope(DomainCrossInheritPost, :own_draft)
-      assert scope.inherits == [:own]
-
-      # :own must be present (merged from domain)
+  describe "cross-boundary scope merging" do
+    test "domain scopes merge into resource alongside resource-defined scopes" do
+      # :own comes from domain, :own_draft is resource-defined
       assert Info.get_scope(DomainCrossInheritPost, :own) != nil
+      assert Info.get_scope(DomainCrossInheritPost, :own_draft) != nil
     end
 
-    test "resolve_scope_filter combines parent and child" do
+    test "resolve_scope_filter returns the resource-defined combined expression" do
       filter_str =
         DomainCrossInheritPost
         |> Info.resolve_scope_filter(:own_draft, %{})
         |> inspect()
 
-      # :own (author_id) AND :own_draft (status == :draft)
       assert filter_str =~ "author_id"
       assert filter_str =~ "status"
     end
 
-    test "resolve_write_scope_filter works with domain-inherited parent" do
+    test "resolve_write_scope_filter returns the same combined expression" do
       filter_str =
         DomainCrossInheritPost
         |> Info.resolve_write_scope_filter(:own_draft, %{})
@@ -370,7 +367,7 @@ defmodule AshGrant.DomainInheritanceTest do
     end
   end
 
-  describe "e2e: cross-boundary scope inheritance" do
+  describe "e2e: cross-boundary scope merging" do
     test "own_draft scope filters by author + draft status" do
       me = Ash.UUID.generate()
       other = Ash.UUID.generate()

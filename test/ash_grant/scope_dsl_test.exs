@@ -14,9 +14,9 @@ defmodule AshGrant.ScopeDslTest do
     ash_grant do
       resolver(fn _actor, _context -> [] end)
 
-      scope(:always, [], true, description: "All records without restriction")
+      scope(:always, true, description: "All records without restriction")
 
-      scope(:published, [], expr(status == :published),
+      scope(:published, expr(status == :published),
         description: "Published posts visible to everyone"
       )
 
@@ -27,29 +27,6 @@ defmodule AshGrant.ScopeDslTest do
       uuid_primary_key(:id)
       attribute(:title, :string, public?: true)
       attribute(:status, :atom, constraints: [one_of: [:draft, :published]])
-      attribute(:author_id, :uuid)
-    end
-  end
-
-  # Test resource with inherited scope
-  defmodule TestComment do
-    use Ash.Resource,
-      domain: nil,
-      validate_domain_inclusion?: false,
-      extensions: [AshGrant]
-
-    ash_grant do
-      resolver(fn _actor, _context -> [] end)
-
-      scope(:always, true)
-      scope(:pending, expr(status == :pending))
-      scope(:always_pending, [:always], expr(status == :pending))
-    end
-
-    attributes do
-      uuid_primary_key(:id)
-      attribute(:body, :string, public?: true)
-      attribute(:status, :atom, constraints: [one_of: [:pending, :approved]])
       attribute(:author_id, :uuid)
     end
   end
@@ -71,8 +48,6 @@ defmodule AshGrant.ScopeDslTest do
 
       assert all_scope.name == :always
       assert all_scope.filter == true
-      # inherits can be nil or empty list when not specified
-      assert all_scope.inherits in [nil, []]
     end
 
     test "scope can have expression filter" do
@@ -82,16 +57,6 @@ defmodule AshGrant.ScopeDslTest do
       assert published_scope.name == :published
       assert published_scope.filter != nil
       refute published_scope.filter == true
-    end
-  end
-
-  describe "scope inheritance" do
-    test "scope can inherit from another scope" do
-      scopes = Info.scopes(TestComment)
-      always_pending_scope = Enum.find(scopes, &(&1.name == :always_pending))
-
-      assert always_pending_scope.name == :always_pending
-      assert always_pending_scope.inherits == [:always]
     end
   end
 
@@ -123,13 +88,6 @@ defmodule AshGrant.ScopeDslTest do
       filter = Info.resolve_scope_filter(TestPost, :unknown, %{})
       assert filter == false
     end
-
-    test "combines inherited scope with own filter" do
-      filter = Info.resolve_scope_filter(TestComment, :always_pending, %{})
-      # :always is true, so result should just be the pending filter
-      assert filter != nil
-      refute filter == true
-    end
   end
 
   describe "scope description" do
@@ -154,6 +112,52 @@ defmodule AshGrant.ScopeDslTest do
 
     test "Info.scope_description/2 returns nil for unknown scope" do
       assert Info.scope_description(TestPost, :unknown) == nil
+    end
+  end
+
+  describe "scope do-block form" do
+    defmodule DoBlockPost do
+      use Ash.Resource,
+        domain: nil,
+        validate_domain_inclusion?: false,
+        extensions: [AshGrant]
+
+      ash_grant do
+        resolver(fn _actor, _context -> [] end)
+
+        scope :always, true do
+          description("All records without restriction")
+        end
+
+        scope :own, expr(author_id == ^actor(:id)) do
+          description("Records owned by the current user")
+        end
+
+        scope(:no_description, expr(status == :published))
+      end
+
+      attributes do
+        uuid_primary_key(:id)
+        attribute(:status, :atom, constraints: [one_of: [:draft, :published]])
+        attribute(:author_id, :uuid)
+      end
+    end
+
+    test "description set via do-block is preserved" do
+      assert Info.get_scope(DoBlockPost, :always).description ==
+               "All records without restriction"
+
+      assert Info.get_scope(DoBlockPost, :own).description ==
+               "Records owned by the current user"
+    end
+
+    test "do-block description is optional" do
+      assert Info.get_scope(DoBlockPost, :no_description).description == nil
+    end
+
+    test "Info.scope_description/2 returns do-block description" do
+      assert Info.scope_description(DoBlockPost, :own) ==
+               "Records owned by the current user"
     end
   end
 end

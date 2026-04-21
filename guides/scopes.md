@@ -16,21 +16,32 @@ ash_grant do
   scope :own, expr(author_id == ^actor(:id))
   scope :published, expr(status == :published)
 
-  # Inherited scope - combines parent with additional filter
-  scope :own_draft, [:own], expr(status == :draft)
-  # Result: author_id == actor.id AND status == :draft
+  # Combined scope - write the combined filter directly (no inheritance)
+  scope :own_draft, expr(author_id == ^actor(:id) and status == :draft)
 end
 ```
 
-## Scope Inheritance
+Each scope is standalone. If you need a combination of conditions, write them
+directly with `and`.
 
-Scopes can inherit from parent scopes:
+## Describing Scopes
+
+Every scope can carry a human-readable `description` that shows up in
+`AshGrant.explain/4` output and introspection helpers. Provide it via a keyword
+option or inside a do-block:
 
 ```elixir
-scope :base, expr(tenant_id == ^actor(:tenant_id))
-scope :active, [:base], expr(status == :active)
-# Result: tenant_id == actor.tenant_id AND status == :active
+# Keyword form
+scope :own, expr(author_id == ^actor(:id)),
+  description: "Records owned by the current user"
+
+# Do-block form
+scope :own, expr(author_id == ^actor(:id)) do
+  description "Records owned by the current user"
+end
 ```
+
+Fetch a description via `AshGrant.Info.scope_description/2`.
 
 ## Scope Combination Rules
 
@@ -47,24 +58,20 @@ they are combined with **OR**:
 # Actor can see their own posts AND all published posts
 ```
 
-### Scope Inheritance = AND
+### Combining conditions within one scope = AND
 
-When a scope **inherits** from parent scopes, they are combined with **AND**:
+If you need multiple conditions to all hold for one scope, write them directly
+in the expression:
 
 ```elixir
-ash_grant do
-  scope :own, expr(author_id == ^actor(:id))
-  scope :draft, expr(status == :draft)
-  scope :own_draft, [:own], expr(status == :draft)
-  # Inheritance: [:own] + expr(status == :draft)
-end
+scope :own_draft, expr(author_id == ^actor(:id) and status == :draft)
 
 # :own_draft filter: (author_id == actor.id) AND (status == :draft)
 # NOT the same as having two separate permissions!
 ```
 
 > **Key difference:** Multiple permissions expand access (OR),
-> scope inheritance restricts access (AND).
+> a single combined scope restricts access (AND).
 
 ## Date-Based Scopes
 
@@ -74,8 +81,9 @@ You can use SQL fragments for temporal filtering:
 # Records created today only
 scope :today, expr(fragment("DATE(inserted_at) = CURRENT_DATE"))
 
-# Combined with ownership
-scope :own_today, [:own], expr(fragment("DATE(inserted_at) = CURRENT_DATE"))
+# Combined with ownership — inline the combined filter
+scope :own_today,
+  expr(author_id == ^actor(:id) and fragment("DATE(inserted_at) = CURRENT_DATE"))
 ```
 
 ## Multi-Tenancy Support
@@ -104,7 +112,7 @@ defmodule MyApp.Blog.Post do
     scope :always, true
     scope :same_tenant, expr(tenant_id == ^tenant())
     scope :own, expr(author_id == ^actor(:id))
-    scope :own_in_tenant, [:same_tenant], expr(author_id == ^actor(:id))
+    scope :own_in_tenant, expr(tenant_id == ^tenant() and author_id == ^actor(:id))
   end
 
   # ...
@@ -325,15 +333,16 @@ ash_grant do
 end
 ```
 
-### Multi-Tenant with Inheritance
+### Multi-Tenant combined scopes
 
-Combined scopes using inheritance:
+Write combined conditions directly in the expression:
 
 ```elixir
 ash_grant do
   scope :tenant, expr(tenant_id == ^actor(:tenant_id))
-  scope :tenant_active, [:tenant], expr(status == :active)
-  scope :tenant_own, [:tenant], expr(created_by_id == ^actor(:id))
+  scope :tenant_active, expr(tenant_id == ^actor(:tenant_id) and status == :active)
+  scope :tenant_own,
+    expr(tenant_id == ^actor(:tenant_id) and created_by_id == ^actor(:id))
 end
 ```
 

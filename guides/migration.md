@@ -4,6 +4,39 @@ This guide covers migrations away from deprecated AshGrant APIs. Each
 section explains **why** the old API is deprecated, what replaces it,
 and the mechanical steps to upgrade existing code.
 
+## Scope inheritance — removed
+
+**Removed in the next release.** Scopes no longer support `inherits`. Write the
+combined filter directly with `and`.
+
+### Why
+
+Scope inheritance added hidden coupling (a child's behaviour depended on parent
+filters that might live in a different module — e.g. the domain), and its
+interactions with `write:` and argument-based scopes were subtle. Inlining the
+expression is mechanically trivial, reads plainly, and is easier to debug in
+`AshGrant.explain/4`.
+
+### What replaces it
+
+Write each scope as a single expression. Combine with `and`:
+
+```elixir
+# Before
+scope :own, expr(author_id == ^actor(:id))
+scope :own_draft, [:own], expr(status == :draft)
+# or:
+scope :own_draft, expr(status == :draft), inherits: [:own]
+
+# After
+scope :own, expr(author_id == ^actor(:id))
+scope :own_draft, expr(author_id == ^actor(:id) and status == :draft)
+```
+
+Domain-defined scopes are still merged into resources that share the domain
+(so a resource can still reference a scope defined on the domain by name in a
+permission string). Only scope-to-scope `inherits` is gone.
+
 ## `write:` scope option → `resolve_argument`
 
 **Deprecated in 0.14.** Still compiles; emits a compile-time

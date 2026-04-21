@@ -71,7 +71,7 @@ defmodule AshGrant.Test.TenantPost do
     scope(:always, true)
     scope(:same_tenant, expr(tenant_id == ^tenant()))
     scope(:own, expr(author_id == ^actor(:id)))
-    scope(:own_in_tenant, [:same_tenant], expr(author_id == ^actor(:id)))
+    scope(:own_in_tenant, expr(tenant_id == ^tenant() and author_id == ^actor(:id)))
   end
 
   attributes do

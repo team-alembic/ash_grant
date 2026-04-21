@@ -79,7 +79,7 @@ defmodule AshGrant.PolicyTest.EdgeCasesTest do
   end
 
   describe "scope inheritance" do
-    # Post has: scope(:own_draft, [:own], expr(status == :draft))
+    # Post has: scope(:own_draft, expr(author_id == ^actor(:id) and status == :draft))
     # which inherits from :own
     test "inherited scope combines filters with AND" do
       # Editor with own_draft permission needs BOTH own AND draft

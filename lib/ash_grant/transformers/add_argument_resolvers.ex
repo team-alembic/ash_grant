@@ -69,59 +69,13 @@ defmodule AshGrant.Transformers.AddArgumentResolvers do
     |> Transformer.get_entities([:ash_grant])
     |> Enum.filter(&match?(%AshGrant.Dsl.Scope{}, &1))
     |> Enum.reduce(%{}, fn scope, acc ->
-      resolved = resolve_scope_in_dsl(dsl_state, scope)
-      args = ArgumentAnalyzer.referenced_args(resolved)
+      expr = if scope.write == nil, do: scope.filter, else: scope.write
+      args = ArgumentAnalyzer.referenced_args(expr)
 
       Enum.reduce(args, acc, fn arg, inner ->
         Map.update(inner, arg, [scope.name], &Enum.uniq([scope.name | &1]))
       end)
     end)
-  end
-
-  # Resolve a scope's filter with inheritance from the in-progress DSL state.
-  defp resolve_scope_in_dsl(dsl_state, %AshGrant.Dsl.Scope{} = scope) do
-    base = if scope.write == nil, do: scope.filter, else: scope.write
-
-    case base do
-      false ->
-        false
-
-      _ ->
-        parents = scope.inherits || []
-
-        parent_filters =
-          Enum.map(parents, fn parent_name ->
-            find_scope(dsl_state, parent_name)
-            |> case do
-              nil -> true
-              parent -> resolve_scope_in_dsl(dsl_state, parent)
-            end
-          end)
-
-        combine(parent_filters, base)
-    end
-  end
-
-  defp find_scope(dsl_state, name) do
-    dsl_state
-    |> Transformer.get_entities([:ash_grant])
-    |> Enum.find(&(match?(%AshGrant.Dsl.Scope{}, &1) and &1.name == name))
-  end
-
-  defp combine(parent_filters, base) do
-    non_true = Enum.reject(parent_filters, &(&1 == true))
-
-    case {non_true, base} do
-      {[], filter} -> filter
-      {filters, true} -> and_all(filters)
-      {filters, filter} -> and_all(filters ++ [filter])
-    end
-  end
-
-  defp and_all([single]), do: single
-
-  defp and_all([first | rest]) do
-    Enum.reduce(rest, first, fn f, acc -> Ash.Expr.expr(^acc and ^f) end)
   end
 
   defp validate_referenced_by_scope(%{name: name} = decl, arg_map, resource) do

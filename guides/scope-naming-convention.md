@@ -110,21 +110,25 @@ scope :draft_or_pending, expr(status in [:draft, :pending_review])
 
 More examples: `:cancellable` > `:scheduled_and_future`, `:archivable` > `:completed_or_expired`.
 
-### Rule 4: AND composition — `_and_` connector with scope inheritance
+### Rule 4: AND composition — `_and_` connector, combined inline
 
-When a scope requires multiple conditions to ALL be true, use scope inheritance
-and name with `_and_`:
+When a scope requires multiple conditions to ALL be true, write them directly
+with `and` and name the scope with `_and_`:
 
 ```elixir
 scope :own, expr(author_id == ^actor(:id))
-scope :own_and_draft, [:own], expr(status == :draft)
+scope :own_and_draft, expr(author_id == ^actor(:id) and status == :draft)
 # Result: author_id == actor.id AND status == :draft
 # "Actor can update post own and draft"
 ```
 
 ```elixir
 scope :at_own_unit, expr(org_unit_id in ^actor(:own_org_unit_ids))
-scope :at_own_unit_and_upcoming, [:at_own_unit], expr(status == :scheduled and start_at > now())
+scope :at_own_unit_and_upcoming,
+  expr(
+    org_unit_id in ^actor(:own_org_unit_ids) and
+      status == :scheduled and start_at > now()
+  )
 # "Actor can cancel schedule at own unit and upcoming"
 ```
 
@@ -233,7 +237,11 @@ ash_grant do
   scope :always, true
   scope :at_own_unit, expr(org_unit_id in ^actor(:own_org_unit_ids))
   scope :upcoming, expr(status == :scheduled and start_at > now())
-  scope :at_own_unit_and_upcoming, [:at_own_unit], expr(status == :scheduled and start_at > now())
+  scope :at_own_unit_and_upcoming,
+    expr(
+      org_unit_id in ^actor(:own_org_unit_ids) and
+        status == :scheduled and start_at > now()
+    )
 end
 ```
 

@@ -160,15 +160,17 @@ end
 | resolver | Yes | Yes | **Resource wins** |
 | resolver | No | Yes | Domain's resolver used |
 | scope (same name) | Yes | Yes | **Resource wins** (override) |
-| scope | No | Yes | Domain scope inherited |
+| scope | No | Yes | Domain scope is available on the resource |
 
-Resource scopes can inherit from domain-defined parent scopes:
+Domain scopes become available on resources that share the domain, alongside
+resource-defined scopes. Scope inheritance between scopes is not supported —
+write the combined expression directly:
 
 ```elixir
-# Domain defines :own scope
-# Resource adds :own_draft that inherits from domain's :own
+# Domain defines :own scope (author_id == ^actor(:id))
+# Resource adds its own combined scope
 ash_grant do
-  scope :own_draft, [:own], expr(status == :draft)
+  scope :own_draft, expr(author_id == ^actor(:id) and status == :draft)
 end
 ```
 

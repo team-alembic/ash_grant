@@ -8,7 +8,7 @@ Permissions resolve to native Ash filters and policy checks, with deny-wins sema
 
 **Authorization:**
 - **Domain-level DSL** — shared resolver and scopes inherited by all resources in a domain
-- **Scope DSL** with `expr()` — row-level filters, scope inheritance, `^tenant()` support
+- **Scope DSL** with `expr()` — row-level filters, `^tenant()` support
 - **Argument-based scopes** with `resolve_argument` — multi-hop authorization via action arguments populated from the resource's own relationships, with lazy loading
 - **Field groups** — column-level read access with inheritance and masking
 - **Instance permissions** — per-record sharing with optional scope conditions
@@ -103,7 +103,7 @@ Post |> Ash.read!(actor: viewer)
 
 - **[Getting Started](guides/getting-started.md)** — Module-based resolvers, explicit policies, domain-level DSL, resolver patterns
 - **[Permissions](guides/permissions.md)** — Permission format, wildcards, RBAC, instance permissions, instance_key, scope_through, deny-wins
-- **[Scopes](guides/scopes.md)** — Scope DSL, inheritance, combination rules, multi-tenancy, relational scopes, business examples
+- **[Scopes](guides/scopes.md)** — Scope DSL, combination rules, multi-tenancy, relational scopes, business examples
 - **[Scope Naming Convention](guides/scope-naming-convention.md)** — Predicate naming, sentence test, RBAC/ABAC patterns, AND/OR composition
 - **[Argument-Based Scope](guides/argument-based-scope.md)** — Multi-hop authorization via action arguments + resource-local lazy loading, avoids DB-query fallback
 - **[Advanced Patterns](guides/advanced-patterns.md)** — Real-world recipes combining `resolve_argument` and `scope_through` (multi-hop writes, parent-shared children, both together)

@@ -122,14 +122,19 @@ defmodule AshGrant.TemporalScopeTest do
       # Today's transactions
       scope(:today, expr(fragment("DATE(inserted_at) = CURRENT_DATE")))
 
-      # Combined: own + today (using inheritance)
-      scope(:own_today, [:own], expr(fragment("DATE(inserted_at) = CURRENT_DATE")))
+      # Combined: own + today
+      scope(
+        :own_today,
+        expr(user_id == ^actor(:id) and fragment("DATE(inserted_at) = CURRENT_DATE"))
+      )
 
       # Own transactions from this week
       scope(
         :own_this_week,
-        [:own],
-        expr(fragment("inserted_at >= DATE_TRUNC('week', CURRENT_DATE)"))
+        expr(
+          user_id == ^actor(:id) and
+            fragment("inserted_at >= DATE_TRUNC('week', CURRENT_DATE)")
+        )
       )
     end
 
@@ -190,7 +195,7 @@ defmodule AshGrant.TemporalScopeTest do
   end
 
   describe "combined temporal + ownership scopes" do
-    test "defines combined scopes with inheritance" do
+    test "defines combined scopes" do
       scopes = Info.scopes(Transaction)
       scope_names = Enum.map(scopes, & &1.name)
 
@@ -200,20 +205,7 @@ defmodule AshGrant.TemporalScopeTest do
       assert :own_this_week in scope_names
     end
 
-    test "own_today inherits from own" do
-      scope = Info.get_scope(Transaction, :own_today)
-
-      assert scope.inherits == [:own]
-      refute scope.filter == true
-    end
-
-    test "own_this_week inherits from own" do
-      scope = Info.get_scope(Transaction, :own_this_week)
-
-      assert scope.inherits == [:own]
-    end
-
-    test "resolve_scope_filter combines inherited scope" do
+    test "resolve_scope_filter returns the combined expression" do
       filter = Info.resolve_scope_filter(Transaction, :own_today, %{})
 
       # Should return a filter (not true or false)
