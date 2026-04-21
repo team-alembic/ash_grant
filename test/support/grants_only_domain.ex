@@ -22,13 +22,13 @@ defmodule AshGrant.Test.GrantsOnlyDomain do
     grants do
       grant :admin, expr(^actor(:role) == :admin) do
         description("Full administrative access across the domain")
-        permission(:manage_main, :*, :always, on: AshGrant.Test.GrantsDomainPost)
-        permission(:manage_other, :*, :always, on: AshGrant.Test.GrantsDomainOther)
+        permission(:manage_main, AshGrant.Test.GrantsDomainPost, :*, :always)
+        permission(:manage_other, AshGrant.Test.GrantsDomainOther, :*, :always)
       end
 
       grant :viewer, expr(^actor(:role) == :viewer) do
         description("Viewers see published posts")
-        permission(:read_published, :read, :published, on: AshGrant.Test.GrantsDomainPost)
+        permission(:read_published, AshGrant.Test.GrantsDomainPost, :read, :published)
       end
     end
   end

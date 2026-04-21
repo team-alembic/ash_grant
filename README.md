@@ -137,8 +137,8 @@ defmodule MyApp.Blog do
 
     grants do
       grant :admin, expr(^actor(:role) == :admin) do
-        permission :manage_posts,    :*, :always, on: MyApp.Blog.Post
-        permission :manage_comments, :*, :always, on: MyApp.Blog.Comment
+        permission :manage_posts,    MyApp.Blog.Post,    :*, :always
+        permission :manage_comments, MyApp.Blog.Comment, :*, :always
       end
     end
   end
@@ -152,7 +152,9 @@ end
 
 Resources and domains can both declare grants — they merge, with the
 resource winning on grant-name conflicts. A domain grant's permissions must
-specify `on:` (there's no enclosing resource to default from).
+name their target — either as the second positional argument (shown above)
+or via the `on:` keyword option — since there's no enclosing resource to
+default from.
 
 ## Guides
 

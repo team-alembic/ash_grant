@@ -256,6 +256,12 @@ defmodule AshGrant.Info do
     merge_domain_grants(resource, resource_grants)
   end
 
+  # Note: `MapSet.new(resource_grants ++ domain_grants)` would not work —
+  # it dedupes by *struct equality*, so a resource `:admin` grant and a
+  # domain `:admin` grant (with different predicates) would both survive.
+  # `Enum.uniq_by/2` with a key function is the right primitive: it keeps
+  # the first occurrence per key, so resource grants (placed first) win on
+  # name conflicts.
   @spec merge_domain_grants(
           resource :: Ash.Resource.t(),
           resource_grants :: [AshGrant.Dsl.Grant.t()]
@@ -266,15 +272,7 @@ defmodule AshGrant.Info do
         resource_grants
 
       domain ->
-        resource_names = MapSet.new(resource_grants, & &1.name)
-
-        domain_only =
-          Enum.reject(
-            AshGrant.Domain.Info.grants(domain),
-            &MapSet.member?(resource_names, &1.name)
-          )
-
-        resource_grants ++ domain_only
+        Enum.uniq_by(resource_grants ++ AshGrant.Domain.Info.grants(domain), & &1.name)
     end
   end
 

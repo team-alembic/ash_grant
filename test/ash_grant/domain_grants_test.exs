@@ -230,7 +230,7 @@ defmodule AshGrant.DomainGrantsTest do
 
             grants do
               grant :noop, expr(^actor(:role) == :admin) do
-                permission(:noop, :read, :always, on: AshGrant.Test.GrantsDomainPost)
+                permission(:noop, AshGrant.Test.GrantsDomainPost, :read, :always)
               end
             end
           end
@@ -246,28 +246,31 @@ defmodule AshGrant.DomainGrantsTest do
     # compile warnings rather than raising, so `assert_raise` wouldn't catch
     # them — `capture_io(:stderr, ...)` observes the warning message instead.
 
-    test "warns when a domain permission is missing `on:`" do
-      warnings =
-        capture_io(:stderr, fn ->
-          defmodule MissingOnDomain do
-            use Ash.Domain,
-              extensions: [AshGrant.Domain],
-              validate_config_inclusion?: false
+    test "requires the target resource positionally — cannot be omitted" do
+      # At the domain level, the target is a *required* second positional
+      # argument, not a keyword. Calling `permission/3` instead of
+      # `permission/4` isn't a valid macro — Elixir raises `CompileError`
+      # with "undefined function permission/3" before Spark ever runs. That
+      # is exactly the feedback we want: a hard compile error surfaced at
+      # the call site.
+      assert_raise CompileError, fn ->
+        defmodule MissingOnDomain do
+          use Ash.Domain,
+            extensions: [AshGrant.Domain],
+            validate_config_inclusion?: false
 
-            ash_grant do
-              grants do
-                grant :bad, expr(^actor(:role) == :admin) do
-                  permission(:no_target, :read, :always)
-                end
+          ash_grant do
+            grants do
+              grant :bad, expr(^actor(:role) == :admin) do
+                permission(:no_target, :read, :always)
               end
             end
-
-            resources do
-            end
           end
-        end)
 
-      assert warnings =~ "`on:` is required"
+          resources do
+          end
+        end
+      end
     end
 
     test "warns on unknown action on the target resource" do
@@ -281,7 +284,7 @@ defmodule AshGrant.DomainGrantsTest do
             ash_grant do
               grants do
                 grant :bad, expr(^actor(:role) == :admin) do
-                  permission(:bad, :bogus, :always, on: AshGrant.Test.GrantsDomainPost)
+                  permission(:bad, AshGrant.Test.GrantsDomainPost, :bogus, :always)
                 end
               end
             end
@@ -305,7 +308,7 @@ defmodule AshGrant.DomainGrantsTest do
             ash_grant do
               grants do
                 grant :bad, expr(^actor(:role) == :admin) do
-                  permission(:bad, :read, :undefined, on: AshGrant.Test.GrantsDomainPost)
+                  permission(:bad, AshGrant.Test.GrantsDomainPost, :read, :undefined)
                 end
               end
             end
@@ -318,7 +321,7 @@ defmodule AshGrant.DomainGrantsTest do
       assert warnings =~ "`scope: :undefined` is not defined"
     end
 
-    test "warns when `on:` is not an Ash.Resource" do
+    test "warns when target is not an Ash.Resource" do
       warnings =
         capture_io(:stderr, fn ->
           defmodule NonResourceDomain do
@@ -329,7 +332,7 @@ defmodule AshGrant.DomainGrantsTest do
             ash_grant do
               grants do
                 grant :bad, expr(^actor(:role) == :admin) do
-                  permission(:bad, :read, :always, on: String)
+                  permission(:bad, String, :read, :always)
                 end
               end
             end
