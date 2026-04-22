@@ -680,7 +680,13 @@ defmodule AshGrant.Introspect do
     if actor == nil do
       []
     else
-      context = Keyword.get(opts, :context, %{})
+      # The synthesized `GrantsResolver` dispatches on `context.resource` to
+      # pick which grants to evaluate, so the resource must be in context.
+      # User-authored resolvers that ignore context aren't harmed by it.
+      context =
+        opts
+        |> Keyword.get(:context, %{})
+        |> Map.put(:resource, resource)
 
       case Info.resolver(resource) do
         nil ->
