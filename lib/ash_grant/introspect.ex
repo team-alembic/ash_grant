@@ -680,26 +680,11 @@ defmodule AshGrant.Introspect do
     if actor == nil do
       []
     else
-      # The synthesized `GrantsResolver` dispatches on `context.resource` to
-      # pick which grants to evaluate, so the resource must be in context.
-      # User-authored resolvers that ignore context aren't harmed by it.
-      context =
-        opts
-        |> Keyword.get(:context, %{})
-        |> Map.put(:resource, resource)
+      base_context = Keyword.get(opts, :context, %{})
 
-      case Info.resolver(resource) do
-        nil ->
-          []
-
-        resolver when is_function(resolver, 2) ->
-          (resolver.(actor, context) || [])
-          |> normalize_to_strings()
-
-        resolver when is_atom(resolver) ->
-          (resolver.resolve(actor, context) || [])
-          |> normalize_to_strings()
-      end
+      resource
+      |> Info.resolve_permissions(actor, base_context)
+      |> normalize_to_strings()
     end
   end
 

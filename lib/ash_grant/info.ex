@@ -88,6 +88,34 @@ defmodule AshGrant.Info do
   end
 
   @doc """
+  Calls the configured resolver for `resource` with `actor` and a context
+  map that always includes `:resource`.
+
+  The synthesized `GrantsResolver` dispatches on `context.resource` to pick
+  which grants to evaluate; omitting it produces a silent empty list.
+  User-authored resolvers that ignore context are unaffected. Every call
+  site that invokes `resolver.resolve(actor, _)` outside the core
+  authorization path (which already carries `:resource` through
+  `Ash.Policy`) should route through this helper.
+
+  Returns the raw permissions list the resolver produces (empty list if no
+  resolver is configured). Callers are responsible for normalizing entries
+  into strings / `Permission` structs / `PermissionInput` structs as
+  needed.
+  """
+  @spec resolve_permissions(resource :: Ash.Resource.t(), actor :: term(), base_context :: map()) ::
+          [term()]
+  def resolve_permissions(resource, actor, base_context \\ %{}) do
+    context = Map.put(base_context, :resource, resource)
+
+    case resolver(resource) do
+      nil -> []
+      fun when is_function(fun, 2) -> fun.(actor, context) || []
+      mod when is_atom(mod) -> mod.resolve(actor, context) || []
+    end
+  end
+
+  @doc """
   Gets the scope resolver for a resource.
 
   DEPRECATED: Use inline `scope` entities instead.
