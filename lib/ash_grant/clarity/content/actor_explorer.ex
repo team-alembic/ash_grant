@@ -62,7 +62,12 @@ with {:module, _} <- Code.ensure_loaded(Clarity),
       else
         resource_key = Info.resource_name(resource)
         actions = Ash.Resource.Info.actions(resource)
-        resolver = Info.resolver(resource)
+        # `Info.resolver/1` returns the synthesized `GrantsResolver` whenever
+        # grants are declared, which doesn't and can't know how to load an
+        # actor — that's a project-specific concern. The project's own
+        # resolver (the one they declared with `resolver MyApp.X`) is
+        # reachable via `raw_resolver/1` and is where `load_actor/1` lives.
+        resolver = Info.raw_resolver(resource) || Info.resolver(resource)
 
         {:ok,
          socket
