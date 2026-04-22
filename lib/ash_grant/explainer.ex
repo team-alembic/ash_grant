@@ -221,6 +221,12 @@ defmodule AshGrant.Explainer do
   # Private functions
 
   defp get_permissions(resource, actor, context) do
+    # The synthesized `GrantsResolver` dispatches on `context.resource` to
+    # pick which grants to evaluate — without it, it returns `[]` and the
+    # explanation concludes `no_matching_permissions` even when
+    # `actor_permissions` shows the action as allowed.
+    context = Map.put(context, :resource, resource)
+
     case Info.resolver(resource) do
       nil ->
         []
