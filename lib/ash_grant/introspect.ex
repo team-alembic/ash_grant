@@ -269,7 +269,11 @@ defmodule AshGrant.Introspect do
   end
 
   defp load_actor_for(resource, actor_id) do
-    case Info.resolver(resource) do
+    # Prefer the user-declared resolver. `Info.resolver/1` returns the
+    # synthesized `GrantsResolver` when grants are declared — which is
+    # generic and can't know how to load an app-specific actor. The
+    # project's own resolver module is reachable via `raw_resolver/1`.
+    case Info.raw_resolver(resource) || Info.resolver(resource) do
       resolver when is_atom(resolver) and not is_nil(resolver) ->
         Code.ensure_loaded(resolver)
 
