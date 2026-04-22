@@ -41,13 +41,38 @@ defmodule AshGrant.Info do
   @doc """
   Gets the permission resolver for a resource.
 
-  Falls back to the resolver on the resource's domain (if the domain uses the
-  `AshGrant.Domain` extension) when the resource does not define its own.
-  Merging at runtime avoids a compile-time cycle between resource and domain
-  that occurs when the domain also has `code_interface` declarations.
+  Computed at read time (no transformer writes into the `:resolver` option):
+
+  * If the resource (or its domain) declares any `grants`, returns
+    `AshGrant.GrantsResolver`. That resolver evaluates declared grants and
+    **also** calls any user-provided resolver (on the resource or the
+    domain) and concatenates the two lists — so `grants` and `resolver`
+    combine rather than shadow each other.
+
+  * Otherwise falls back to the user's explicit `:resolver` (resource
+    first, then domain). Reading the domain at runtime avoids a
+    compile-time cycle that occurs when the domain declares
+    `code_interface` entries targeting the resource.
   """
   @spec resolver(resource :: Ash.Resource.t()) :: module() | function() | nil
   def resolver(resource) do
+    if grants(resource) != [] do
+      AshGrant.GrantsResolver
+    else
+      raw_resolver(resource)
+    end
+  end
+
+  @doc """
+  Returns the user-declared resolver (resource first, domain fallback),
+  bypassing the `GrantsResolver` synthesis.
+
+  Internal to `AshGrant.GrantsResolver` — callers outside the extension
+  should use `resolver/1` instead. Exposed publicly so the synthesized
+  resolver can reach it without importing private functions.
+  """
+  @spec raw_resolver(resource :: Ash.Resource.t()) :: module() | function() | nil
+  def raw_resolver(resource) do
     case Spark.Dsl.Extension.get_opt(resource, [:ash_grant], :resolver) do
       nil -> domain_resolver(resource)
       resolver -> resolver

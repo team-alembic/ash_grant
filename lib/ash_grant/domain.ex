@@ -46,23 +46,26 @@ defmodule AshGrant.Domain do
   | grants (same name) | Yes | Yes | Resource wins (override) |
   | grants | No | Yes | Domain grants used |
 
-  ### Interaction with an explicit `resolver`
+  ### `grants` and `resolver` are additive, not mutually exclusive
 
-  Declaring `grants` on the domain and an explicit `resolver` on the *same*
-  domain is a compile error — grants synthesize the resolver, so they are
-  mutually exclusive at a given level.
+  You can declare both `grants` and an explicit `resolver` on the same
+  resource *and* the same domain. At runtime the synthesized
+  `AshGrant.GrantsResolver`:
 
-  A resource that defines its own `resolver` fully overrides the domain's
-  resolver, which means domain-level `grants` will **not** run for that
-  resource. Remove the resource resolver (or switch to a resource `grants`
-  block) if you want domain grants to apply.
+  1. Evaluates declared grants (resource + domain merged) and emits
+     permission strings for every matching grant.
+  2. Calls the user-declared resolver (resource first, domain fallback)
+     and concatenates *its* permission strings onto the list.
+  3. The combined list flows through `AshGrant.Evaluator.has_access?/3`
+     exactly as before — deny from either source still wins.
+
+  This lets grants handle the static RBAC + ABAC while a resolver covers
+  dynamic per-row permissions (e.g. DB-backed sharing). Pair them freely.
   """
 
   use Spark.Dsl.Extension,
     sections: AshGrant.Domain.Dsl.sections(),
-    transformers: [
-      AshGrant.Domain.Transformers.SynthesizeGrantsResolver
-    ],
+    transformers: [],
     verifiers: [
       AshGrant.Domain.Verifiers.ValidateGrantReferences
     ]

@@ -56,8 +56,14 @@ defmodule AshGrant.DomainGrantsTest do
       assert names == [:manage_main, :manage_other, :read_published]
     end
 
-    test "domain synthesizes the GrantsResolver when it declares grants" do
-      assert AshGrant.Domain.Info.resolver(GrantsOnlyDomain) == AshGrant.GrantsResolver
+    test "resources in a grants-only domain route through GrantsResolver" do
+      # `AshGrant.Domain.Info.resolver/1` returns the **user-declared**
+      # resolver (nil here — the domain only declares grants). The
+      # synthesis happens in `AshGrant.Info.resolver/1` at read time: any
+      # resource in the domain returns `GrantsResolver` because the
+      # domain's grants merge into the resource's grant list.
+      assert AshGrant.Domain.Info.resolver(GrantsOnlyDomain) == nil
+      assert Info.resolver(GrantsDomainPost) == AshGrant.GrantsResolver
     end
   end
 
@@ -197,50 +203,65 @@ defmodule AshGrant.DomainGrantsTest do
     end
   end
 
-  describe "resource with a custom resolver shadows domain grants" do
-    test "resource's explicit resolver is used, not GrantsResolver" do
-      resolver = Info.resolver(GrantsDomainResolverPost)
-      refute resolver == AshGrant.GrantsResolver
-      assert is_function(resolver, 2)
+  describe "resource with a custom resolver AND a grants-bearing domain" do
+    # Previous semantics shadowed the domain's grants when the resource
+    # declared its own resolver. With grants + resolver now merging, the
+    # domain grants apply *on top of* the resource's custom resolver.
+
+    test "Info.resolver/1 routes through GrantsResolver because the domain has grants" do
+      # Even though the resource declares its own `resolver`, grants exist
+      # somewhere in the chain (the domain) so we route through
+      # `GrantsResolver`, which in turn calls the custom resolver.
+      assert Info.resolver(GrantsDomainResolverPost) == AshGrant.GrantsResolver
     end
 
-    test "domain :admin grant does NOT apply (resource resolver returns [] for admin actor)" do
-      resolver = Info.resolver(GrantsDomainResolverPost)
-      assert resolver.(admin(), %{resource: GrantsDomainResolverPost}) == []
+    test "admin actor: domain :admin grant fires AND resource resolver returns []" do
+      perms =
+        AshGrant.GrantsResolver.resolve(admin(), %{resource: GrantsDomainResolverPost})
+
+      # Domain's :admin grant emits permissions for GrantsDomainPost /
+      # GrantsDomainOther (not this resource) — the merged list carries
+      # those strings through, and the resource resolver contributes nothing.
+      assert "grants_domain_post:*:*:always" in perms
+      assert "grants_domain_other:*:*:always" in perms
     end
 
-    test "resource's custom resolver still runs for its own recognised actor" do
-      resolver = Info.resolver(GrantsDomainResolverPost)
+    test "custom-resolver actor: no grant matches, user resolver still fires" do
+      perms =
+        AshGrant.GrantsResolver.resolve(%{role: :custom_resolver_actor}, %{
+          resource: GrantsDomainResolverPost
+        })
 
-      assert resolver.(%{role: :custom_resolver_actor}, %{resource: GrantsDomainResolverPost}) ==
-               [
-                 "grants_domain_resolver_post:*:*:always"
-               ]
+      assert "grants_domain_resolver_post:*:*:always" in perms
     end
   end
 
   describe "compile-time verification" do
-    test "rejects declaring both grants and explicit resolver on the same domain" do
-      assert_raise Spark.Error.DslError, ~r/both `grants` and `resolver`/s, fn ->
-        defmodule DualDomain do
-          use Ash.Domain,
-            extensions: [AshGrant.Domain],
-            validate_config_inclusion?: false
+    test "accepts both grants and an explicit resolver on the same domain — outputs merge" do
+      # No longer a compile error. The merge runs at
+      # `AshGrant.GrantsResolver.resolve/2`.
+      defmodule DualDomain do
+        use Ash.Domain,
+          extensions: [AshGrant.Domain],
+          validate_config_inclusion?: false
 
-          ash_grant do
-            resolver(fn _actor, _context -> [] end)
+        ash_grant do
+          resolver(fn _actor, _context -> ["grants_domain_post:*:read:"] end)
 
-            grants do
-              grant :noop, expr(^actor(:role) == :admin) do
-                permission(:noop, AshGrant.Test.GrantsDomainPost, :read, :always)
-              end
+          grants do
+            grant :admin, expr(^actor(:role) == :admin) do
+              permission(:admin_all, AshGrant.Test.GrantsDomainPost, :*, :always)
             end
           end
+        end
 
-          resources do
-          end
+        resources do
         end
       end
+
+      assert AshGrant.Domain.Info.resolver(DualDomain) != nil
+      grants = AshGrant.Domain.Info.grants(DualDomain)
+      assert length(grants) == 1
     end
 
     # The four cases below are handled by the domain-level
