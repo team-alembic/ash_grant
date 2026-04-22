@@ -449,19 +449,28 @@ defmodule AshGrant.Dsl do
     describe: """
     Declares a single permission within a `grant`.
 
-    Positional form: `permission :name, :action, :scope`. The target resource
-    is inferred from the enclosing resource's `ash_grant` block, or supplied
-    via `on:`. Instance defaults to `:*` (RBAC) and can be set with the
-    `instance:` keyword option.
+    Positional form: `permission :name, :action, :scope`. The `:scope`
+    argument is optional — omit it for an unrestricted grant that applies
+    to every row (equivalent to declaring `scope :always, true` and passing
+    `:always`):
+
+        permission :read_all_posts, :read           # unrestricted read
+        permission :update_own,    :update, :own   # row-level filter
+
+    The target resource is inferred from the enclosing resource's
+    `ash_grant` block, or supplied via `on:`. Instance defaults to `:*`
+    (RBAC) and can be set with the `instance:` keyword option.
 
     `AshGrant.Verifiers.ValidateGrantReferences` runs at compile time and
     checks that `on` is an `Ash.Resource`, that `action` exists on it (or is
-    `:*`), and that `scope` is defined in its `ash_grant` block.
+    `:*`), and — when a scope is given — that it is defined in the target
+    resource's `ash_grant` block. A permission without a scope skips the
+    scope check entirely.
 
     ## Examples
 
-        permission :read_all_posts, :read, :always
-        permission :update_own, :update, :own
+        permission :read_all_posts, :read            # no scope — unrestricted
+        permission :update_own,     :update, :own
 
         # Cross-resource (from inside a resource's grants block)
         permission :read_comments, :read, :always, on: Blog.Comment
@@ -478,19 +487,21 @@ defmodule AshGrant.Dsl do
 
     When declared at the domain level (inside `AshGrant.Domain`'s
     `grants do ... end`), the target resource is instead a **required second
-    positional argument** — there is no enclosing resource to default from:
+    positional argument** — there is no enclosing resource to default from.
+    `:scope` is optional at the domain level too:
 
-        permission :manage_posts, MyApp.Blog.Post, :*, :always
+        permission :manage_posts, MyApp.Blog.Post, :*              # unrestricted
+        permission :manage_posts, MyApp.Blog.Post, :*, :always     # explicit
 
     See `AshGrant.Dsl.DomainPermission` for the domain-level entity.
     """,
     examples: [
-      "permission :read_all_posts, :read, :always",
+      "permission :read_all_posts, :read",
       "permission :update_own, :update, :own",
       "permission :audit_access, :read, :always, on: Blog.Post"
     ],
     target: AshGrant.Dsl.Permission,
-    args: [:name, :action, :scope],
+    args: [:name, :action, {:optional, :scope, nil}],
     schema: [
       name: [
         type: :atom,
@@ -519,8 +530,12 @@ defmodule AshGrant.Dsl do
       ],
       scope: [
         type: :atom,
-        required: true,
-        doc: "Scope name defined on the target resource (e.g. `:always`, `:own`)."
+        required: false,
+        default: nil,
+        doc:
+          "Scope name defined on the target resource (e.g. `:always`, `:own`). " <>
+            "Optional — omitting it is equivalent to `:always`: the permission grants " <>
+            "unrestricted access with no row filter."
       ],
       deny: [
         type: :boolean,
@@ -543,12 +558,14 @@ defmodule AshGrant.Dsl do
     Positional form: `permission :name, TargetResource, :action, :scope`.
     Because a domain has no enclosing resource, the target is a required
     second positional argument (rather than the `on:` keyword used at the
-    resource level). `:instance` is a keyword option and defaults to `:*`
-    (RBAC).
+    resource level). `:scope` is optional — omit it for an unrestricted
+    grant (equivalent to `:always`). `:instance` is a keyword option and
+    defaults to `:*` (RBAC).
 
     ## Examples
 
-        permission :manage_posts, MyApp.Blog.Post, :*, :always
+        permission :manage_posts, MyApp.Blog.Post, :*                 # unrestricted
+        permission :manage_posts, MyApp.Blog.Post, :*, :always        # explicit :always
 
         permission :read_comments, MyApp.Blog.Comment, :read, :always do
           description "Read every comment in the domain"
@@ -564,11 +581,12 @@ defmodule AshGrant.Dsl do
           deny: true
     """,
     examples: [
+      "permission :manage_posts, MyApp.Blog.Post, :*",
       "permission :manage_posts, MyApp.Blog.Post, :*, :always",
       "permission :audit_access, MyApp.Blog.Post, :read, :always"
     ],
     target: AshGrant.Dsl.Permission,
-    args: [:name, :on, :action, :scope],
+    args: [:name, :on, :action, {:optional, :scope, nil}],
     schema: [
       name: [
         type: :atom,
@@ -596,8 +614,12 @@ defmodule AshGrant.Dsl do
       ],
       scope: [
         type: :atom,
-        required: true,
-        doc: "Scope name defined on the target resource (or inherited from its domain)."
+        required: false,
+        default: nil,
+        doc:
+          "Scope name defined on the target resource (or inherited from its domain). " <>
+            "Optional — omitting it is equivalent to `:always`: the permission grants " <>
+            "unrestricted access with no row filter."
       ],
       deny: [
         type: :boolean,

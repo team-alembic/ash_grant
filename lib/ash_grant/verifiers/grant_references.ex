@@ -64,6 +64,18 @@ defmodule AshGrant.Verifiers.GrantReferences do
       target == caller_module ->
         :ok
 
+      not looks_like_module?(target) ->
+        # Plain atom like `:read` (not a module alias) — almost always a
+        # typo or a forgotten positional argument. Keeping this as a soft
+        # pass-through would let the error silently surface at runtime.
+        dsl_error(
+          caller_module,
+          path,
+          "`on: #{inspect(target)}` is not a module. Did you forget the target " <>
+            "resource as the second positional argument? Expected form: " <>
+            "`permission :name, TargetResource, :action, :scope`."
+        )
+
       not Code.ensure_loaded?(target) ->
         case Code.ensure_compiled(target) do
           {:module, _} -> ensure_resource(target, caller_module, path)
@@ -72,6 +84,16 @@ defmodule AshGrant.Verifiers.GrantReferences do
 
       true ->
         ensure_resource(target, caller_module, path)
+    end
+  end
+
+  # Elixir module aliases compile to atoms prefixed with `"Elixir."`
+  # (e.g. `MyApp.Blog.Post` -> `:"Elixir.MyApp.Blog.Post"`). Plain atoms
+  # like `:read` don't have that prefix and are never resources.
+  defp looks_like_module?(atom) when is_atom(atom) do
+    case Atom.to_string(atom) do
+      "Elixir." <> _ -> true
+      _ -> false
     end
   end
 
@@ -125,6 +147,11 @@ defmodule AshGrant.Verifiers.GrantReferences do
       )
     end
   end
+
+  # `scope` is optional on a permission — a nil scope means "no row filter"
+  # (equivalent to `:always`). Skip reference validation entirely in that
+  # case; there's nothing to look up.
+  defp validate_scope_reference(%{scope: nil}, _caller_module, _path, _local_scopes), do: :ok
 
   defp validate_scope_reference(
          %{on: target, scope: scope},

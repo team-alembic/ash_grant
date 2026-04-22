@@ -248,31 +248,33 @@ defmodule AshGrant.DomainGrantsTest do
     # compile warnings rather than raising, so `assert_raise` wouldn't catch
     # them — `capture_io(:stderr, ...)` observes the warning message instead.
 
-    test "requires the target resource positionally — cannot be omitted" do
-      # At the domain level, the target is a *required* second positional
-      # argument, not a keyword. Calling `permission/3` instead of
-      # `permission/4` isn't a valid macro — Elixir raises `CompileError`
-      # with "undefined function permission/3" before Spark ever runs. That
-      # is exactly the feedback we want: a hard compile error surfaced at
-      # the call site.
-      assert_raise CompileError, fn ->
-        defmodule MissingOnDomain do
-          use Ash.Domain,
-            extensions: [AshGrant.Domain],
-            validate_config_inclusion?: false
+    test "warns when the target resource is omitted and arity shifts to non-module `:on`" do
+      # With optional `:scope`, a 3-arg call `permission(:name, :read, :always)`
+      # is accepted by the macro — `on` silently binds to the plain atom
+      # `:read`. The verifier catches that case by rejecting non-module
+      # atoms with a pointed "did you forget the target?" message.
+      warnings =
+        capture_io(:stderr, fn ->
+          defmodule MissingOnDomain do
+            use Ash.Domain,
+              extensions: [AshGrant.Domain],
+              validate_config_inclusion?: false
 
-          ash_grant do
-            grants do
-              grant :bad, expr(^actor(:role) == :admin) do
-                permission(:no_target, :read, :always)
+            ash_grant do
+              grants do
+                grant :bad, expr(^actor(:role) == :admin) do
+                  permission(:no_target, :read, :always)
+                end
               end
             end
-          end
 
-          resources do
+            resources do
+            end
           end
-        end
-      end
+        end)
+
+      assert warnings =~ "is not a module"
+      assert warnings =~ "forget the target"
     end
 
     test "warns on unknown action on the target resource" do

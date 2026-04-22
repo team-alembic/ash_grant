@@ -97,6 +97,10 @@ defmodule AshGrant.GrantsResolver do
       stringify(permission.scope)
   end
 
+  # `nil` scope = permission declared without a scope. Emit it as an empty
+  # trailing segment so the 4-part parser round-trips it to `scope: nil`
+  # (see `AshGrant.Permission.parse/1` and `normalize_scope/1`).
+  defp stringify(nil), do: ""
   defp stringify(:*), do: "*"
   defp stringify(value) when is_atom(value), do: Atom.to_string(value)
   defp stringify(value) when is_binary(value), do: value

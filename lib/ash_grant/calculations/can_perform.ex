@@ -178,7 +178,9 @@ defmodule AshGrant.Calculation.CanPerform do
   end
 
   defp build_rbac_expression(scopes, scope_resolver, resource) do
-    if "always" in scopes or "all" in scopes or "global" in scopes do
+    # `nil` scope = permission declared without a scope = unrestricted, same
+    # as `"always"` / `"all"` / `"global"`. Kept in sync with `FilterCheck`.
+    if nil in scopes or "always" in scopes or "all" in scopes or "global" in scopes do
       true
     else
       build_rbac_filter(scopes, scope_resolver, resource)

@@ -270,8 +270,11 @@ defmodule AshGrant.FilterCheck do
          scope_resolver,
          context
        ) do
-    # Check for global access from RBAC
-    has_global_access = "always" in scopes or "all" in scopes or "global" in scopes
+    # Check for global access from RBAC. `nil` represents a permission
+    # declared without a scope — it means "no row filter" (same as the
+    # `Check` write path, which treats nil scope as `true`).
+    has_global_access =
+      nil in scopes or "always" in scopes or "all" in scopes or "global" in scopes
 
     if has_global_access do
       true

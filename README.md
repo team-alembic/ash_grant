@@ -52,22 +52,21 @@ defmodule MyApp.Blog.Post do
   ash_grant do
     default_policies true  # Auto-generates read/write policies
 
-    # Scopes define row-level filters (referenced by grants below)
-    scope :always, true
-    scope :own, expr(author_id == ^actor(:id))
+    # Row-level filters — only declare the ones your grants actually reference.
+    scope :own,       expr(author_id == ^actor(:id))
     scope :published, expr(status == :published)
 
     # Grants pair an actor predicate with a set of compile-time-verified
     # permissions. AshGrant synthesizes the resolver from these.
     grants do
       grant :admin, expr(^actor(:role) == :admin) do
-        permission :manage_all, :*, :always
+        permission :manage_all, :*                # no scope = unrestricted
       end
 
       grant :editor, expr(^actor(:role) == :editor) do
-        permission :read_all,   :read,   :always
-        permission :create_any, :create, :always
-        permission :update_own, :update, :own
+        permission :read_all,   :read             # unrestricted read
+        permission :create_any, :create           # unrestricted create
+        permission :update_own, :update, :own     # row-level filter
       end
 
       grant :viewer, expr(^actor(:role) == :viewer) do
@@ -82,9 +81,9 @@ end
 
 **How it works:**
 1. Actor (`%{role: :editor, id: "user_123"}`) matches the `:editor` grant's predicate
-2. Each permission compiles to a string like `"post:*:update:own"` and references a scope by name
-3. Compile-time verifier checks that every permission's action and scope exist on the resource
-4. Scope `:own` adds filter `author_id == actor.id` to queries, Scope `:published` filters by status
+2. Each permission compiles to a string like `"post:*:update:own"` referencing a scope, or `"post:*:read:"` (no scope) for unrestricted access
+3. Compile-time verifier checks every permission's action exists and — when a scope is named — that the scope is defined on the resource
+4. Scope `:own` adds filter `author_id == actor.id` to queries; scope `:published` filters by status; a scope-less permission means no row filter at all
 
 ### 2. Use It
 
