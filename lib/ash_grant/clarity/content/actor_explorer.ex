@@ -1,9 +1,9 @@
 with {:module, _} <- Code.ensure_loaded(Clarity),
      {:module, _} <- Code.ensure_loaded(Ash),
-     {:module, _} <- Code.ensure_loaded(Phoenix.LiveView) do
+     {:module, _} <- Code.ensure_loaded(Phoenix.LiveComponent) do
   defmodule AshGrant.Clarity.Content.ActorExplorer do
     @moduledoc """
-    Interactive LiveView content provider for exploring AshGrant permissions
+    Interactive LiveComponent content provider for exploring AshGrant permissions
     as a specific actor.
 
     Given an actor id the view calls
@@ -15,9 +15,16 @@ with {:module, _} <- Code.ensure_loaded(Clarity),
     Errors from the resolver (`:unknown_resource`,
     `:actor_loader_not_implemented`, `:actor_not_found`) surface as inline
     warning banners with remediation guidance.
+
+    Implemented as a `Phoenix.LiveComponent` (rather than a `Phoenix.LiveView`)
+    so Clarity can pass the current `lens` struct — which contains anonymous
+    `icon` functions — via component assigns instead of a `live_render/3`
+    session. Session values get signed with `term_to_binary(term, [:safe])`,
+    which rejects function terms, so a LiveView here would crash on mount
+    with an `ArgumentError`.
     """
 
-    use Phoenix.LiveView
+    use Phoenix.LiveComponent
 
     @behaviour Clarity.Content
 
@@ -46,32 +53,36 @@ with {:module, _} <- Code.ensure_loaded(Clarity),
       _ -> false
     end
 
-    @impl Phoenix.LiveView
-    def mount(_params, session, socket) do
-      %ResourceVertex{resource: resource} = session["vertex"]
+    @impl Phoenix.LiveComponent
+    def update(assigns, socket) do
+      %ResourceVertex{resource: resource} = assigns.vertex
 
-      resource_key = Info.resource_name(resource)
-      actions = Ash.Resource.Info.actions(resource)
-      resolver = Info.resolver(resource)
+      if socket.assigns[:resource] == resource do
+        {:ok, socket}
+      else
+        resource_key = Info.resource_name(resource)
+        actions = Ash.Resource.Info.actions(resource)
+        resolver = Info.resolver(resource)
 
-      {:ok,
-       socket
-       |> assign(
-         resource: resource,
-         resource_key: resource_key,
-         actions: actions,
-         resolver: resolver,
-         resolver_status: resolver_status(resolver),
-         actor_id: "",
-         permissions: nil,
-         lookup_error: nil,
-         explain: nil,
-         explain_error: nil,
-         selected_action: nil
-       )}
+        {:ok,
+         socket
+         |> assign(
+           resource: resource,
+           resource_key: resource_key,
+           actions: actions,
+           resolver: resolver,
+           resolver_status: resolver_status(resolver),
+           actor_id: "",
+           permissions: nil,
+           lookup_error: nil,
+           explain: nil,
+           explain_error: nil,
+           selected_action: nil
+         )}
+      end
     end
 
-    @impl Phoenix.LiveView
+    @impl Phoenix.LiveComponent
     def handle_event("lookup", %{"actor_id" => actor_id}, socket) do
       actor_id = String.trim(actor_id)
       resource_key = socket.assigns.resource_key
@@ -167,7 +178,7 @@ with {:module, _} <- Code.ensure_loaded(Clarity),
       if function_exported?(mod, :load_actor, 1), do: :ready, else: :no_load_actor
     end
 
-    @impl Phoenix.LiveView
+    @impl Phoenix.LiveComponent
     def render(assigns) do
       ~H"""
       <div class="p-4 space-y-4 max-w-[120ch]">
@@ -181,7 +192,12 @@ with {:module, _} <- Code.ensure_loaded(Clarity),
 
         <.resolver_banner status={@resolver_status} resolver={@resolver} />
 
-        <form phx-submit="lookup" class="flex gap-2 items-end" :if={@resolver_status == :ready}>
+        <form
+          phx-submit="lookup"
+          phx-target={@myself}
+          class="flex gap-2 items-end"
+          :if={@resolver_status == :ready}
+        >
           <label class="flex flex-col text-sm grow">
             <span class="font-medium">Actor id</span>
             <input
@@ -202,7 +218,11 @@ with {:module, _} <- Code.ensure_loaded(Clarity),
 
         <section :if={@permissions}>
           <h3 class="font-semibold mb-2">Permissions for <code>{@actor_id}</code></h3>
-          <.permissions_table permissions={@permissions} selected_action={@selected_action} />
+          <.permissions_table
+            permissions={@permissions}
+            selected_action={@selected_action}
+            target={@myself}
+          />
         </section>
 
         <.explain_error_banner reason={@explain_error} />
@@ -213,7 +233,12 @@ with {:module, _} <- Code.ensure_loaded(Clarity),
               Explain: <code>{@explain.action}</code>
               — <span class={decision_class(@explain.decision)}>{@explain.decision}</span>
             </h3>
-            <button type="button" phx-click="clear_explain" class="text-sm underline opacity-70">
+            <button
+              type="button"
+              phx-click="clear_explain"
+              phx-target={@myself}
+              class="text-sm underline opacity-70"
+            >
               close
             </button>
           </div>
@@ -345,6 +370,7 @@ with {:module, _} <- Code.ensure_loaded(Clarity),
 
     attr :permissions, :list, required: true
     attr :selected_action, :any, required: true
+    attr :target, :any, required: true
 
     defp permissions_table(assigns) do
       ~H"""
@@ -374,6 +400,7 @@ with {:module, _} <- Code.ensure_loaded(Clarity),
                 type="button"
                 phx-click="explain"
                 phx-value-action={perm.action}
+                phx-target={@target}
                 class="underline text-xs"
               >
                 explain
