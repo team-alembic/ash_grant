@@ -43,8 +43,8 @@ defmodule AshGrant.GrantsResolver do
   @impl true
   def resolve(actor, %{resource: resource} = context) when not is_nil(resource) do
     grants_perms = resolve_grants(actor, resource, context)
-    user_perms = resolve_user(actor, resource, context)
-    grants_perms ++ user_perms
+    extra_perms = resolve_via_resolver(actor, resource, context)
+    grants_perms ++ extra_perms
   end
 
   def resolve(_actor, _context), do: []
@@ -64,19 +64,23 @@ defmodule AshGrant.GrantsResolver do
     end)
   end
 
-  defp resolve_user(actor, resource, context) do
+  # Calls the user-declared resolver (the value of the `:resolver` DSL
+  # option, looked up via `AshGrant.Info.raw_resolver/1` to bypass the
+  # grants-synthesis routing). Returns its emitted permission list, or `[]`
+  # when there is no explicit resolver.
+  defp resolve_via_resolver(actor, resource, context) do
     case AshGrant.Info.raw_resolver(resource) do
       nil -> []
-      resolver -> call_user_resolver(resolver, actor, resource, context)
+      resolver -> call_resolver(resolver, actor, resource, context)
     end
   end
 
-  defp call_user_resolver(mod, actor, resource, context) when is_atom(mod) do
+  defp call_resolver(mod, actor, resource, context) when is_atom(mod) do
     mod.resolve(actor, context)
   rescue
     error ->
       Logger.warning(
-        "AshGrant.GrantsResolver: user resolver #{inspect(mod)} for " <>
+        "AshGrant.GrantsResolver: resolver #{inspect(mod)} for " <>
           "#{inspect(resource)} raised — treating as empty. " <>
           "Error: #{Exception.message(error)}"
       )
@@ -84,12 +88,12 @@ defmodule AshGrant.GrantsResolver do
       []
   end
 
-  defp call_user_resolver(fun, actor, resource, context) when is_function(fun, 2) do
+  defp call_resolver(fun, actor, resource, context) when is_function(fun, 2) do
     fun.(actor, context)
   rescue
     error ->
       Logger.warning(
-        "AshGrant.GrantsResolver: user resolver function for " <>
+        "AshGrant.GrantsResolver: resolver function for " <>
           "#{inspect(resource)} raised — treating as empty. " <>
           "Error: #{Exception.message(error)}"
       )
@@ -97,7 +101,7 @@ defmodule AshGrant.GrantsResolver do
       []
   end
 
-  defp call_user_resolver(_other, _actor, _resource, _context), do: []
+  defp call_resolver(_other, _actor, _resource, _context), do: []
 
   defp predicate_true?(%{predicate: true}, _actor, _resource, _tenant, _context), do: true
   defp predicate_true?(%{predicate: false}, _actor, _resource, _tenant, _context), do: false

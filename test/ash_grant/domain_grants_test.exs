@@ -248,10 +248,10 @@ defmodule AshGrant.DomainGrantsTest do
       assert length(grants) == 1
     end
 
-    test "broadcast permission compiles even when no resource is named" do
-      # `permission :name, :action, :scope` with no `on:` is the new
-      # default at the domain level. The verifier skips the action/scope
-      # reference checks because the target isn't known until runtime.
+    test "broadcast permission compiles when the domain has no resources" do
+      # `permission :name, :action, :scope` is a domain broadcast — no
+      # explicit target. With no resources in the domain there is nothing
+      # to validate against, so the verifier passes vacuously.
       defmodule BroadcastDomain do
         use Ash.Domain,
           extensions: [AshGrant.Domain],
@@ -275,10 +275,60 @@ defmodule AshGrant.DomainGrantsTest do
       assert Enum.all?(grant.permissions, &(&1.on == nil))
     end
 
-    # Domain permissions are always broadcasts — the resource isn't known
-    # until runtime, so action/scope existence can't be checked statically.
-    # The reference checks now only apply to *resource-level* grants, where
-    # the target is the enclosing resource (covered by
-    # `test/ash_grant/grants_dsl_test.exs`).
+    test "warns at compile time when a broadcast scope is missing on a resource" do
+      # The fixture domain `GrantsOnlyDomain` already references
+      # `:always` / `:published`, both of which are declared on the
+      # domain itself — so we exercise the negative path with a fresh
+      # inline domain that references a scope nobody declared.
+      # Spark converts verifier errors into compile warnings rather than
+      # raising, so we capture stderr.
+      warnings =
+        capture_io(:stderr, fn ->
+          defmodule MissingScopeDomain do
+            use Ash.Domain,
+              extensions: [AshGrant.Domain],
+              validate_config_inclusion?: false
+
+            ash_grant do
+              grants do
+                grant :weird, expr(^actor(:role) == :weird) do
+                  permission(:read_phantom, :read, :phantom)
+                end
+              end
+            end
+
+            resources do
+              resource(AshGrant.Test.GrantsDomainPost)
+            end
+          end
+        end)
+
+      assert warnings =~ "`scope: :phantom` is not defined"
+    end
+
+    test "warns at compile time when a broadcast action is missing on a resource" do
+      warnings =
+        capture_io(:stderr, fn ->
+          defmodule MissingActionDomain do
+            use Ash.Domain,
+              extensions: [AshGrant.Domain],
+              validate_config_inclusion?: false
+
+            ash_grant do
+              grants do
+                grant :weird, expr(^actor(:role) == :weird) do
+                  permission(:nuke_things, :nuke, :always)
+                end
+              end
+            end
+
+            resources do
+              resource(AshGrant.Test.GrantsDomainPost)
+            end
+          end
+        end)
+
+      assert warnings =~ "`action: :nuke` is not defined"
+    end
   end
 end

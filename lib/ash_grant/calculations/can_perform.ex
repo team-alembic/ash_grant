@@ -62,7 +62,7 @@ defmodule AshGrant.Calculation.CanPerform do
   2. Gets RBAC scopes via `AshGrant.Evaluator.get_all_scopes/4`
   3. Gets instance IDs via `AshGrant.Evaluator.get_matching_instance_ids/4`
   4. Builds a combined boolean expression:
-     - "always"/"all"/"global" in scopes -> `true`
+     - `nil` in scopes (permission declared without a scope) -> `true`
      - No scopes AND no instances -> `false`
      - RBAC scopes -> scope filters combined with OR
      - Instance IDs -> `id in ^instance_ids`
@@ -178,9 +178,13 @@ defmodule AshGrant.Calculation.CanPerform do
   end
 
   defp build_rbac_expression(scopes, scope_resolver, resource) do
-    # `nil` scope = permission declared without a scope = unrestricted, same
-    # as `"always"` / `"all"` / `"global"`. Kept in sync with `FilterCheck`.
-    if nil in scopes or "always" in scopes or "all" in scopes or "global" in scopes do
+    # `nil` scope = permission declared without a scope = unrestricted, no
+    # row filter. Named scopes — including legacy `:always`/`:all`/`:global`
+    # — go through the regular scope-resolver path; if the user wants
+    # global access they declare `scope :always, true` (or any name) and
+    # the resolver returns `true`, which the filter combinator collapses
+    # to "no constraint." Same primitive, no special-casing.
+    if nil in scopes do
       true
     else
       build_rbac_filter(scopes, scope_resolver, resource)

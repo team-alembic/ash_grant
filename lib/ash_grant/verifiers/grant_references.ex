@@ -1,28 +1,15 @@
 defmodule AshGrant.Verifiers.GrantReferences do
   @moduledoc false
-  # Shared permission-reference validation used by both the resource-level
-  # verifier (`AshGrant.Verifiers.ValidateGrantReferences`) and the
-  # domain-level verifier (`AshGrant.Domain.Verifiers.ValidateGrantReferences`).
+  # Resource-level reference validation for grants. Called by
+  # `AshGrant.Verifiers.ValidateGrantReferences`. Domain-level grants
+  # (broadcasts) are validated separately in
+  # `AshGrant.Domain.Verifiers.ValidateGrantReferences`, which has access
+  # to the full list of resources in the domain.
   #
-  # There is no user-facing cross-resource keyword: a permission's target
-  # is determined by where the grant lives. At the resource level,
-  # `AshGrant.Transformers.NormalizeGrants` sets `permission.on` to the
-  # enclosing resource at compile time; at the domain level no transformer
-  # runs and `permission.on` stays `nil` (broadcast). That makes
-  # validation simple:
-  #
-  # - `permission.on == nil` (domain broadcast) — the resource isn't known
-  #   until runtime, so action/scope existence can't be checked statically.
-  #   Skip all reference checks.
-  # - `permission.on == caller_module` (resource-level after NormalizeGrants)
-  #   — verify the action exists on the enclosing resource and, when a
-  #   scope is given, that the scope is defined locally or inherited from
-  #   the domain.
-  #
-  # `caller_module` is the module declaring the grants (resource or domain),
-  # used for error attribution. `local_scopes` / `local_actions` are the
-  # scope/action names visible in the caller's DSL state. Domains pass
-  # empty lists for both (broadcasts skip validation entirely).
+  # `permission.on` is set by `AshGrant.Transformers.NormalizeGrants` to
+  # the enclosing resource at compile time, so the only case we need to
+  # validate is `permission.on == caller_module`. The `nil` case is a
+  # defensive no-op in case a future transformer leaves the field unset.
 
   alias Spark.Error.DslError
 
@@ -55,7 +42,10 @@ defmodule AshGrant.Verifiers.GrantReferences do
 
     case permission.on do
       nil ->
-        # Domain-level broadcast — target unknown until runtime.
+        # Defensive: NormalizeGrants always injects the enclosing resource
+        # at the resource level, so this branch shouldn't trigger. If a
+        # future transformer leaves it unset, skip silently rather than
+        # error — the domain-level verifier handles intentional broadcasts.
         :ok
 
       ^caller_module ->
@@ -65,9 +55,8 @@ defmodule AshGrant.Verifiers.GrantReferences do
 
       _other ->
         # Should never happen: `NormalizeGrants` only injects the enclosing
-        # resource, and the user can't override `permission.on` themselves.
-        # If we ever get here it's a bug in a transformer somewhere; fail
-        # loudly rather than silently passing.
+        # resource, and there is no user-facing cross-resource keyword. If
+        # we ever get here it's a transformer bug — fail loudly.
         dsl_error(
           caller_module,
           path,

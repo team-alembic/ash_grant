@@ -216,6 +216,8 @@ defmodule AshGrant.Info do
     merge_domain_scopes(resource, resource_scopes)
   end
 
+  # Mirrors `merge_domain_grants/2` — `Enum.uniq_by/2` keeps the first
+  # occurrence per name, so resource scopes (placed first) win on conflict.
   @spec merge_domain_scopes(
           resource :: Ash.Resource.t(),
           resource_scopes :: [AshGrant.Dsl.Scope.t()]
@@ -226,15 +228,7 @@ defmodule AshGrant.Info do
         resource_scopes
 
       domain ->
-        resource_names = MapSet.new(resource_scopes, & &1.name)
-
-        domain_only =
-          Enum.reject(
-            AshGrant.Domain.Info.scopes(domain),
-            &MapSet.member?(resource_names, &1.name)
-          )
-
-        resource_scopes ++ domain_only
+        Enum.uniq_by(resource_scopes ++ AshGrant.Domain.Info.scopes(domain), & &1.name)
     end
   end
 

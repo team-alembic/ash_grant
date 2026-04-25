@@ -413,15 +413,11 @@ defmodule AshGrant.Check do
   end
 
   defp check_scope_access(nil, _scope_resolver, _context, _authorizer, _opts) do
-    # No scope means no filtering (like instance permissions)
-    true
-  end
-
-  defp check_scope_access("always", _scope_resolver, _context, _authorizer, _opts) do
-    true
-  end
-
-  defp check_scope_access("all", _scope_resolver, _context, _authorizer, _opts) do
+    # `nil` scope = permission declared without a scope = no row filter.
+    # Named scopes — including legacy `:always`/`:all`/`:global` — go
+    # through the regular scope-resolver path; if the user wants global
+    # access they declare `scope :always, true` (or any name) and the
+    # resolver returns `true`, which collapses to "no constraint."
     true
   end
 
