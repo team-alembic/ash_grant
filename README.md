@@ -121,9 +121,9 @@ end
 
 ### Declare grants on the domain (or on resources — or both)
 
-You can also put the `grants` block on an `Ash.Domain` using the
-`AshGrant.Domain` extension. Domain-level grants apply to **every resource
-in the domain by default** — a clean way to centralize RBAC across a
+You can put the `grants` block on an `Ash.Domain` using the
+`AshGrant.Domain` extension. Domain-level grants apply to **every
+resource in the domain** — a clean way to centralize RBAC across a
 bounded context without repeating the same grant on each resource:
 
 ```elixir
@@ -135,7 +135,6 @@ defmodule MyApp.Blog do
     scope :own, expr(author_id == ^actor(:id))
 
     grants do
-      # Broadcast: applies to every resource in MyApp.Blog
       grant :admin, expr(^actor(:role) == :admin) do
         permission :manage_all, :*, :always
       end
@@ -143,11 +142,6 @@ defmodule MyApp.Blog do
       grant :editor, expr(^actor(:role) == :editor) do
         permission :read_all,   :read              # unrestricted on every resource
         permission :update_own, :update, :own
-      end
-
-      # Scoped to one resource — Ash's `policy resource_is/1` analog
-      grant :auditor, expr(^actor(:role) == :auditor) do
-        permission :audit_posts, :read, :always, on: MyApp.Blog.Post
       end
     end
   end
@@ -159,11 +153,12 @@ defmodule MyApp.Blog do
 end
 ```
 
-The DSL is the same on resources and on domains — only the targeting
-default differs. Resource-level grants default `on:` to the enclosing
-resource; domain-level grants default `on:` to *every* resource (the
-resolver substitutes the resource being authorized at runtime). Add `on:
-SpecificResource` on either level to scope a permission to one resource.
+Same DSL on resources and on domains. The location of the grant is what
+scopes it: a permission declared on a resource applies to that resource;
+a permission declared on the domain applies to every resource in the
+domain (the resolver substitutes the resource being authorized at
+runtime). To grant a permission on one specific resource, declare it on
+that resource's `grants` block.
 
 Resources and domains can both declare grants — they merge, with the
 resource winning on grant-name conflicts.

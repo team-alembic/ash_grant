@@ -4,10 +4,9 @@ defmodule AshGrant.Test.GrantsOnlyDomain do
   level. Resources in this domain inherit these grants (and the shared
   scopes) unless they declare their own.
 
-  Covers:
-  - Broadcast permissions (no `on:`) applied to every resource in the domain
-  - Resource-scoped domain permissions (`on: SpecificResource`)
-  - Resource-level grants merging with domain-level grants
+  Domain grants are always broadcasts — they apply to every resource in
+  the domain. To grant a permission on a specific resource only, declare
+  it on that resource's `grants` block.
   """
   use Ash.Domain,
     extensions: [AshGrant.Domain],
@@ -21,21 +20,12 @@ defmodule AshGrant.Test.GrantsOnlyDomain do
     grants do
       grant :admin, expr(^actor(:role) == :admin) do
         description("Full administrative access — broadcast across the domain")
-        # Broadcast: applies to every resource in the domain. The resolver
-        # substitutes the resource being authorized at runtime.
         permission(:manage_all, :*, :always)
       end
 
       grant :viewer, expr(^actor(:role) == :viewer) do
         description("Viewers see published rows on every resource")
         permission(:read_published, :read, :published)
-      end
-
-      grant :auditor, expr(^actor(:role) == :auditor) do
-        description("Auditor's read access scoped to a single resource")
-        # Resource-scoped: the keyword `on:` narrows this permission to one
-        # resource in the domain (Ash's `policy resource_is/1` analog).
-        permission(:audit_post, :read, :always, on: AshGrant.Test.GrantsDomainPost)
       end
     end
   end

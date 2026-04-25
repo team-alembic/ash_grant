@@ -9,9 +9,10 @@ defmodule AshGrant.Domain.Dsl do
   - `scope` entities — row-level filters (`expr(...)`) inherited by every
     resource in the domain. Resource-level scopes with the same name win.
   - `grants do ... end` — declarative grants that apply to **every**
-    resource in the domain by default. Mirrors how `Ash.Policy.Authorizer`
-    treats domain-level policies: they cover every resource/action unless
-    you scope them down inside a permission via the `on:` keyword.
+    resource in the domain. Mirrors how `Ash.Policy.Authorizer` treats
+    domain-level policies (cover every resource/action). To grant a
+    permission on a specific resource, declare it on that resource's
+    `grants` block.
 
   Resource-specific options like `resource_name`, `default_policies`, and
   `field_group` must be configured on each resource.
@@ -34,11 +35,6 @@ defmodule AshGrant.Domain.Dsl do
             grant :editor, expr(^actor(:role) == :editor) do
               permission :read_all,   :read
               permission :update_own, :update, :own
-            end
-
-            # Scoped to a single resource (Ash's `resource_is/1` analog)
-            grant :auditor, expr(^actor(:role) == :auditor) do
-              permission :audit_posts, :read, :always, on: MyApp.Blog.Post
             end
           end
         end
@@ -80,6 +76,7 @@ defmodule AshGrant.Domain.Dsl do
         scope :own, expr(author_id == ^actor(:id))
 
         grants do
+          # Broadcasts — apply to every resource in the domain
           grant :admin, expr(^actor(:role) == :admin) do
             permission :manage_all, :*, :always
           end
