@@ -28,7 +28,22 @@ defmodule AshGrant.MixProject do
 
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: [:logger],
+      env: [
+        clarity_introspectors: [
+          AshGrant.Clarity.Introspector.Resource,
+          AshGrant.Clarity.Introspector.Domain
+        ],
+        clarity_content_providers: [
+          AshGrant.Clarity.Content.ResourceOverview,
+          AshGrant.Clarity.Content.DomainOverview,
+          AshGrant.Clarity.Content.ScopeDetail,
+          AshGrant.Clarity.Content.GrantDetail,
+          AshGrant.Clarity.Content.FieldGroupDetail,
+          AshGrant.Clarity.Content.ActorExplorer
+        ],
+        clarity_perspective_lensmakers: [AshGrant.Clarity.Lensmaker]
+      ]
     ]
   end
 
@@ -50,7 +65,49 @@ defmodule AshGrant.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:stream_data, "~> 1.0"}
-    ]
+    ] ++ clarity_deps()
+  end
+
+  # Optional Clarity integration — opt in via `CLARITY_VERSION` environment variable.
+  #
+  # The integration lives under `lib/ash_grant/clarity/` and every module is
+  # wrapped in `Code.ensure_loaded(Clarity)` guards, so the library compiles
+  # and runs normally whether or not Clarity is present. When consumers add
+  # both `{:ash_grant, ...}` and `{:clarity, ...}` to their own mix.exs the
+  # guards succeed and the integration activates automatically — they do not
+  # need to set `CLARITY_VERSION`.
+  #
+  # `CLARITY_VERSION` is a development escape hatch so the AshGrant repo can
+  # exercise the integration locally:
+  #
+  #     CLARITY_VERSION=local mix deps.get
+  #     CLARITY_VERSION=main mix deps.get
+  #     CLARITY_VERSION=0.4 mix deps.get
+  defp clarity_deps do
+    case System.get_env("CLARITY_VERSION") do
+      nil ->
+        []
+
+      "local" ->
+        path = System.get_env("CLARITY_LOCAL_PATH") || "../clarity"
+
+        [
+          {:clarity, path: path, optional: true},
+          {:phoenix_live_view, "~> 1.0", optional: true}
+        ]
+
+      "main" ->
+        [
+          {:clarity, git: "https://github.com/team-alembic/clarity.git", optional: true},
+          {:phoenix_live_view, "~> 1.0", optional: true}
+        ]
+
+      version ->
+        [
+          {:clarity, "~> #{version}", optional: true},
+          {:phoenix_live_view, "~> 1.0", optional: true}
+        ]
+    end
   end
 
   defp aliases do
@@ -120,4 +177,5 @@ defmodule AshGrant.MixProject do
       version -> "~> #{version}"
     end
   end
+
 end
