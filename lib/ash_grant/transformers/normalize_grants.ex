@@ -2,28 +2,29 @@ defmodule AshGrant.Transformers.NormalizeGrants do
   @moduledoc """
   Normalizes the `grants` DSL block.
 
-  This transformer runs once all entities are parsed and:
-
-  - Fills in `on:` with the current resource module when omitted on a
-    permission declared inside a resource's own `ash_grant` block.
-  - Validates that `grants` and an explicit `resolver` are not both set.
+  Runs once all entities are parsed and fills in `on:` with the current
+  resource module when omitted on a permission declared inside a
+  resource's own `ash_grant` block.
 
   Reference validation (that each permission's `on:`, `action:`, and `scope:`
   resolve to real things) is handled by
   `AshGrant.Verifiers.ValidateGrantReferences`, which runs after all
   transformers so that Ash's default actions have been materialized.
+
+  `grants` and an explicit `resolver` are **not** mutually exclusive. When
+  both are declared, `AshGrant.GrantsResolver` runs grants and then calls
+  the user's resolver, concatenating the permission lists. See
+  `AshGrant.GrantsResolver` for the runtime merge.
   """
 
   use Spark.Dsl.Transformer
 
   alias Spark.Dsl.Transformer
-  alias Spark.Error.DslError
 
   @impl true
   def after?(_), do: false
 
   @impl true
-  def before?(AshGrant.Transformers.SynthesizeGrantsResolver), do: true
   def before?(_), do: false
 
   @impl true
@@ -36,26 +37,7 @@ defmodule AshGrant.Transformers.NormalizeGrants do
         {:ok, dsl_state}
 
       _ ->
-        with :ok <- validate_not_both_resolver_and_grants(dsl_state, resource) do
-          inject_default_resource(dsl_state, resource, grants)
-        end
-    end
-  end
-
-  defp validate_not_both_resolver_and_grants(dsl_state, resource) do
-    case Transformer.get_option(dsl_state, [:ash_grant], :resolver) do
-      nil ->
-        :ok
-
-      _resolver ->
-        {:error,
-         DslError.exception(
-           module: resource,
-           path: [:ash_grant, :grants],
-           message:
-             "Cannot declare both `grants` and `resolver` on #{inspect(resource)}. " <>
-               "Use one or the other — grants synthesize a resolver automatically."
-         )}
+        inject_default_resource(dsl_state, resource, grants)
     end
   end
 

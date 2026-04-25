@@ -223,34 +223,62 @@ defmodule AshGrant.GrantsDslTest do
       end
     end
 
-    test "rejects declaring both grants and explicit resolver" do
-      assert_raise Spark.Error.DslError, ~r/both `grants` and `resolver`/s, fn ->
-        defmodule DualResolverPost do
-          use Ash.Resource,
-            domain: nil,
-            validate_domain_inclusion?: false,
-            extensions: [AshGrant]
+    test "accepts both grants and an explicit resolver — outputs merge" do
+      # Both compile cleanly; `GrantsResolver` runs grants *and* calls the
+      # user resolver, concatenating their permission lists. Deny-wins in
+      # the evaluator continues to hold because both contributions flow
+      # through the same `Evaluator.has_access?/3` path.
+      defmodule DualPost do
+        use Ash.Resource,
+          domain: nil,
+          validate_domain_inclusion?: false,
+          extensions: [AshGrant]
 
-          actions do
-            defaults([:read])
-          end
+        ash_grant do
+          resource_name("dualpost")
 
-          ash_grant do
-            resolver(fn _actor, _context -> [] end)
-            scope(:always, true)
+          resolver(fn actor, _context ->
+            case actor do
+              %{role: :dynamic} -> ["dualpost:*:read:"]
+              _ -> []
+            end
+          end)
 
-            grants do
-              grant :noop, expr(^actor(:role) == :admin) do
-                permission(:read_all, :read, :always)
-              end
+          scope(:always, true)
+
+          grants do
+            grant :admin, expr(^actor(:role) == :admin) do
+              permission(:manage_all, :*, :always)
             end
           end
+        end
 
-          attributes do
-            uuid_primary_key(:id)
-          end
+        actions do
+          defaults([:read])
+        end
+
+        attributes do
+          uuid_primary_key(:id)
         end
       end
+
+      assert AshGrant.Info.resolver(DualPost) == AshGrant.GrantsResolver
+
+      # Admin actor: grants match, user resolver returns []. Only the grant's
+      # permission shows up.
+      admin_perms = AshGrant.GrantsResolver.resolve(%{role: :admin}, %{resource: DualPost})
+      assert "dualpost:*:*:always" in admin_perms
+      refute "dualpost:*:read:" in admin_perms
+
+      # Dynamic actor: no grant matches, user resolver contributes.
+      dynamic_perms =
+        AshGrant.GrantsResolver.resolve(%{role: :dynamic}, %{resource: DualPost})
+
+      assert "dualpost:*:read:" in dynamic_perms
+      refute Enum.any?(dynamic_perms, &String.contains?(&1, ":*:always"))
+
+      # Actor matching neither: empty.
+      assert [] = AshGrant.GrantsResolver.resolve(%{role: :nobody}, %{resource: DualPost})
     end
   end
 end

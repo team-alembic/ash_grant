@@ -37,10 +37,19 @@ defmodule AshGrant.Verifiers.ValidateScopes do
   @spec resolver_configured?(dsl_state :: map()) :: boolean()
   defp resolver_configured?(dsl_state) do
     Verifier.get_option(dsl_state, [:ash_grant], :resolver) != nil or
-      case Verifier.get_persisted(dsl_state, :domain) do
-        nil -> false
-        domain -> AshGrant.Domain.Info.resolver(domain) != nil
-      end
+      Verifier.get_entities(dsl_state, [:ash_grant, :grants]) != [] or
+      domain_source?(dsl_state)
+  end
+
+  defp domain_source?(dsl_state) do
+    case Verifier.get_persisted(dsl_state, :domain) do
+      nil ->
+        false
+
+      domain ->
+        AshGrant.Domain.Info.resolver(domain) != nil or
+          AshGrant.Domain.Info.grants(domain) != []
+    end
   end
 
   @spec validate_deprecated_options(dsl_state :: map(), resource :: module()) :: :ok

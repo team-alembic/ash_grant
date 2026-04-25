@@ -96,6 +96,8 @@ mix ash_grant.verify path/to/test.yaml --verbose  # Verbose output
 
 - `!` prefix = deny rule
 - `instance_id` = `*` for RBAC, specific ID for instance permissions
+- `scope` is optional: an empty trailing segment (`resource:*:action:`) means
+  "no row filter" — unrestricted access, equivalent to a scope like `:always`
 - Deny rules always override allow rules
 - `instance_key` option: changes which field instance IDs match against (default `:id`)
 - `scope_through` entity: propagates parent instance permissions to child resources via FK

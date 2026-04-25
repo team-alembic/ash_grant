@@ -52,22 +52,21 @@ defmodule MyApp.Blog.Post do
   ash_grant do
     default_policies true  # Auto-generates read/write policies
 
-    # Scopes define row-level filters (referenced by grants below)
-    scope :always, true
-    scope :own, expr(author_id == ^actor(:id))
+    # Row-level filters — only declare the ones your grants actually reference.
+    scope :own,       expr(author_id == ^actor(:id))
     scope :published, expr(status == :published)
 
     # Grants pair an actor predicate with a set of compile-time-verified
     # permissions. AshGrant synthesizes the resolver from these.
     grants do
       grant :admin, expr(^actor(:role) == :admin) do
-        permission :manage_all, :*, :always
+        permission :manage_all, :*                # no scope = unrestricted
       end
 
       grant :editor, expr(^actor(:role) == :editor) do
-        permission :read_all,   :read,   :always
-        permission :create_any, :create, :always
-        permission :update_own, :update, :own
+        permission :read_all,   :read             # unrestricted read
+        permission :create_any, :create           # unrestricted create
+        permission :update_own, :update, :own     # row-level filter
       end
 
       grant :viewer, expr(^actor(:role) == :viewer) do
@@ -82,9 +81,9 @@ end
 
 **How it works:**
 1. Actor (`%{role: :editor, id: "user_123"}`) matches the `:editor` grant's predicate
-2. Each permission compiles to a string like `"post:*:update:own"` and references a scope by name
-3. Compile-time verifier checks that every permission's action and scope exist on the resource
-4. Scope `:own` adds filter `author_id == actor.id` to queries, Scope `:published` filters by status
+2. Each permission compiles to a string like `"post:*:update:own"` referencing a scope, or `"post:*:read:"` (no scope) for unrestricted access
+3. Compile-time verifier checks every permission's action exists and — when a scope is named — that the scope is defined on the resource
+4. Scope `:own` adds filter `author_id == actor.id` to queries; scope `:published` filters by status; a scope-less permission means no row filter at all
 
 ### 2. Use It
 
@@ -119,6 +118,50 @@ ash_grant do
   scope :always, true
 end
 ```
+
+### Declare grants on the domain (or on resources — or both)
+
+You can put the `grants` block on an `Ash.Domain` using the
+`AshGrant.Domain` extension. Domain-level grants apply to **every
+resource in the domain** — a clean way to centralize RBAC across a
+bounded context without repeating the same grant on each resource:
+
+```elixir
+defmodule MyApp.Blog do
+  use Ash.Domain, extensions: [AshGrant.Domain]
+
+  ash_grant do
+    scope :always, true
+    scope :own, expr(author_id == ^actor(:id))
+
+    grants do
+      grant :admin, expr(^actor(:role) == :admin) do
+        permission :manage_all, :*, :always
+      end
+
+      grant :editor, expr(^actor(:role) == :editor) do
+        permission :read_all,   :read              # unrestricted on every resource
+        permission :update_own, :update, :own
+      end
+    end
+  end
+
+  resources do
+    resource MyApp.Blog.Post
+    resource MyApp.Blog.Comment
+  end
+end
+```
+
+Same DSL on resources and on domains. The location of the grant is what
+scopes it: a permission declared on a resource applies to that resource;
+a permission declared on the domain applies to every resource in the
+domain (the resolver substitutes the resource being authorized at
+runtime). To grant a permission on one specific resource, declare it on
+that resource's `grants` block.
+
+Resources and domains can both declare grants — they merge, with the
+resource winning on grant-name conflicts.
 
 ## Guides
 

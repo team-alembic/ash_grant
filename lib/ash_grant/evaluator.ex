@@ -328,7 +328,12 @@ defmodule AshGrant.Evaluator do
   @doc """
   Gets all scopes for matching permissions.
 
-  Returns a list of scopes from all matching allow permissions.
+  Returns a list of scopes from all matching allow permissions. A matching
+  permission that was declared without a scope contributes `nil` to the
+  list — downstream consumers (`FilterCheck`, `CanPerform`) treat `nil`
+  as "no row filter" / unrestricted access, equivalent to the explicit
+  `"always"` / `"all"` / `"global"` scopes.
+
   Useful when a user has multiple roles with different scopes.
 
   ## Examples
@@ -337,8 +342,13 @@ defmodule AshGrant.Evaluator do
       iex> AshGrant.Evaluator.get_all_scopes(permissions, "blog", "read")
       ["own", "published", "always"]
 
+      iex> permissions = ["blog:*:read:"]
+      iex> AshGrant.Evaluator.get_all_scopes(permissions, "blog", "read")
+      [nil]
+
   """
-  @spec get_all_scopes(permissions(), String.t(), String.t(), atom() | nil) :: [String.t()]
+  @spec get_all_scopes(permissions(), String.t(), String.t(), atom() | nil) ::
+          [String.t() | nil]
   def get_all_scopes(permissions, resource, action, action_type \\ nil) do
     permissions = normalize_permissions(permissions)
 
@@ -356,7 +366,6 @@ defmodule AshGrant.Evaluator do
         not Permission.deny?(perm) and Permission.matches?(perm, resource, action, action_type)
       end)
       |> Enum.map(& &1.scope)
-      |> Enum.reject(&is_nil/1)
       |> Enum.uniq()
     end
   end

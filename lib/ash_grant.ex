@@ -311,7 +311,6 @@ defmodule AshGrant do
     sections: AshGrant.Dsl.sections(),
     transformers: [
       AshGrant.Transformers.NormalizeGrants,
-      AshGrant.Transformers.SynthesizeGrantsResolver,
       AshGrant.Transformers.ValidateScopeThroughs,
       AshGrant.Transformers.ResolveFieldGroupFields,
       AshGrant.Transformers.ValidateFieldGroups,
