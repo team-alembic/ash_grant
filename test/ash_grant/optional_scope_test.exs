@@ -103,7 +103,10 @@ defmodule AshGrant.OptionalScopeTest do
     end
   end
 
-  # Inline domain with a no-scope permission.
+  # Inline domain with a no-scope **broadcast** permission. Domain-level
+  # permissions default to broadcast (`on: nil`) — they apply to every
+  # resource in the domain, with the resolver substituting the resource
+  # being authorized at runtime.
   defmodule BareDomain do
     use Ash.Domain,
       extensions: [AshGrant.Domain],
@@ -112,7 +115,7 @@ defmodule AshGrant.OptionalScopeTest do
     ash_grant do
       grants do
         grant :admin, expr(^actor(:role) == :admin) do
-          permission(:manage_everything, AshGrant.OptionalScopeTest.Post, :*)
+          permission(:manage_everything, :*)
         end
       end
     end
@@ -122,19 +125,17 @@ defmodule AshGrant.OptionalScopeTest do
   end
 
   describe "domain-level permission with no scope" do
-    test "parses to a Permission struct with scope: nil" do
+    test "parses to a Permission struct with scope: nil and broadcast on: nil" do
       [grant] = AshGrant.Domain.Info.grants(BareDomain)
       [permission] = grant.permissions
 
       assert permission.name == :manage_everything
-      assert permission.on == Post
+      assert permission.on == nil
       assert permission.action == :*
       assert permission.scope == nil
     end
 
-    test "resolver emits an empty-trailing-segment permission string" do
-      perms = AshGrant.GrantsResolver.resolve(%{role: :admin}, %{resource: Post})
-
+    test "resolver emits an empty-trailing-segment string substituting the current resource" do
       # Even though Post declares its own grants, merging domain grants
       # via Info.grants/1 requires a real Ash.Resource.Info.domain/1 link,
       # which inline modules don't have. So here we just prove the
@@ -144,8 +145,10 @@ defmodule AshGrant.OptionalScopeTest do
 
       # stringify nil -> "" (see AshGrant.GrantsResolver.stringify/1)
       assert perm.scope == nil
+      assert perm.on == nil
 
       # Sanity: Post has its own admin grant emitting "post:*:*:"
+      perms = AshGrant.GrantsResolver.resolve(%{role: :admin}, %{resource: Post})
       assert "post:*:*:" in perms
     end
   end

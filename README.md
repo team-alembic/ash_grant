@@ -122,9 +122,9 @@ end
 ### Declare grants on the domain (or on resources — or both)
 
 You can also put the `grants` block on an `Ash.Domain` using the
-`AshGrant.Domain` extension. Every resource in the domain inherits the
-domain's grants (and scopes), which is a clean way to centralize RBAC across
-a bounded context without repeating the same grant on each resource:
+`AshGrant.Domain` extension. Domain-level grants apply to **every resource
+in the domain by default** — a clean way to centralize RBAC across a
+bounded context without repeating the same grant on each resource:
 
 ```elixir
 defmodule MyApp.Blog do
@@ -135,9 +135,19 @@ defmodule MyApp.Blog do
     scope :own, expr(author_id == ^actor(:id))
 
     grants do
+      # Broadcast: applies to every resource in MyApp.Blog
       grant :admin, expr(^actor(:role) == :admin) do
-        permission :manage_posts,    MyApp.Blog.Post,    :*, :always
-        permission :manage_comments, MyApp.Blog.Comment, :*, :always
+        permission :manage_all, :*, :always
+      end
+
+      grant :editor, expr(^actor(:role) == :editor) do
+        permission :read_all,   :read              # unrestricted on every resource
+        permission :update_own, :update, :own
+      end
+
+      # Scoped to one resource — Ash's `policy resource_is/1` analog
+      grant :auditor, expr(^actor(:role) == :auditor) do
+        permission :audit_posts, :read, :always, on: MyApp.Blog.Post
       end
     end
   end
@@ -149,11 +159,14 @@ defmodule MyApp.Blog do
 end
 ```
 
+The DSL is the same on resources and on domains — only the targeting
+default differs. Resource-level grants default `on:` to the enclosing
+resource; domain-level grants default `on:` to *every* resource (the
+resolver substitutes the resource being authorized at runtime). Add `on:
+SpecificResource` on either level to scope a permission to one resource.
+
 Resources and domains can both declare grants — they merge, with the
-resource winning on grant-name conflicts. A domain grant's permissions must
-name their target — either as the second positional argument (shown above)
-or via the `on:` keyword option — since there's no enclosing resource to
-default from.
+resource winning on grant-name conflicts.
 
 ## Guides
 

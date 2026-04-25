@@ -2,33 +2,49 @@ defmodule AshGrant.Domain.Dsl do
   @moduledoc """
   DSL definition for the AshGrant domain-level extension.
 
-  This module defines the `ash_grant` DSL section that can be added to
-  Ash domains to configure shared permission settings inherited by resources.
+  Adds an `ash_grant` block to an `Ash.Domain`. Supported configuration:
 
-  Supported at the domain level: `resolver`, `scope`, and `grants`.
+  - `resolver` — a permission resolver inherited by resources that don't
+    define their own.
+  - `scope` entities — row-level filters (`expr(...)`) inherited by every
+    resource in the domain. Resource-level scopes with the same name win.
+  - `grants do ... end` — declarative grants that apply to **every**
+    resource in the domain by default. Mirrors how `Ash.Policy.Authorizer`
+    treats domain-level policies: they cover every resource/action unless
+    you scope them down inside a permission via the `on:` keyword.
+
   Resource-specific options like `resource_name`, `default_policies`, and
   `field_group` must be configured on each resource.
 
   ## Example
 
       defmodule MyApp.Blog do
-        use Ash.Domain,
-          extensions: [AshGrant.Domain]
+        use Ash.Domain, extensions: [AshGrant.Domain]
 
         ash_grant do
           scope :always, true
           scope :own, expr(author_id == ^actor(:id))
 
           grants do
+            # Applies to every resource in the domain
             grant :admin, expr(^actor(:role) == :admin) do
-              permission :manage_posts, MyApp.Blog.Post, :*, :always
-              permission :manage_comments, MyApp.Blog.Comment, :*, :always
+              permission :manage_all, :*, :always
+            end
+
+            grant :editor, expr(^actor(:role) == :editor) do
+              permission :read_all,   :read
+              permission :update_own, :update, :own
+            end
+
+            # Scoped to a single resource (Ash's `resource_is/1` analog)
+            grant :auditor, expr(^actor(:role) == :auditor) do
+              permission :audit_posts, :read, :always, on: MyApp.Blog.Post
             end
           end
         end
 
         resources do
-          resource MyApp.Blog.Post    # inherits domain grants + scopes
+          resource MyApp.Blog.Post
           resource MyApp.Blog.Comment
         end
       end
@@ -41,7 +57,7 @@ defmodule AshGrant.Domain.Dsl do
     name: :ash_grant,
     top_level?: false,
     imports: [Ash.Expr],
-    sections: [AshGrant.Dsl.domain_grants_section()],
+    sections: [AshGrant.Dsl.grants_section()],
     describe: """
     Shared AshGrant configuration inherited by resources in this domain.
 
@@ -61,10 +77,16 @@ defmodule AshGrant.Domain.Dsl do
       """
       ash_grant do
         scope :always, true
+        scope :own, expr(author_id == ^actor(:id))
 
         grants do
           grant :admin, expr(^actor(:role) == :admin) do
-            permission :manage_posts, MyApp.Blog.Post, :*, :always
+            permission :manage_all, :*, :always
+          end
+
+          grant :editor, expr(^actor(:role) == :editor) do
+            permission :read_all,   :read
+            permission :update_own, :update, :own
           end
         end
       end
@@ -82,8 +104,9 @@ defmodule AshGrant.Domain.Dsl do
         This resolver is inherited by all resources in the domain that
         use the `AshGrant` extension and don't define their own resolver.
 
-        Mutually exclusive with a `grants` block on the same domain — if
-        grants are declared, the extension synthesizes the resolver for you.
+        Combines additively with `grants`: when both are declared on the
+        same domain, `AshGrant.GrantsResolver` evaluates the grants and
+        then calls this resolver, concatenating both permission lists.
         """
       ]
     ]

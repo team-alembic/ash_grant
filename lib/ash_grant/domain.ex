@@ -6,9 +6,21 @@ defmodule AshGrant.Domain do
   and `grants` configurations that are automatically inherited by all
   resources in the domain that use the `AshGrant` extension.
 
+  ## Domain grants apply to every resource by default
+
+  A domain-level `permission :name, :action, :scope` is a **broadcast** —
+  it applies to every resource in the domain. This mirrors how
+  `Ash.Policy.Authorizer` treats domain-level policies (cover every
+  resource/action unless narrowed). The `AshGrant.GrantsResolver`
+  substitutes the resource being authorized at runtime, so a single
+  domain permission lights up all of them. Use the `on:` keyword option
+  to scope a permission to one specific resource (Ash's
+  `policy resource_is/1` analog).
+
   Resource and domain grants are complementary: both can be declared, and
-  both contribute to a resource's effective permissions. Resources can also
-  override an individual domain setting by declaring their own.
+  both contribute to a resource's effective permissions. Resources can
+  also override an individual domain grant by declaring one with the same
+  `:name`.
 
   ## Example
 
@@ -21,9 +33,19 @@ defmodule AshGrant.Domain do
           scope :own, expr(author_id == ^actor(:id))
 
           grants do
+            # Broadcast — every resource in the domain
             grant :admin, expr(^actor(:role) == :admin) do
-              permission :manage_posts, MyApp.Blog.Post, :*, :always
-              permission :manage_comments, MyApp.Blog.Comment, :*, :always
+              permission :manage_all, :*, :always
+            end
+
+            grant :editor, expr(^actor(:role) == :editor) do
+              permission :read_all,   :read
+              permission :update_own, :update, :own
+            end
+
+            # Scoped to a single resource via the `on:` keyword
+            grant :auditor, expr(^actor(:role) == :auditor) do
+              permission :audit_posts, :read, :always, on: MyApp.Blog.Post
             end
           end
         end

@@ -57,7 +57,7 @@ defmodule AshGrant.GrantsResolver do
     |> AshGrant.Info.grants()
     |> Enum.flat_map(fn grant ->
       if predicate_true?(grant, actor, resource, tenant, inner_context) do
-        Enum.map(grant.permissions || [], &to_permission_string/1)
+        Enum.map(grant.permissions || [], &to_permission_string(&1, resource))
       else
         []
       end
@@ -127,8 +127,13 @@ defmodule AshGrant.GrantsResolver do
       false
   end
 
-  defp to_permission_string(%AshGrant.Dsl.Permission{} = permission) do
-    resource_name = AshGrant.Info.resource_name(permission.on)
+  # `permission.on == nil` means a domain-level broadcast: the permission
+  # was declared without a target so it applies to every resource in the
+  # domain. At runtime we substitute the resource currently being checked
+  # (the one passed to `resolve/2` via `context.resource`).
+  defp to_permission_string(%AshGrant.Dsl.Permission{} = permission, current_resource) do
+    target = permission.on || current_resource
+    resource_name = AshGrant.Info.resource_name(target)
     prefix = if permission.deny, do: "!", else: ""
 
     prefix <>

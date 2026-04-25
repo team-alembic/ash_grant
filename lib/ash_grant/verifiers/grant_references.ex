@@ -44,21 +44,25 @@ defmodule AshGrant.Verifiers.GrantReferences do
   defp validate_permission(permission, grant, caller_module, local_scopes, local_actions) do
     path = [:ash_grant, :grants, :grant, grant.name, :permission, permission.name]
 
-    with :ok <- validate_resource_reference(permission, caller_module, path),
-         :ok <- validate_action_reference(permission, caller_module, path, local_actions) do
-      validate_scope_reference(permission, caller_module, path, local_scopes)
+    case permission.on do
+      # Domain-level broadcast (no target): the resource isn't known until
+      # runtime, so action/scope existence can't be checked statically.
+      # Trust the user — fail-closed at runtime if the action/scope is
+      # missing on a particular resource (the permission string just won't
+      # match that resource's check).
+      nil ->
+        :ok
+
+      _ ->
+        with :ok <- validate_resource_reference(permission, caller_module, path),
+             :ok <- validate_action_reference(permission, caller_module, path, local_actions) do
+          validate_scope_reference(permission, caller_module, path, local_scopes)
+        end
     end
   end
 
-  defp validate_resource_reference(%{on: nil}, caller_module, path) do
-    dsl_error(
-      caller_module,
-      path,
-      "`on:` is required — could not infer the target resource. " <>
-        "Declare the permission inside a resource's `ash_grant` block, or pass `on: MyApp.Blog.Post`."
-    )
-  end
-
+  # `validate_permission/5` short-circuits on `on: nil`, so we always have a
+  # non-nil target by the time we reach this clause.
   defp validate_resource_reference(%{on: target}, caller_module, path) when is_atom(target) do
     cond do
       target == caller_module ->

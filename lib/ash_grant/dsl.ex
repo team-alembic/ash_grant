@@ -455,26 +455,55 @@ defmodule AshGrant.Dsl do
     `:always`):
 
         permission :read_all_posts, :read           # unrestricted read
-        permission :update_own,    :update, :own   # row-level filter
+        permission :update_own,    :update, :own    # row-level filter
 
-    The target resource is inferred from the enclosing resource's
-    `ash_grant` block, or supplied via `on:`. Instance defaults to `:*`
-    (RBAC) and can be set with the `instance:` keyword option.
+    Instance defaults to `:*` (RBAC) and can be set with the `instance:`
+    keyword option.
 
-    `AshGrant.Verifiers.ValidateGrantReferences` runs at compile time and
-    checks that `on` is an `Ash.Resource`, that `action` exists on it (or is
-    `:*`), and — when a scope is given — that it is defined in the target
-    resource's `ash_grant` block. A permission without a scope skips the
-    scope check entirely.
+    ## Targeting (`on:`)
+
+    The same `permission` entity is used inside `AshGrant` (on a resource)
+    and `AshGrant.Domain` (on a domain). What `on:` does depends on
+    context:
+
+    * **Resource-level grant.** When you omit `on:`, the
+      `NormalizeGrants` transformer injects the enclosing resource —
+      writing `permission :read, :read` inside `MyApp.Post`'s grants
+      means "applies to `MyApp.Post`." Use `on: OtherResource` to point
+      a permission at a different resource (cross-resource grants).
+    * **Domain-level grant.** No transformer injects a target. Omitting
+      `on:` makes the permission a **broadcast** — it applies to every
+      resource the domain owns. The `AshGrant.GrantsResolver` substitutes
+      the resource being authorized at runtime. Use `on: OneResource` to
+      scope a domain permission to a single resource (Ash's
+      `policy resource_is(...)` equivalent).
+
+    ## Compile-time verification
+
+    `AshGrant.Verifiers.ValidateGrantReferences` checks that any `on:`
+    you specify is an `Ash.Resource`, that `action` exists on it (or is
+    `:*`), and — when a scope is given — that the scope is defined on
+    the target resource (or inherited from its domain). A domain-level
+    `on: nil` broadcast skips the resource/action/scope reference checks
+    because the target isn't known until runtime.
 
     ## Examples
 
-        permission :read_all_posts, :read            # no scope — unrestricted
+        # Resource-level — target inferred
+        permission :read_all_posts, :read              # no scope — unrestricted
         permission :update_own,     :update, :own
 
-        # Cross-resource (from inside a resource's grants block)
+        # Cross-resource (resource-level)
         permission :read_comments, :read, :always, on: Blog.Comment
 
+        # Domain-level broadcast (applies to every resource in the domain)
+        permission :manage_all,    :*, :always
+        permission :read_anywhere, :read
+
+        # Domain-level scoped to one resource
+        permission :manage_posts, :*, :always, on: MyApp.Blog.Post
+
+        # Audit metadata
         permission :read_tickets, :read, :assigned do
           description "Read tickets assigned to this agent"
         end
@@ -482,22 +511,11 @@ defmodule AshGrant.Dsl do
     For deny rules, pass `deny: true`:
 
         permission :block_archived_destroy, :destroy, :archived, deny: true
-
-    ## Domain-level permissions
-
-    When declared at the domain level (inside `AshGrant.Domain`'s
-    `grants do ... end`), the target resource is instead a **required second
-    positional argument** — there is no enclosing resource to default from.
-    `:scope` is optional at the domain level too:
-
-        permission :manage_posts, MyApp.Blog.Post, :*              # unrestricted
-        permission :manage_posts, MyApp.Blog.Post, :*, :always     # explicit
-
-    See `AshGrant.Dsl.DomainPermission` for the domain-level entity.
     """,
     examples: [
       "permission :read_all_posts, :read",
       "permission :update_own, :update, :own",
+      "permission :manage_all, :*, :always",
       "permission :audit_access, :read, :always, on: Blog.Post"
     ],
     target: AshGrant.Dsl.Permission,
@@ -534,90 +552,6 @@ defmodule AshGrant.Dsl do
         default: nil,
         doc:
           "Scope name defined on the target resource (e.g. `:always`, `:own`). " <>
-            "Optional — omitting it is equivalent to `:always`: the permission grants " <>
-            "unrestricted access with no row filter."
-      ],
-      deny: [
-        type: :boolean,
-        default: false,
-        doc: "When `true`, the permission becomes a deny rule. Deny always wins."
-      ],
-      description: [
-        type: :string,
-        required: false,
-        doc: "Human-readable description used in docs, audits, and explain output."
-      ]
-    ]
-  }
-
-  @domain_permission %Spark.Dsl.Entity{
-    name: :permission,
-    describe: """
-    Declares a single permission within a **domain-level** `grant`.
-
-    Positional form: `permission :name, TargetResource, :action, :scope`.
-    Because a domain has no enclosing resource, the target is a required
-    second positional argument (rather than the `on:` keyword used at the
-    resource level). `:scope` is optional — omit it for an unrestricted
-    grant (equivalent to `:always`). `:instance` is a keyword option and
-    defaults to `:*` (RBAC).
-
-    ## Examples
-
-        permission :manage_posts, MyApp.Blog.Post, :*                 # unrestricted
-        permission :manage_posts, MyApp.Blog.Post, :*, :always        # explicit :always
-
-        permission :read_comments, MyApp.Blog.Comment, :read, :always do
-          description "Read every comment in the domain"
-        end
-
-        # Instance-scoped (rare — dynamic instance permissions belong in a
-        # resolver, not in grants)
-        permission :manage_root_post, MyApp.Blog.Post, :update, :always,
-          instance: "root-post-id"
-
-        # Deny rule
-        permission :block_archived_destroy, MyApp.Blog.Post, :destroy, :archived,
-          deny: true
-    """,
-    examples: [
-      "permission :manage_posts, MyApp.Blog.Post, :*",
-      "permission :manage_posts, MyApp.Blog.Post, :*, :always",
-      "permission :audit_access, MyApp.Blog.Post, :read, :always"
-    ],
-    target: AshGrant.Dsl.Permission,
-    args: [:name, :on, :action, {:optional, :scope, nil}],
-    schema: [
-      name: [
-        type: :atom,
-        required: true,
-        doc: "Stable identifier for this permission within its grant."
-      ],
-      on: [
-        type: :atom,
-        required: true,
-        doc:
-          "The `Ash.Resource` module this permission applies to. Required at " <>
-            "the domain level — no enclosing resource is available to default from."
-      ],
-      instance: [
-        type: {:or, [{:in, [:*]}, :atom, :string]},
-        default: :*,
-        doc:
-          "Instance id this permission targets. Defaults to `:*` (RBAC). " <>
-            "Hardcoded instance ids are rare; dynamic instance permissions should use a resolver function."
-      ],
-      action: [
-        type: :atom,
-        required: true,
-        doc: "The action this permission covers. Use `:*` for all actions."
-      ],
-      scope: [
-        type: :atom,
-        required: false,
-        default: nil,
-        doc:
-          "Scope name defined on the target resource (or inherited from its domain). " <>
             "Optional — omitting it is equivalent to `:always`: the permission grants " <>
             "unrestricted access with no row filter."
       ],
@@ -699,14 +633,17 @@ defmodule AshGrant.Dsl do
     Declarative grants for permission-based authorization.
 
     Each `grant` pairs an actor predicate with a list of named permissions.
-    AshGrant synthesizes a resolver from the declared grants at compile time,
-    so resources using `grants` do not need to provide an explicit `resolver`
-    function.
+    `AshGrant.GrantsResolver` evaluates these grants at runtime and emits
+    permission strings that flow through the existing `Check` / `FilterCheck`
+    machinery.
 
-    Grants are mutually exclusive with an explicit `resolver` — use one or the
-    other, not both. Use an explicit resolver when permissions need to be
-    fetched from a database or external system (e.g. runtime instance-specific
-    grants).
+    A `grants` block can live on a resource or on a domain (via
+    `AshGrant.Domain`). Domain-level grants apply to every resource in the
+    domain unless a permission narrows itself with `on: SomeResource`.
+
+    `grants` is **additive** with an explicit `resolver`: when both are
+    declared, the synthesized resolver evaluates grants and then calls
+    the user's resolver, concatenating both permission lists.
     """,
     examples: [
       """
@@ -726,99 +663,22 @@ defmodule AshGrant.Dsl do
   }
 
   @doc """
-  Returns the resource-level `grants` section definition.
+  Returns the `grants` section definition. Used by both `AshGrant` (resource
+  extension) and `AshGrant.Domain` (domain extension) — the same `permission`
+  entity with no required target.
 
-  The resource-level `permission` entity uses `args: [:name, :action, :scope]`
-  with an optional `on:` keyword — domain-level grants need a different
-  entity (see `domain_grants_section/0`) because they have no enclosing
-  resource to default from, so the target is required and becomes the second
-  positional argument instead.
+  Targeting differs by context:
+
+  - **Resource-level**: when `on:` is omitted, `AshGrant.Transformers.NormalizeGrants`
+    injects the enclosing resource. Specify `on: OtherResource` to point at a
+    different resource. The permission applies to the named resource.
+  - **Domain-level**: no transformer injects a target. A permission declared
+    without `on:` is a *broadcast* — it applies to every resource in the
+    domain (the resolver substitutes the resource being checked at runtime).
+    Specify `on: OneResource` to scope a domain permission to a single
+    resource.
   """
   def grants_section, do: @grants
-
-  @domain_grant %Spark.Dsl.Entity{
-    name: :grant,
-    describe: """
-    Declares a named domain-level grant — an actor predicate paired with a
-    set of permissions. Identical to the resource-level `grant` entity
-    except that every `permission` inside **must** name its target resource
-    as the second positional argument.
-
-    ## Examples
-
-        grant :admin, expr(^actor(:role) == :admin) do
-          description "Full access for admins across the domain"
-          permission :manage_posts,    MyApp.Blog.Post,    :*, :always
-          permission :manage_comments, MyApp.Blog.Comment, :*, :always
-        end
-    """,
-    examples: [
-      """
-      grant :admin, expr(^actor(:role) == :admin) do
-        permission :manage_posts, MyApp.Blog.Post, :*, :always
-      end
-      """
-    ],
-    target: AshGrant.Dsl.Grant,
-    args: [:name, :predicate],
-    schema: [
-      name: [
-        type: :atom,
-        required: true,
-        doc: "Stable identifier for this grant (e.g. `:admin`, `:editor`)."
-      ],
-      predicate: [
-        type: {:or, [:boolean, :any]},
-        required: true,
-        doc:
-          "Ash expression over the actor, e.g. `expr(^actor(:role) == :admin)`. " <>
-            "Evaluated via `Ash.Expr.eval/2` with the current actor at permission-check time."
-      ],
-      description: [
-        type: :string,
-        required: false,
-        doc: "Human-readable description of what this grant represents."
-      ]
-    ],
-    entities: [permissions: [@domain_permission]]
-  }
-
-  @domain_grants %Spark.Dsl.Section{
-    name: :grants,
-    top_level?: false,
-    describe: """
-    Declarative grants at the domain level.
-
-    Resources in the domain inherit these grants (and scopes) unless they
-    declare their own with the same `:name`. Each `permission` must specify
-    its target resource as the second positional argument.
-
-    Grants are mutually exclusive with an explicit `resolver` on the **same**
-    domain — use one or the other, not both. If a *resource* in the domain
-    declares its own `resolver`, that resource shadows the domain's grants
-    for that resource only.
-    """,
-    examples: [
-      """
-      grants do
-        grant :admin, expr(^actor(:role) == :admin) do
-          permission :manage_posts, MyApp.Blog.Post, :*, :always
-        end
-      end
-      """
-    ],
-    entities: [@domain_grant]
-  }
-
-  @doc """
-  Returns the domain-level `grants` section definition.
-
-  Mirrors `grants_section/0` but uses a domain-specific `permission` entity
-  whose target resource is a required second positional argument rather
-  than the `on:` keyword — there is no enclosing resource at the domain
-  level to default from.
-  """
-  def domain_grants_section, do: @domain_grants
 
   @ash_grant %Spark.Dsl.Section{
     name: :ash_grant,

@@ -3,10 +3,12 @@ defmodule AshGrant.DomainGrantsTest do
   Covers the declarative `grants` DSL when declared on an `Ash.Domain`
   instead of (or in addition to) a resource.
 
-  The permission pipeline is the same as for resource-level grants
-  (`SynthesizeGrantsResolver` → `GrantsResolver` → `Check`/`FilterCheck`);
-  only the merge point in `AshGrant.Info.grants/1` and the domain-level
-  transformer/verifier are new.
+  Domain-level grants apply to **every** resource in the domain by
+  default — `permission :name, :action, :scope` is a *broadcast*. The
+  resolver substitutes `context.resource` at runtime so the same
+  permission lights up every resource in the domain. Use the `on:`
+  keyword to scope a single permission to one resource (Ash's
+  `policy resource_is/1` analog).
   """
 
   use ExUnit.Case, async: false
@@ -28,6 +30,7 @@ defmodule AshGrant.DomainGrantsTest do
   defp super_admin, do: %{id: Ash.UUID.generate(), role: :super_admin}
   defp editor, do: %{id: Ash.UUID.generate(), role: :editor}
   defp viewer, do: %{id: Ash.UUID.generate(), role: :viewer}
+  defp auditor, do: %{id: Ash.UUID.generate(), role: :auditor}
 
   defp clear_ets!(resource) do
     resource
@@ -47,60 +50,88 @@ defmodule AshGrant.DomainGrantsTest do
   describe "domain-level introspection" do
     test "AshGrant.Domain.Info.grants/1 returns the domain's grants" do
       grants = AshGrant.Domain.Info.grants(GrantsOnlyDomain)
-      assert Enum.map(grants, & &1.name) |> Enum.sort() == [:admin, :viewer]
+      assert Enum.map(grants, & &1.name) |> Enum.sort() == [:admin, :auditor, :viewer]
     end
 
     test "AshGrant.Domain.Info.permissions/1 flattens permissions across grants" do
       perms = AshGrant.Domain.Info.permissions(GrantsOnlyDomain)
       names = Enum.map(perms, & &1.name) |> Enum.sort()
-      assert names == [:manage_main, :manage_other, :read_published]
+      assert names == [:audit_post, :manage_all, :read_published]
+    end
+
+    test "broadcast permissions parse with on: nil" do
+      [%{permissions: [perm | _]}] =
+        AshGrant.Domain.Info.grants(GrantsOnlyDomain)
+        |> Enum.filter(&(&1.name == :admin))
+
+      assert perm.on == nil
+      assert perm.action == :*
+      assert perm.scope == :always
+    end
+
+    test "scoped (`on:`) permissions parse with the target set" do
+      [%{permissions: [perm]}] =
+        AshGrant.Domain.Info.grants(GrantsOnlyDomain)
+        |> Enum.filter(&(&1.name == :auditor))
+
+      assert perm.on == GrantsDomainPost
     end
 
     test "resources in a grants-only domain route through GrantsResolver" do
       # `AshGrant.Domain.Info.resolver/1` returns the **user-declared**
-      # resolver (nil here — the domain only declares grants). The
-      # synthesis happens in `AshGrant.Info.resolver/1` at read time: any
-      # resource in the domain returns `GrantsResolver` because the
-      # domain's grants merge into the resource's grant list.
+      # resolver (nil here — the domain only declares grants). Synthesis
+      # happens in `AshGrant.Info.resolver/1` at read time: any resource in
+      # the domain returns `GrantsResolver` because the domain's grants
+      # merge into the resource's grant list.
       assert AshGrant.Domain.Info.resolver(GrantsOnlyDomain) == nil
       assert Info.resolver(GrantsDomainPost) == AshGrant.GrantsResolver
     end
   end
 
-  describe "resource with no grants inherits from the domain" do
-    test "Info.grants/1 returns the two domain grants" do
-      grants = Info.grants(GrantsDomainPost)
-      assert Enum.map(grants, & &1.name) |> Enum.sort() == [:admin, :viewer]
-    end
-
-    test "resource inherits the GrantsResolver through Info.resolver/1 fallback" do
-      assert Info.resolver(GrantsDomainPost) == AshGrant.GrantsResolver
-    end
-
-    test "admin actor gets permissions on the enclosing resource" do
+  describe "broadcast permissions apply to every resource in the domain" do
+    test "admin gets the broadcast permission on the main resource" do
       perms = AshGrant.GrantsResolver.resolve(admin(), %{resource: GrantsDomainPost})
       assert "grants_domain_post:*:*:always" in perms
     end
 
-    test "admin actor also gets permissions on a sibling resource" do
-      perms = AshGrant.GrantsResolver.resolve(admin(), %{resource: GrantsDomainPost})
-      # The :admin grant declares permissions for two resources; both should
-      # be emitted regardless of which resource the check is running against.
+    test "the same broadcast permission lights up sibling resources" do
+      # Same domain-level :admin grant — but checked from a different
+      # resource. The resolver substitutes the resource being authorized.
+      perms = AshGrant.GrantsResolver.resolve(admin(), %{resource: GrantsDomainOther})
       assert "grants_domain_other:*:*:always" in perms
     end
 
-    test "viewer sees only the :read :published permission" do
-      perms = AshGrant.GrantsResolver.resolve(viewer(), %{resource: GrantsDomainPost})
-      assert "grants_domain_post:*:read:published" in perms
-      refute Enum.any?(perms, &String.starts_with?(&1, "grants_domain_post:*:*"))
+    test "viewer's broadcast :read :published applies to every resource" do
+      post_perms = AshGrant.GrantsResolver.resolve(viewer(), %{resource: GrantsDomainPost})
+      assert "grants_domain_post:*:read:published" in post_perms
+
+      other_perms = AshGrant.GrantsResolver.resolve(viewer(), %{resource: GrantsDomainOther})
+      assert "grants_domain_other:*:read:published" in other_perms
     end
 
     test "unknown actor role yields no permissions" do
       assert [] =
                AshGrant.GrantsResolver.resolve(%{role: :stranger}, %{resource: GrantsDomainPost})
     end
+  end
 
-    test "admin can read through the full policy pipeline" do
+  describe "scoped (`on:`) domain permissions apply only to their target" do
+    test "auditor's :audit_post permission fires on GrantsDomainPost" do
+      perms = AshGrant.GrantsResolver.resolve(auditor(), %{resource: GrantsDomainPost})
+      assert "grants_domain_post:*:read:always" in perms
+    end
+
+    test "auditor gets nothing on a sibling resource (different `on:`)" do
+      perms = AshGrant.GrantsResolver.resolve(auditor(), %{resource: GrantsDomainOther})
+      # The :auditor grant has only one permission (`on: GrantsDomainPost`);
+      # for any other resource the emitted string targets Post, not Other,
+      # so nothing matches a check on Other.
+      refute Enum.any?(perms, &String.starts_with?(&1, "grants_domain_other:"))
+    end
+  end
+
+  describe "domain grants flow through the full Ash.Policy pipeline" do
+    test "admin can read a resource that declares no grants of its own" do
       {:ok, _} =
         GrantsDomainPost
         |> Ash.Changeset.for_create(:create, %{title: "a", author_id: Ash.UUID.generate()},
@@ -110,6 +141,20 @@ defmodule AshGrant.DomainGrantsTest do
 
       assert [_] =
                GrantsDomainPost
+               |> Ash.Query.for_read(:read)
+               |> Ash.read!(actor: admin())
+    end
+
+    test "admin can read a sibling resource via the same broadcast" do
+      {:ok, _} =
+        GrantsDomainOther
+        |> Ash.Changeset.for_create(:create, %{title: "a", author_id: Ash.UUID.generate()},
+          authorize?: false
+        )
+        |> Ash.create(authorize?: false)
+
+      assert [_] =
+               GrantsDomainOther
                |> Ash.Query.for_read(:read)
                |> Ash.read!(actor: admin())
     end
@@ -130,50 +175,21 @@ defmodule AshGrant.DomainGrantsTest do
     end
   end
 
-  describe "a domain grant pointing at a sibling resource covers that resource" do
-    test "admin can read the :other resource even though it declares no grants" do
-      {:ok, _} =
-        GrantsDomainOther
-        |> Ash.Changeset.for_create(:create, %{title: "a", author_id: Ash.UUID.generate()},
-          authorize?: false
-        )
-        |> Ash.create(authorize?: false)
-
-      assert [_] =
-               GrantsDomainOther
-               |> Ash.Query.for_read(:read)
-               |> Ash.read!(actor: admin())
-    end
-  end
-
-  describe "resource with its own grants (different names) merges with domain grants" do
+  describe "resource grants merge with the domain's broadcast grants" do
     test "Info.grants/1 returns both resource and domain grants" do
       names = Info.grants(GrantsDomainMixedPost) |> Enum.map(& &1.name) |> Enum.sort()
-      assert names == [:admin, :editor, :viewer]
+      assert names == [:admin, :auditor, :editor, :viewer]
     end
 
-    test "editor grant (resource-only) contributes its permissions" do
+    test "resource-only :editor grant contributes its permissions" do
       perms = AshGrant.GrantsResolver.resolve(editor(), %{resource: GrantsDomainMixedPost})
       assert "grants_domain_mixed_post:*:read:always" in perms
       assert "grants_domain_mixed_post:*:update:own" in perms
     end
 
-    test "admin grant (domain-only) still appears in the merged grant list" do
-      names = Info.grants(GrantsDomainMixedPost) |> Enum.map(& &1.name)
-      assert :admin in names
-    end
-
-    test "admin grant's `on:` is respected — no permissions leak onto mixed resource" do
-      # The domain's :admin grant declares permissions with
-      # `on: GrantsDomainPost` and `on: GrantsDomainOther` — neither targets
-      # the mixed resource. The permission strings the resolver emits reflect
-      # that: admin gets coverage on the named resources, not on
-      # GrantsDomainMixedPost. The check machinery filters by prefix, so a
-      # downstream policy call for mixed would never see those strings match.
+    test "domain-only :admin broadcast still fires for the merged resource" do
       perms = AshGrant.GrantsResolver.resolve(admin(), %{resource: GrantsDomainMixedPost})
-      refute "grants_domain_mixed_post:*:*:always" in perms
-      assert "grants_domain_post:*:*:always" in perms
-      assert "grants_domain_other:*:*:always" in perms
+      assert "grants_domain_mixed_post:*:*:always" in perms
     end
   end
 
@@ -204,26 +220,18 @@ defmodule AshGrant.DomainGrantsTest do
   end
 
   describe "resource with a custom resolver AND a grants-bearing domain" do
-    # Previous semantics shadowed the domain's grants when the resource
-    # declared its own resolver. With grants + resolver now merging, the
-    # domain grants apply *on top of* the resource's custom resolver.
-
     test "Info.resolver/1 routes through GrantsResolver because the domain has grants" do
-      # Even though the resource declares its own `resolver`, grants exist
-      # somewhere in the chain (the domain) so we route through
-      # `GrantsResolver`, which in turn calls the custom resolver.
       assert Info.resolver(GrantsDomainResolverPost) == AshGrant.GrantsResolver
     end
 
-    test "admin actor: domain :admin grant fires AND resource resolver returns []" do
+    test "admin actor: domain :admin broadcast fires through to this resource too" do
+      # The domain's broadcast `:admin` grant covers every resource — that
+      # includes the one with a custom resolver. The custom resolver also
+      # runs on top (and contributes nothing for this actor).
       perms =
         AshGrant.GrantsResolver.resolve(admin(), %{resource: GrantsDomainResolverPost})
 
-      # Domain's :admin grant emits permissions for GrantsDomainPost /
-      # GrantsDomainOther (not this resource) — the merged list carries
-      # those strings through, and the resource resolver contributes nothing.
-      assert "grants_domain_post:*:*:always" in perms
-      assert "grants_domain_other:*:*:always" in perms
+      assert "grants_domain_resolver_post:*:*:always" in perms
     end
 
     test "custom-resolver actor: no grant matches, user resolver still fires" do
@@ -250,7 +258,7 @@ defmodule AshGrant.DomainGrantsTest do
 
           grants do
             grant :admin, expr(^actor(:role) == :admin) do
-              permission(:admin_all, AshGrant.Test.GrantsDomainPost, :*, :always)
+              permission(:admin_all, :*, :always)
             end
           end
         end
@@ -264,41 +272,34 @@ defmodule AshGrant.DomainGrantsTest do
       assert length(grants) == 1
     end
 
-    # The four cases below are handled by the domain-level
-    # `ValidateGrantReferences` verifier. Spark converts verifier errors into
-    # compile warnings rather than raising, so `assert_raise` wouldn't catch
-    # them — `capture_io(:stderr, ...)` observes the warning message instead.
+    test "broadcast permission compiles even when no resource is named" do
+      # `permission :name, :action, :scope` with no `on:` is the new
+      # default at the domain level. The verifier skips the action/scope
+      # reference checks because the target isn't known until runtime.
+      defmodule BroadcastDomain do
+        use Ash.Domain,
+          extensions: [AshGrant.Domain],
+          validate_config_inclusion?: false
 
-    test "warns when the target resource is omitted and arity shifts to non-module `:on`" do
-      # With optional `:scope`, a 3-arg call `permission(:name, :read, :always)`
-      # is accepted by the macro — `on` silently binds to the plain atom
-      # `:read`. The verifier catches that case by rejecting non-module
-      # atoms with a pointed "did you forget the target?" message.
-      warnings =
-        capture_io(:stderr, fn ->
-          defmodule MissingOnDomain do
-            use Ash.Domain,
-              extensions: [AshGrant.Domain],
-              validate_config_inclusion?: false
-
-            ash_grant do
-              grants do
-                grant :bad, expr(^actor(:role) == :admin) do
-                  permission(:no_target, :read, :always)
-                end
-              end
-            end
-
-            resources do
+        ash_grant do
+          grants do
+            grant :universal, expr(^actor(:role) == :universal) do
+              permission(:read_anywhere, :read)
+              permission(:manage_anywhere, :*, :always)
             end
           end
-        end)
+        end
 
-      assert warnings =~ "is not a module"
-      assert warnings =~ "forget the target"
+        resources do
+        end
+      end
+
+      [grant] = AshGrant.Domain.Info.grants(BroadcastDomain)
+      assert length(grant.permissions) == 2
+      assert Enum.all?(grant.permissions, &(&1.on == nil))
     end
 
-    test "warns on unknown action on the target resource" do
+    test "warns on unknown action when a domain permission names its target" do
       warnings =
         capture_io(:stderr, fn ->
           defmodule BogusActionDomain do
@@ -309,7 +310,7 @@ defmodule AshGrant.DomainGrantsTest do
             ash_grant do
               grants do
                 grant :bad, expr(^actor(:role) == :admin) do
-                  permission(:bad, AshGrant.Test.GrantsDomainPost, :bogus, :always)
+                  permission(:bad, :bogus, :always, on: AshGrant.Test.GrantsDomainPost)
                 end
               end
             end
@@ -322,7 +323,7 @@ defmodule AshGrant.DomainGrantsTest do
       assert warnings =~ "`action: :bogus` is not defined"
     end
 
-    test "warns on unknown scope on the target resource" do
+    test "warns on unknown scope when a domain permission names its target" do
       warnings =
         capture_io(:stderr, fn ->
           defmodule BogusScopeDomain do
@@ -333,7 +334,7 @@ defmodule AshGrant.DomainGrantsTest do
             ash_grant do
               grants do
                 grant :bad, expr(^actor(:role) == :admin) do
-                  permission(:bad, AshGrant.Test.GrantsDomainPost, :read, :undefined)
+                  permission(:bad, :read, :undefined, on: AshGrant.Test.GrantsDomainPost)
                 end
               end
             end
@@ -346,7 +347,7 @@ defmodule AshGrant.DomainGrantsTest do
       assert warnings =~ "`scope: :undefined` is not defined"
     end
 
-    test "warns when target is not an Ash.Resource" do
+    test "warns when `on:` is given but isn't an Ash.Resource" do
       warnings =
         capture_io(:stderr, fn ->
           defmodule NonResourceDomain do
@@ -357,7 +358,7 @@ defmodule AshGrant.DomainGrantsTest do
             ash_grant do
               grants do
                 grant :bad, expr(^actor(:role) == :admin) do
-                  permission(:bad, String, :read, :always)
+                  permission(:bad, :read, :always, on: String)
                 end
               end
             end
