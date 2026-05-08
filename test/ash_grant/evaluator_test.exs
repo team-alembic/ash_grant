@@ -215,6 +215,27 @@ defmodule AshGrant.EvaluatorTest do
       scopes = Evaluator.get_all_scopes(permissions, "blog", "read")
       assert scopes == ["always"]
     end
+
+    test "preserves `nil` for permissions declared without a scope" do
+      # `"blog:*:read:"` (4-part with empty trailing) parses to scope: nil.
+      # The scope list carries the nil through so downstream consumers
+      # (FilterCheck, CanPerform) can treat it as unrestricted access,
+      # equivalent to `"always"` / `"all"` / `"global"`.
+      permissions = ["blog:*:read:"]
+
+      assert Evaluator.get_all_scopes(permissions, "blog", "read") == [nil]
+    end
+
+    test "mixes `nil` with named scopes when both kinds match" do
+      permissions = [
+        "blog:*:read:",
+        "blog:*:read:own"
+      ]
+
+      scopes = Evaluator.get_all_scopes(permissions, "blog", "read")
+      assert nil in scopes
+      assert "own" in scopes
+    end
   end
 
   describe "find_matching/3" do

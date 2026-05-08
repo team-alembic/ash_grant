@@ -41,6 +41,35 @@ defmodule AshGrant.Domain.Info do
   end
 
   @doc """
+  Gets all `grant` declarations configured on the domain.
+
+  Returns `[]` if the domain does not use the `AshGrant.Domain` extension
+  or declares no grants.
+  """
+  @spec grants(domain :: Ash.Domain.t()) :: [AshGrant.Dsl.Grant.t()]
+  def grants(domain) do
+    Spark.Dsl.Extension.get_entities(domain, [:ash_grant, :grants])
+  end
+
+  @doc """
+  Gets a specific grant by name from the domain.
+  """
+  @spec get_grant(domain :: Ash.Domain.t(), name :: atom()) :: AshGrant.Dsl.Grant.t() | nil
+  def get_grant(domain, name) do
+    grants(domain)
+    |> Enum.find(&(&1.name == name))
+  end
+
+  @doc """
+  Gets all permissions declared across every grant on the domain as a flat list.
+  """
+  @spec permissions(domain :: Ash.Domain.t()) :: [AshGrant.Dsl.Permission.t()]
+  def permissions(domain) do
+    grants(domain)
+    |> Enum.flat_map(fn grant -> grant.permissions || [] end)
+  end
+
+  @doc """
   Returns true if the domain has the `AshGrant.Domain` extension configured.
   """
   @spec configured?(domain :: Ash.Domain.t()) :: boolean()
