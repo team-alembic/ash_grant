@@ -18,6 +18,6 @@ end
 
 config :ash_grant,
   ecto_repos: [AshGrant.TestRepo],
-  ash_domains: [AshGrant.Test.Domain]
+  ash_domains: [AshGrant.Test.Domain, AshGrant.Test.GrantsWithResolverDomain]
 
 config :logger, level: :warning

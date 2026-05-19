@@ -220,18 +220,8 @@ defmodule AshGrant.Explainer do
 
   # Private functions
 
-  defp get_permissions(resource, actor, context) do
-    case Info.resolver(resource) do
-      nil ->
-        []
-
-      resolver when is_function(resolver, 2) ->
-        resolver.(actor, context) || []
-
-      resolver when is_atom(resolver) ->
-        resolver.resolve(actor, context) || []
-    end
-  end
+  defp get_permissions(resource, actor, context),
+    do: Info.resolve_permissions(resource, actor, context)
 
   defp matches_resource?(%Permission{resource: perm_resource}, resource_name) do
     perm_resource == "*" || perm_resource == resource_name
