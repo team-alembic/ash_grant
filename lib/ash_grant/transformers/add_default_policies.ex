@@ -108,10 +108,23 @@ defmodule AshGrant.Transformers.AddDefaultPolicies do
   end
 
   defp add_write_policy(dsl_state) do
-    write_policy = %Ash.Policy.Policy{
+    # `create`/`update` use the strict `AshGrant.Check`:
+    #   * create has no row yet, so the scope must be evaluated against the
+    #     changeset's attributes — a FilterCheck has nothing to filter and the
+    #     tenant/own scope would not be enforced (the create would leak).
+    #   * update *could* be filter-based (it acts on a row), and that would be
+    #     the better security posture (a filter hides non-matching rows instead
+    #     of confirming existence via `Forbidden`) — but Ash's atomic-update
+    #     forbidden path currently crashes (`Ash.Actions.Update.Bulk` calls
+    #     `Ash.Authorizer.exception` with the authorizer module as a *string*,
+    #     hitting `:erlang.function_exported/3`'s atom guard). The atomic-destroy
+    #     path is not affected. Until that upstream Ash bug is fixed, update
+    #     stays strict so an out-of-scope single update fails cleanly with
+    #     `Forbidden` rather than an `ArgumentError`.
+    strict_write_policy = %Ash.Policy.Policy{
       bypass?: false,
       access_type: :strict,
-      condition: [{Ash.Policy.Check.ActionType, type: [:create, :update, :destroy]}],
+      condition: [{Ash.Policy.Check.ActionType, type: [:create, :update]}],
       policies: [
         %Ash.Policy.Check{
           type: :authorize_if,
@@ -122,7 +135,30 @@ defmodule AshGrant.Transformers.AddDefaultPolicies do
       ]
     }
 
-    {:ok, Transformer.add_entity(dsl_state, [:policies], write_policy, type: :append)}
+    # `destroy` uses `AshGrant.FilterCheck` (access_type :filter): the scope is
+    # resolved to a filter that Ash evaluates against the target record for a
+    # single destroy AND pushes into the query for a bulk/atomic destroy. The
+    # strict SimpleCheck cannot authorize an atomic query destroy (it needs a
+    # concrete record), so `cascade_destroy` — which prefers the atomic strategy
+    # — would be forbidden. Filter-based authorization makes every destroy
+    # strategy work uniformly (RBAC, instance, and `scope_through` scopes all
+    # resolve to filters).
+    filter_destroy_policy = %Ash.Policy.Policy{
+      bypass?: false,
+      access_type: :filter,
+      condition: [{Ash.Policy.Check.ActionType, type: [:destroy]}],
+      policies: [
+        %Ash.Policy.Check{
+          type: :authorize_if,
+          check_module: AshGrant.FilterCheck,
+          check: {AshGrant.FilterCheck, []},
+          check_opts: []
+        }
+      ]
+    }
+
+    dsl_state = Transformer.add_entity(dsl_state, [:policies], strict_write_policy, type: :append)
+    {:ok, Transformer.add_entity(dsl_state, [:policies], filter_destroy_policy, type: :append)}
   end
 
   defp add_generic_action_policy(dsl_state) do

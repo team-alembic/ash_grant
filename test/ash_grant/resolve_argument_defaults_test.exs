@@ -170,25 +170,24 @@ defmodule AshGrant.ResolveArgumentDefaultsTest do
     test "default_policies generated read + write policies" do
       policies = Ash.Policy.Info.policies(RefundDefaults)
 
-      # One read policy (filter_check), one write policy (check), one generic action policy
-      assert Enum.any?(policies, fn p ->
-               Enum.any?(p.condition, fn
-                 {Ash.Policy.Check.ActionType, opts} -> opts[:type] == [:read]
-                 _ -> false
-               end)
-             end),
+      # Read policy (filter_check), a strict create/update write policy (check),
+      # a filter-based destroy policy (filter_check, so atomic/bulk destroys
+      # authorize), and a generic action policy.
+      condition_type = fn p ->
+        Enum.find_value(p.condition, fn
+          {Ash.Policy.Check.ActionType, opts} -> opts[:type]
+          _ -> nil
+        end)
+      end
+
+      assert Enum.any?(policies, &(condition_type.(&1) == [:read])),
              "expected a default-generated read policy"
 
-      assert Enum.any?(policies, fn p ->
-               Enum.any?(p.condition, fn
-                 {Ash.Policy.Check.ActionType, opts} ->
-                   opts[:type] == [:create, :update, :destroy]
+      assert Enum.any?(policies, &(condition_type.(&1) == [:create, :update])),
+             "expected a default-generated strict create/update write policy"
 
-                 _ ->
-                   false
-               end)
-             end),
-             "expected a default-generated write policy"
+      assert Enum.any?(policies, &(condition_type.(&1) == [:destroy])),
+             "expected a default-generated filter-based destroy policy"
     end
   end
 end
