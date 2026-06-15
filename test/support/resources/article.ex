@@ -98,11 +98,26 @@ defmodule AshGrant.Test.Article do
     update_timestamp(:updated_at)
   end
 
+  # A user-defined bypass alongside `default_policies: true`. The generated
+  # `action_type(:action)` grant policy must be APPENDED after this bypass so the
+  # bypass wins; otherwise (the generated policy prepended) a no-grant actor is
+  # forbidden before the bypass runs. Regression coverage for the `:privileged`
+  # generic action below.
+  policies do
+    bypass action(:privileged) do
+      authorize_if(always())
+    end
+  end
+
   actions do
     defaults([:read, :destroy, create: :*, update: :*])
 
     action :summarize, :string do
       run(fn _input, _context -> {:ok, "summary"} end)
+    end
+
+    action :privileged, :string do
+      run(fn _input, _context -> {:ok, "privileged"} end)
     end
   end
 end

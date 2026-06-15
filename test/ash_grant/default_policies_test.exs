@@ -147,6 +147,23 @@ defmodule AshGrant.DefaultPoliciesTest do
     end
   end
 
+  describe "user bypass on a generic action takes precedence over the generated policy" do
+    # Regression: the generated `action_type(:action)` policy must be appended
+    # AFTER user policies. When it was prepended (Spark's `add_entity` default),
+    # it ran before the user's `bypass action(:privileged)` and forbade no-grant
+    # actors before the bypass could authorize. `Article` grants no permission
+    # for `:privileged`, so only the bypass can authorize it.
+    test "nil actor is authorized by the bypass" do
+      input = Ash.ActionInput.for_action(Article, :privileged, %{}, actor: nil)
+      assert {:ok, "privileged"} = Ash.run_action(input)
+    end
+
+    test "an actor without any grant is authorized by the bypass" do
+      input = Ash.ActionInput.for_action(Article, :privileged, %{}, actor: %{role: :viewer})
+      assert {:ok, "privileged"} = Ash.run_action(input)
+    end
+  end
+
   describe "AshGrant.Info.default_policies/1" do
     test "returns the configured value" do
       assert AshGrant.Info.default_policies(Article) == true

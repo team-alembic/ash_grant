@@ -140,6 +140,11 @@ defmodule AshGrant.Transformers.AddDefaultPolicies do
       ]
     }
 
-    {:ok, Transformer.add_entity(dsl_state, [:policies], generic_policy)}
+    # `type: :append` (like the read/write/destroy policies above) so this
+    # generated policy lands AFTER user-defined ones. Without it, `add_entity`
+    # defaults to `:prepend`, placing the generic-action grant policy BEFORE the
+    # user's `bypass` policies — a failing grant then forbids the action before
+    # a bypass (e.g. an AshOban/system bypass) is ever evaluated.
+    {:ok, Transformer.add_entity(dsl_state, [:policies], generic_policy, type: :append)}
   end
 end
