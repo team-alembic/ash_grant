@@ -170,7 +170,7 @@ scope :to_own_unit, expr(to_center_id in ^actor(:own_org_unit_ids))
 ### Staff Device PIN
 
 ```elixir
-ash_grant do
+grants do
   resource_name "staff_pin"
   default_policies true
 
@@ -189,7 +189,7 @@ Admin:          "staff_pin:*:*:always"
 ### Member Management
 
 ```elixir
-ash_grant do
+grants do
   resource_name "member"
   default_policies true
 
@@ -208,7 +208,7 @@ Executive:        "member:*:read:always"
 ### Inventory Transfer (OR composition)
 
 ```elixir
-ash_grant do
+grants do
   resource_name "inventory_transfer"
   default_policies true
 
@@ -230,7 +230,7 @@ Regional:       "inventory_transfer:*:read:in_own_tree"
 ### Schedule with Lifecycle (AND composition)
 
 ```elixir
-ash_grant do
+grants do
   resource_name "schedule"
   default_policies true
 

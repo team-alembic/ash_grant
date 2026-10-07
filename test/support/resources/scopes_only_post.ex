@@ -6,7 +6,7 @@ defmodule AshGrant.Test.ScopesOnlyPost do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     # Resolver on resource, scopes from domain
     resolver(fn actor, _context ->
       case actor do

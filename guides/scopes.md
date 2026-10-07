@@ -6,7 +6,7 @@ using the `scope` entity with Ash `expr()` expressions.
 ## Scope DSL
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
 
   # Boolean scope - no filtering
@@ -97,7 +97,7 @@ defmodule MyApp.Blog.Post do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     resolver fn actor, _context ->
       case actor do
         %{role: :tenant_admin} -> ["post:*:*:same_tenant"]
@@ -147,7 +147,7 @@ Ash.update(post, %{title: "Updated"}, actor: user, tenant: tenant_id)
 Uses Ash's built-in tenant context, passed via query/changeset options:
 
 ```elixir
-ash_grant do
+grants do
   scope :same_tenant, expr(tenant_id == ^tenant())
 end
 
@@ -160,7 +160,7 @@ Post |> Ash.read!(actor: user, tenant: "acme_corp")
 Uses a tenant_id field stored on the actor:
 
 ```elixir
-ash_grant do
+grants do
   scope :same_tenant, expr(tenant_id == ^actor(:tenant_id))
 end
 
@@ -185,7 +185,7 @@ tenant, and isn't a database function — a reference date for a
 through `^context(:key)`:
 
 ```elixir
-ash_grant do
+grants do
   scope :recent, expr(inserted_at > ^context(:cutoff))
   scope :within_limit, expr(amount <= ^context(:max_amount))
 end
@@ -237,7 +237,7 @@ You can use `exists()` and dot-path references in scope expressions for relation
 These work for both **read** and **write** actions:
 
 ```elixir
-ash_grant do
+grants do
   scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id)))
   scope :own_in_team, expr(author_id == ^actor(:id) and exists(team.memberships, user_id == ^actor(:id)))
   scope :same_center, expr(order.center_id == ^actor(:center_id))
@@ -274,7 +274,7 @@ with `resolve_argument`. The scope stays in-memory-evaluable and the resource
 populates the argument from its own relationships:
 
 ```elixir
-ash_grant do
+grants do
   scope :at_own_unit, expr(^arg(:center_id) in ^actor(:own_org_unit_ids))
   resolve_argument :center_id, from_path: [:order, :center_id]
 end
@@ -298,7 +298,7 @@ AshGrant supports a wide variety of business scenarios. Here are common patterns
 ### Status-Based Workflow
 
 ```elixir
-ash_grant do
+grants do
   scope :always, true
   scope :draft, expr(status == :draft)
   scope :pending_review, expr(status == :pending_review)
@@ -312,7 +312,7 @@ end
 Hierarchical access levels:
 
 ```elixir
-ash_grant do
+grants do
   scope :public, expr(classification == :public)
   scope :internal, expr(classification in [:public, :internal])
   scope :confidential, expr(classification in [:public, :internal, :confidential])
@@ -325,7 +325,7 @@ end
 Numeric comparisons for amount-based authorization:
 
 ```elixir
-ash_grant do
+grants do
   scope :small_amount, expr(amount < 1000)
   scope :medium_amount, expr(amount < 10000)
   scope :large_amount, expr(amount < 100000)
@@ -338,7 +338,7 @@ end
 Write combined conditions directly in the expression:
 
 ```elixir
-ash_grant do
+grants do
   scope :tenant, expr(tenant_id == ^actor(:tenant_id))
   scope :tenant_active, expr(tenant_id == ^actor(:tenant_id) and status == :active)
   scope :tenant_own,
@@ -351,7 +351,7 @@ end
 Temporal filtering:
 
 ```elixir
-ash_grant do
+grants do
   scope :current_period, expr(period_id == ^actor(:current_period_id))
   scope :open_periods, expr(period_status == :open)
   scope :this_fiscal_year, expr(fiscal_year == ^actor(:fiscal_year))
@@ -363,7 +363,7 @@ end
 List membership for territory assignments:
 
 ```elixir
-ash_grant do
+grants do
   scope :same_region, expr(region_id == ^actor(:region_id))
   scope :assigned_territories, expr(territory_id in ^actor(:territory_ids))
   scope :my_accounts, expr(account_manager_id == ^actor(:id))

@@ -24,7 +24,7 @@ defmodule AshGrant.WriteScopeDeprecationTest do
             data_layer: Ash.DataLayer.Ets,
             extensions: [AshGrant]
 
-          ash_grant do
+          grants do
             resolver(fn _, _ -> [] end)
             scope(:readonly, expr(author_id == ^actor(:id)), write: false)
           end
@@ -60,7 +60,7 @@ defmodule AshGrant.WriteScopeDeprecationTest do
             data_layer: Ash.DataLayer.Ets,
             extensions: [AshGrant]
 
-          ash_grant do
+          grants do
             resolver fn _, _ -> [] end
             scope :own, expr(author_id == ^actor(:id))
           end

@@ -20,7 +20,7 @@ defmodule AshGrant.ResolveArgumentValidationTest do
           data_layer: Ash.DataLayer.Ets,
           extensions: [AshGrant]
 
-        ash_grant do
+        grants do
           resolver(fn _, _ -> [] end)
           scope(:has_ref, expr(^arg(:center_id) == ^actor(:org_id)))
           resolve_argument(:center_id, from_path: [:nonexistent_rel, :center_id])
@@ -51,7 +51,7 @@ defmodule AshGrant.ResolveArgumentValidationTest do
           data_layer: Ash.DataLayer.Ets,
           extensions: [AshGrant]
 
-        ash_grant do
+        grants do
           resolver(fn _, _ -> [] end)
           scope(:has_ref, expr(^arg(:parent) == ^actor(:id)))
           resolve_argument(:parent, from_path: [:parent])
@@ -85,7 +85,7 @@ defmodule AshGrant.ResolveArgumentValidationTest do
           data_layer: Ash.DataLayer.Ets,
           extensions: [AshGrant]
 
-        ash_grant do
+        grants do
           resolver(fn _, _ -> [] end)
           scope(:has_ref, expr(^arg(:nothing) == ^actor(:id)))
           resolve_argument(:nothing, from_path: [:nothing_here])
@@ -116,7 +116,7 @@ defmodule AshGrant.ResolveArgumentValidationTest do
           data_layer: Ash.DataLayer.Ets,
           extensions: [AshGrant]
 
-        ash_grant do
+        grants do
           resolver(fn _, _ -> [] end)
           scope(:own, expr(author_id == ^actor(:id)))
           # No scope references ^arg(:center_id) — this is dead code.
@@ -147,7 +147,7 @@ defmodule AshGrant.ResolveArgumentValidationTest do
           data_layer: Ash.DataLayer.Ets,
           extensions: [AshGrant]
 
-        ash_grant do
+        grants do
           resolver(fn _, _ -> [] end)
           scope(:has_ref, expr(^arg(:id) == ^actor(:id)))
           resolve_argument(:id, from_path: [:id], for_actions: [:nonexistent_action])

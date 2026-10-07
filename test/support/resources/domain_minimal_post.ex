@@ -6,7 +6,7 @@ defmodule AshGrant.Test.DomainMinimalPost do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     default_policies(true)
 
     # Extra scope beyond domain's :always and :own

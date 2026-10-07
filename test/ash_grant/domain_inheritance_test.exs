@@ -210,7 +210,7 @@ defmodule AshGrant.DomainInheritanceTest do
               data_layer: Ash.DataLayer.Ets,
               extensions: [AshGrant]
 
-            ash_grant do
+            grants do
               scope(:always, true)
             end
 
@@ -252,7 +252,7 @@ defmodule AshGrant.DomainInheritanceTest do
               authorizers: [Ash.Policy.Authorizer],
               extensions: [AshGrant]
 
-            ash_grant do
+            grants do
               default_policies(true)
               scope(:always, true)
             end

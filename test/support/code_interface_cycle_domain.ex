@@ -13,7 +13,7 @@ defmodule AshGrant.Test.CodeInterfaceCycleDomain do
     extensions: [AshGrant.Domain],
     validate_config_inclusion?: false
 
-  ash_grant do
+  grants do
     resolver(fn actor, _context ->
       case actor do
         nil -> []

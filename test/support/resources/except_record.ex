@@ -18,7 +18,7 @@ defmodule AshGrant.Test.ExceptRecord do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     resolver(fn actor, _context ->
       case actor do
         %{permissions: perms} -> perms

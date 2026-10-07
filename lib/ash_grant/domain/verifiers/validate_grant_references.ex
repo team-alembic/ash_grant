@@ -33,7 +33,10 @@ defmodule AshGrant.Domain.Verifiers.ValidateGrantReferences do
   @impl true
   def verify(dsl_state) do
     domain = Verifier.get_persisted(dsl_state, :module)
-    grants = Verifier.get_entities(dsl_state, [:ash_grant, :grants])
+
+    grants =
+      Verifier.get_entities(dsl_state, [:grants])
+      |> Enum.filter(&match?(%AshGrant.Dsl.Grant{}, &1))
 
     case grants do
       [] ->
@@ -54,7 +57,7 @@ defmodule AshGrant.Domain.Verifiers.ValidateGrantReferences do
   end
 
   defp validate_permission(permission, grant, domain, resources) do
-    path = [:ash_grant, :grants, :grant, grant.name, :permission, permission.name]
+    path = [:grants, :grant, grant.name, :permission, permission.name]
 
     Enum.reduce_while(resources, :ok, fn resource, :ok ->
       case validate_against(permission, resource, domain, path) do

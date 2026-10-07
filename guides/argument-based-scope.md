@@ -56,7 +56,7 @@ defmodule MyApp.Orders.Refund do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     resolver MyApp.PermissionResolver
     resource_name "refund"
 
@@ -244,7 +244,7 @@ specific actions):
 
 ```elixir
 # Resource — no resolve_argument entity
-ash_grant do
+grants do
   scope :at_own_unit, expr(^arg(:center_id) in ^actor(:own_org_unit_ids))
 end
 

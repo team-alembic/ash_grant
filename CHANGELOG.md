@@ -10,6 +10,34 @@ and this project adheres to
 
 ### Breaking
 
+- **Top-level DSL section renamed from `ash_grant` to `grants`** on both
+  resources (`AshGrant`) and domains (`AshGrant.Domain`). `grant` entities now
+  sit directly in the `grants` block. The nested `grants do ... end` section is
+  removed. Spark paths change from `[:ash_grant]` and `[:ash_grant, :grants]` to
+  `[:grants]`.
+
+  ```elixir
+  # Before
+  ash_grant do
+    scope :always, true
+
+    grants do
+      grant :admin, expr(^actor(:role) == :admin) do
+        permission :manage_all, :*, :always
+      end
+    end
+  end
+
+  # After
+  grants do
+    scope :always, true
+
+    grant :admin, expr(^actor(:role) == :admin) do
+      permission :manage_all, :*, :always
+    end
+  end
+  ```
+
 - **Scope inheritance removed.** `inherits` (and the old 3-argument positional
   form `scope :name, [:parent], filter`) is no longer supported. Write each
   scope as a standalone expression; combine conditions with `and`:
@@ -40,10 +68,11 @@ and this project adheres to
 ### Added
 
 - **Domain-level `grants` block.** Add `AshGrant.Domain` to your `Ash.Domain`'s
-  `extensions` to declare a `grants do ... end` (and shared `scope` /
-  `resolver`) that every resource in the domain inherits. Domain grants are
-  _broadcasts_ — `permission :name, :action, :scope` lights up every resource in
-  the domain; the resolver substitutes the resource being authorized at runtime.
+  `extensions` to declare `grant` entities (and shared `scope` / `resolver`)
+  in a `grants do ... end` block that every resource in the domain inherits.
+  Domain grants are _broadcasts_ — `permission :name, :action, :scope` lights up
+  every resource in the domain; the resolver substitutes the resource being
+  authorized at runtime.
   Resources may still declare their own `grants`; the two merge with
   resource-level grants winning on name conflicts.
 
@@ -51,19 +80,17 @@ and this project adheres to
   defmodule MyApp.Blog do
     use Ash.Domain, extensions: [AshGrant.Domain]
 
-    ash_grant do
+    grants do
       scope :always, true
       scope :own, expr(author_id == ^actor(:id))
 
-      grants do
-        grant :admin, expr(^actor(:role) == :admin) do
-          permission :manage_all, :*, :always
-        end
+      grant :admin, expr(^actor(:role) == :admin) do
+        permission :manage_all, :*, :always
+      end
 
-        grant :editor, expr(^actor(:role) == :editor) do
-          permission :read_all,   :read              # unrestricted on every resource
-          permission :update_own, :update, :own
-        end
+      grant :editor, expr(^actor(:role) == :editor) do
+        permission :read_all,   :read              # unrestricted on every resource
+        permission :update_own, :update, :own
       end
     end
 

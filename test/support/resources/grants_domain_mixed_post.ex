@@ -10,15 +10,13 @@ defmodule AshGrant.Test.GrantsDomainMixedPost do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     resource_name("grants_domain_mixed_post")
     default_policies(true)
 
-    grants do
-      grant :editor, expr(^actor(:role) == :editor) do
-        permission(:read_any, :read, :always)
-        permission(:update_own, :update, :own)
-      end
+    grant :editor, expr(^actor(:role) == :editor) do
+      permission(:read_any, :read, :always)
+      permission(:update_own, :update, :own)
     end
   end
 

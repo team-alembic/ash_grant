@@ -32,7 +32,7 @@ defmodule AshGrant.WriteScopeTest do
       validate_domain_inclusion?: false,
       extensions: [AshGrant]
 
-    ash_grant do
+    grants do
       resolver(fn _actor, _context -> [] end)
 
       scope(:always, true)
@@ -248,7 +248,7 @@ defmodule AshGrant.WriteScopeTest do
       validate_domain_inclusion?: false,
       extensions: [AshGrant]
 
-    ash_grant do
+    grants do
       resolver(fn _actor, _context -> [] end)
       scope_resolver(fn scope, _context -> "legacy_filter_for_#{scope}" end)
       scope(:always, true)

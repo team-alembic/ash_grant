@@ -7,7 +7,7 @@ AshGrant supports column-level read authorization through **field groups**. Fiel
 Define field groups with optional inheritance:
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
 
   scope :always, true
@@ -28,7 +28,7 @@ end
 When a resource has many attributes, use `:always` with `except` to exclude specific fields instead of listing all visible ones:
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   scope :always, true
 
@@ -80,7 +80,7 @@ end
 Set `default_field_policies: true` to auto-generate field policies from field group definitions:
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   default_policies true
   default_field_policies true  # Auto-generates field_policies from field_groups

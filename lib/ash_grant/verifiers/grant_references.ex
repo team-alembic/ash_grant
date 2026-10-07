@@ -26,7 +26,7 @@ defmodule AshGrant.Verifiers.GrantReferences do
   end
 
   defp validate_permission(permission, grant, caller_module, local_scopes, local_actions) do
-    path = [:ash_grant, :grants, :grant, grant.name, :permission, permission.name]
+    path = [:grants, :grant, grant.name, :permission, permission.name]
 
     with :ok <- validate_action_reference(permission, caller_module, path, local_actions) do
       validate_scope_reference(permission, caller_module, path, local_scopes)
@@ -64,7 +64,7 @@ defmodule AshGrant.Verifiers.GrantReferences do
         path,
         "`scope: #{inspect(scope)}` is not defined on #{inspect(caller_module)}. " <>
           "Available scopes: #{inspect(local_scopes)}. " <>
-          "Add one with `scope #{inspect(scope)}, expr(...)` in the resource's `ash_grant` block."
+          "Add one with `scope #{inspect(scope)}, expr(...)` in the resource's `grants` block."
       )
     end
   end

@@ -12,7 +12,7 @@ defmodule AshGrant.Test.GrantsDomainOther do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     resource_name("grants_domain_other")
     default_policies(true)
   end

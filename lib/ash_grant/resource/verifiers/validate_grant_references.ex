@@ -16,7 +16,10 @@ defmodule AshGrant.Resource.Verifiers.ValidateGrantReferences do
   @impl true
   def verify(dsl_state) do
     resource = Verifier.get_persisted(dsl_state, :module)
-    grants = Verifier.get_entities(dsl_state, [:ash_grant, :grants])
+
+    grants =
+      Verifier.get_entities(dsl_state, [:grants])
+      |> Enum.filter(&match?(%AshGrant.Dsl.Grant{}, &1))
 
     case grants do
       [] ->
@@ -38,7 +41,7 @@ defmodule AshGrant.Resource.Verifiers.ValidateGrantReferences do
   # reference a domain-inherited scope.
   defp available_scope_names(dsl_state) do
     local =
-      Verifier.get_entities(dsl_state, [:ash_grant])
+      Verifier.get_entities(dsl_state, [:grants])
       |> Enum.filter(&match?(%AshGrant.Dsl.Scope{}, &1))
       |> Enum.map(& &1.name)
 

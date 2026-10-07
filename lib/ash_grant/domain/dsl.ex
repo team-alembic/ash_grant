@@ -2,13 +2,13 @@ defmodule AshGrant.Domain.Dsl do
   @moduledoc """
   DSL definition for the AshGrant domain-level extension.
 
-  Adds an `ash_grant` block to an `Ash.Domain`. Supported configuration:
+  Adds a `grants` block to an `Ash.Domain`. Supported configuration:
 
   - `resolver` — a permission resolver inherited by resources that don't
     define their own.
   - `scope` entities — row-level filters (`expr(...)`) inherited by every
     resource in the domain. Resource-level scopes with the same name win.
-  - `grants do ... end` — declarative grants that apply to **every**
+  - `grant` entities — declarative grants that apply to **every**
     resource in the domain. Mirrors how `Ash.Policy.Authorizer` treats
     domain-level policies (cover every resource/action). To grant a
     permission on a specific resource, declare it on that resource's
@@ -22,20 +22,18 @@ defmodule AshGrant.Domain.Dsl do
       defmodule MyApp.Blog do
         use Ash.Domain, extensions: [AshGrant.Domain]
 
-        ash_grant do
+        grants do
           scope :always, true
           scope :own, expr(author_id == ^actor(:id))
 
-          grants do
-            # Applies to every resource in the domain
-            grant :admin, expr(^actor(:role) == :admin) do
-              permission :manage_all, :*, :always
-            end
+          # Applies to every resource in the domain
+          grant :admin, expr(^actor(:role) == :admin) do
+            permission :manage_all, :*, :always
+          end
 
-            grant :editor, expr(^actor(:role) == :editor) do
-              permission :read_all,   :read
-              permission :update_own, :update, :own
-            end
+          grant :editor, expr(^actor(:role) == :editor) do
+            permission :read_all,   :read
+            permission :update_own, :update, :own
           end
         end
 
@@ -49,21 +47,20 @@ defmodule AshGrant.Domain.Dsl do
   contribute, with the resource winning on grant-name conflicts.
   """
 
-  @ash_grant %Spark.Dsl.Section{
-    name: :ash_grant,
+  @grants %Spark.Dsl.Section{
+    name: :grants,
     top_level?: false,
     imports: [Ash.Expr],
-    sections: [AshGrant.Dsl.grants_section()],
     describe: """
     Shared AshGrant configuration inherited by resources in this domain.
 
     Resources using the `AshGrant` extension inherit the `resolver`, `scope`
-    definitions, and `grants` from their domain. Resources can add their own
-    `grants` and `scope` entries on top — both levels contribute.
+    definitions, and `grant` entities from their domain. Resources can add their own
+    `grant` and `scope` entries on top — both levels contribute.
     """,
     examples: [
       """
-      ash_grant do
+      grants do
         resolver MyApp.PermissionResolver
 
         scope :always, true
@@ -71,25 +68,23 @@ defmodule AshGrant.Domain.Dsl do
       end
       """,
       """
-      ash_grant do
+      grants do
         scope :always, true
         scope :own, expr(author_id == ^actor(:id))
 
-        grants do
-          # Broadcasts — apply to every resource in the domain
-          grant :admin, expr(^actor(:role) == :admin) do
-            permission :manage_all, :*, :always
-          end
+        # Broadcasts — apply to every resource in the domain
+        grant :admin, expr(^actor(:role) == :admin) do
+          permission :manage_all, :*, :always
+        end
 
-          grant :editor, expr(^actor(:role) == :editor) do
-            permission :read_all,   :read
-            permission :update_own, :update, :own
-          end
+        grant :editor, expr(^actor(:role) == :editor) do
+          permission :read_all,   :read
+          permission :update_own, :update, :own
         end
       end
       """
     ],
-    entities: [AshGrant.Dsl.scope_entity()],
+    entities: [AshGrant.Dsl.scope_entity(), AshGrant.Dsl.grant_entity()],
     schema: [
       resolver: [
         type: {:or, [{:behaviour, AshGrant.PermissionResolver}, {:fun, 2}]},
@@ -109,7 +104,7 @@ defmodule AshGrant.Domain.Dsl do
     ]
   }
 
-  @sections [@ash_grant]
+  @sections [@grants]
 
   def sections, do: @sections
 end

@@ -37,7 +37,7 @@ defmodule AshGrant.Transformers.ValidateFieldGroups do
   end
 
   defp get_field_group_entities(dsl_state) do
-    Transformer.get_entities(dsl_state, [:ash_grant])
+    Transformer.get_entities(dsl_state, [:grants])
     |> Enum.filter(&match?(%AshGrant.Dsl.FieldGroup{}, &1))
   end
 
@@ -48,7 +48,7 @@ defmodule AshGrant.Transformers.ValidateFieldGroups do
     if dupes != [] do
       raise Spark.Error.DslError,
         module: resource,
-        path: [:ash_grant, :field_group],
+        path: [:grants, :field_group],
         message: "Duplicate field group names: #{inspect(Enum.uniq(dupes))}"
     end
   end
@@ -58,7 +58,7 @@ defmodule AshGrant.Transformers.ValidateFieldGroups do
       unless parent in valid_names do
         raise Spark.Error.DslError,
           module: resource,
-          path: [:ash_grant, :field_group, fg.name],
+          path: [:grants, :field_group, fg.name],
           message:
             "Field group #{inspect(fg.name)} inherits from #{inspect(parent)}, " <>
               "but no field group named #{inspect(parent)} exists"
@@ -79,7 +79,7 @@ defmodule AshGrant.Transformers.ValidateFieldGroups do
 
           raise Spark.Error.DslError,
             module: resource,
-            path: [:ash_grant, :field_group, fg.name],
+            path: [:grants, :field_group, fg.name],
             message: "Circular field group inheritance detected: #{path_str}"
       end
     end
@@ -99,7 +99,7 @@ defmodule AshGrant.Transformers.ValidateFieldGroups do
       if fg.mask != nil and fg.mask != [] and fg.mask_with == nil do
         raise Spark.Error.DslError,
           module: resource,
-          path: [:ash_grant, :field_group, fg.name],
+          path: [:grants, :field_group, fg.name],
           message:
             "Field group #{inspect(fg.name)} has mask fields #{inspect(fg.mask)} " <>
               "but no mask_with function is configured"

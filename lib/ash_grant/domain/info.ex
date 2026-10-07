@@ -17,7 +17,7 @@ defmodule AshGrant.Domain.Info do
   """
   @spec resolver(domain :: Ash.Domain.t()) :: module() | function() | nil
   def resolver(domain) do
-    Spark.Dsl.Extension.get_opt(domain, [:ash_grant], :resolver)
+    Spark.Dsl.Extension.get_opt(domain, [:grants], :resolver)
   end
 
   @doc """
@@ -27,7 +27,7 @@ defmodule AshGrant.Domain.Info do
   """
   @spec scopes(domain :: Ash.Domain.t()) :: [AshGrant.Dsl.Scope.t()]
   def scopes(domain) do
-    Spark.Dsl.Extension.get_entities(domain, [:ash_grant])
+    Spark.Dsl.Extension.get_entities(domain, [:grants])
     |> Enum.filter(&match?(%AshGrant.Dsl.Scope{}, &1))
   end
 
@@ -48,7 +48,8 @@ defmodule AshGrant.Domain.Info do
   """
   @spec grants(domain :: Ash.Domain.t()) :: [AshGrant.Dsl.Grant.t()]
   def grants(domain) do
-    Spark.Dsl.Extension.get_entities(domain, [:ash_grant, :grants])
+    Spark.Dsl.Extension.get_entities(domain, [:grants])
+    |> Enum.filter(&match?(%AshGrant.Dsl.Grant{}, &1))
   end
 
   @doc """

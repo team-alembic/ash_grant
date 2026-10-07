@@ -1,7 +1,7 @@
 defmodule AshGrant.ResolveArgumentDefaultsTest do
   @moduledoc """
   Validates that `default_policies true` + `resolve_argument` compose cleanly:
-  a resource can declare its entire authorization setup inside the `ash_grant`
+  a resource can declare its entire authorization setup inside the `grants`
   block with no explicit `policies` or per-action `argument`/`change` wiring.
   """
   use ExUnit.Case, async: false

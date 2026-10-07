@@ -13,7 +13,7 @@ defmodule AshGrant.InfoTest do
       validate_domain_inclusion?: false,
       extensions: [AshGrant]
 
-    ash_grant do
+    grants do
       resolver(fn actor, _context ->
         if actor, do: ["resource:*:read:always"], else: []
       end)
@@ -38,7 +38,7 @@ defmodule AshGrant.InfoTest do
       validate_domain_inclusion?: false,
       extensions: [AshGrant]
 
-    ash_grant do
+    grants do
       resolver(fn _actor, _context -> [] end)
     end
 
@@ -61,7 +61,7 @@ defmodule AshGrant.InfoTest do
       validate_domain_inclusion?: false,
       extensions: [AshGrant]
 
-    ash_grant do
+    grants do
       resolver(AshGrant.InfoTest.TestResolver)
     end
 

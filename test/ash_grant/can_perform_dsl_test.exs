@@ -79,7 +79,7 @@ defmodule AshGrant.CanPerformDslTest do
             authorizers: [Ash.Policy.Authorizer],
             extensions: [AshGrant]
 
-          ash_grant do
+          grants do
             resolver(fn _, _ -> [] end)
             scope(:always, true)
             can_perform_actions([:nonexistent])
@@ -105,7 +105,7 @@ defmodule AshGrant.CanPerformDslTest do
             authorizers: [Ash.Policy.Authorizer],
             extensions: [AshGrant]
 
-          ash_grant do
+          grants do
             resolver(fn _, _ -> [] end)
             scope(:always, true)
             can_perform(:foobar)
@@ -130,7 +130,7 @@ defmodule AshGrant.CanPerformDslTest do
           authorizers: [Ash.Policy.Authorizer],
           extensions: [AshGrant]
 
-        ash_grant do
+        grants do
           resolver(fn _, _ -> [] end)
           scope(:always, true)
           can_perform_actions([:read, :destroy])

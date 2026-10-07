@@ -11,9 +11,9 @@ defmodule AshGrant.Calculation.CanPerform do
   ### DSL Sugar (Recommended)
 
   Use `can_perform` entities or the `can_perform_actions` batch option in your
-  `ash_grant` block. The transformer auto-generates calculations at compile time:
+  `grants` block. The transformer auto-generates calculations at compile time:
 
-      ash_grant do
+      grants do
         resolver MyApp.PermissionResolver
         scope :always, true
         scope :own, expr(author_id == ^actor(:id))
@@ -290,9 +290,9 @@ defmodule AshGrant.Calculation.CanPerform do
     AshGrant.Calculation.CanPerform: Scope "#{scope}" not found in inline scope DSL \
     and no scope_resolver configured.
 
-    Define the scope in your ash_grant block:
+    Define the scope in your grants block:
 
-        ash_grant do
+        grants do
           resolver MyApp.PermissionResolver
           scope :#{scope}, expr(...)
         end

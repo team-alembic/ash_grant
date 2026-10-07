@@ -62,7 +62,7 @@ AshGrant generates per-record boolean calculations for UI visibility patterns
 #### DSL Sugar (Recommended)
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   scope :always, true
   scope :own, expr(author_id == ^actor(:id))
@@ -189,7 +189,7 @@ call site.
 ## DSL Configuration
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver       # Required (or inherited from domain)
   default_policies true                   # Optional: auto-generate policies
   resource_name "custom_name"             # Optional: defaults to module name (e.g., MyApp.Blog.Post → "post")
@@ -217,7 +217,7 @@ end
 | `resource_name` | string | Resource name for permission matching. Default: derived from module name (last segment, snake_cased). `MyApp.Blog.Post` → `"post"`, `MyApp.CustomerOrder` → `"customer_order"` |
 | `instance_key` | atom | Field to match instance permission IDs against. Defaults to `:id` (primary key). See [Instance Key](permissions.md#instance-key) |
 
-**Entities inside `ash_grant do ... end`**
+**Entities inside `grants do ... end`**
 
 | Entity | Description |
 |--------|-------------|
@@ -304,7 +304,7 @@ end
 You can combine them:
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   default_policies true  # Adds filter_check for read, check for write
 end
@@ -333,7 +333,7 @@ end
 The `scope_resolver` option is deprecated. If configured alongside inline scopes, inline scope DSL is checked first and `scope_resolver` acts as a fallback for scopes not defined inline. An error is raised if a scope is found in neither. Migrate all scopes to inline `scope` definitions.
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   scope_resolver MyApp.LegacyScopeResolver  # Deprecated fallback
 

@@ -16,7 +16,7 @@ defmodule AshGrant.TemporalScopeTest do
       validate_domain_inclusion?: false,
       extensions: [AshGrant]
 
-    ash_grant do
+    grants do
       resolver(fn _actor, _context -> [] end)
 
       # Boolean scope - no filtering
@@ -111,7 +111,7 @@ defmodule AshGrant.TemporalScopeTest do
       validate_domain_inclusion?: false,
       extensions: [AshGrant]
 
-    ash_grant do
+    grants do
       resolver(fn _actor, _context -> [] end)
 
       scope(:always, true)

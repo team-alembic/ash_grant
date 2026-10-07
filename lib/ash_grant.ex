@@ -43,7 +43,7 @@ defmodule AshGrant do
           authorizers: [Ash.Policy.Authorizer],
           extensions: [AshGrant]
 
-        ash_grant do
+        grants do
           resolver MyApp.PermissionResolver
           default_policies true  # Auto-generates read/write policies!
 
@@ -66,7 +66,7 @@ defmodule AshGrant do
           authorizers: [Ash.Policy.Authorizer],
           extensions: [AshGrant]
 
-        ash_grant do
+        grants do
           resolver MyApp.PermissionResolver
           resource_name "post"
 
@@ -206,7 +206,7 @@ defmodule AshGrant do
 
   Define scopes inline using `expr()` expressions:
 
-      ash_grant do
+      grants do
         scope :always, true
         scope :own, expr(author_id == ^actor(:id))
         scope :published, expr(status == :published)
@@ -217,7 +217,7 @@ defmodule AshGrant do
 
   Use `^context(:key)` for injectable values instead of database functions:
 
-      ash_grant do
+      grants do
         # Instead of: scope :today, expr(fragment("DATE(inserted_at) = CURRENT_DATE"))
         # Use injectable context:
         scope :today, expr(fragment("DATE(inserted_at) = ?", ^context(:reference_date)))
@@ -260,7 +260,7 @@ defmodule AshGrant do
 
   ## DSL Configuration
 
-      ash_grant do
+      grants do
         resolver MyApp.PermissionResolver       # Required
         default_policies true                   # Optional: auto-generate policies
         resource_name "custom_name"             # Optional

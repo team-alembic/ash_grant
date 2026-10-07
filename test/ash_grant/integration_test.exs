@@ -25,7 +25,7 @@ defmodule AshGrant.IntegrationTest do
       domain: AshGrant.IntegrationTest.TestDomain,
       extensions: [AshGrant]
 
-    ash_grant do
+    grants do
       resolver(fn actor, _context ->
         case actor do
           nil -> []
@@ -74,7 +74,7 @@ defmodule AshGrant.IntegrationTest do
       domain: AshGrant.IntegrationTest.TestDomain,
       extensions: [AshGrant]
 
-    ash_grant do
+    grants do
       resolver(fn actor, _context ->
         case actor do
           nil ->

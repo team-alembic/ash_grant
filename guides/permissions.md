@@ -128,7 +128,7 @@ Instance permissions can include scope conditions for attribute-based access con
 **Define the scope in your resource:**
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
 
   scope :draft, expr(status == :draft)
@@ -205,7 +205,7 @@ By default, instance permissions match against the `:id` (primary key) field.
 Use `instance_key` to match against a different field:
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   instance_key :feed_id  # Match against feed_id instead of id
 
@@ -225,7 +225,7 @@ child resources via a `belongs_to` relationship:
 defmodule MyApp.Post do
   use Ash.Resource, extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     resolver MyApp.PermissionResolver
     default_policies true
 

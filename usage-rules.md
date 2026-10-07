@@ -67,7 +67,7 @@ When the 5th part is omitted (4-part format), all fields are visible.
 
 1. `authorizers: [Ash.Policy.Authorizer]` in resource options
 2. `extensions: [AshGrant]` in resource options
-3. An `ash_grant` block with at least a `resolver` and one scope
+3. An `grants` block with at least a `resolver` and one scope
 
 ```elixir
 defmodule MyApp.Blog.Post do
@@ -76,7 +76,7 @@ defmodule MyApp.Blog.Post do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     resolver MyApp.PermissionResolver
     scope :always, true
     scope :own, expr(author_id == ^actor(:id))
@@ -87,7 +87,7 @@ end
 ### DO: Use `default_policies: true` to eliminate boilerplate
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   default_policies true  # Generates read + write policies automatically
 
@@ -100,7 +100,7 @@ end
 ### DO: Use explicit policies when you need bypasses or custom logic
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   scope :always, true
   scope :own, expr(author_id == ^actor(:id))
@@ -131,7 +131,7 @@ AshGrant generates policy checks, but Ash must be told to enforce them.
 
 ## DSL Configuration
 
-### `ash_grant` block options
+### `grants` block options
 
 | Option                 | Type              | Required | Default | Description                                                  |
 |------------------------|-------------------|----------|---------|--------------------------------------------------------------|
@@ -159,7 +159,7 @@ scope_through :relationship_name, actions: [:read, :update]
 ```
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   default_policies true
 
@@ -197,7 +197,7 @@ end
   scope option" below) — prefer `resolve_argument` for multi-hop cases.
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
 
   scope :always, true
@@ -217,7 +217,7 @@ end
   use the `resolve_argument` entity (see next section).
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
 
   # Simple — in-memory for writes
@@ -238,7 +238,7 @@ scopes against an action argument and let the resource populate the argument
 from its own relationships:
 
 ```elixir
-ash_grant do
+grants do
   scope :at_own_unit, expr(^arg(:center_id) in ^actor(:own_org_unit_ids))
 
   # The transformer auto-injects `argument :center_id` + a lazy change on
@@ -271,7 +271,7 @@ field_group :name, [:field1, :field2], inherits: [:parent_groups]
 Field groups define sets of fields for column-level read authorization.
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
 
   field_group :public, [:name, :department, :position]
@@ -418,7 +418,7 @@ into a composite child, prefer **argument-based scopes** over deep
 relationship traversal in the scope expression itself:
 
 ```elixir
-ash_grant do
+grants do
   # Scope compares an action argument, not a traversed relationship
   scope :at_own_unit, expr(^arg(:center_id) in ^actor(:own_org_unit_ids))
   scope :at_own_unit_and_small, [:at_own_unit], expr(total_amount <= 100)
@@ -600,7 +600,7 @@ resources automatically — use `scope_through` for that.
 ### `instance_key` — match against a different field
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   instance_key :feed_id  # "feed:feed_abc:read:" → WHERE feed_id IN ('feed_abc')
 
@@ -613,7 +613,7 @@ end
 ```elixir
 # Parent: Feed (user has "feed:feed_abc:read:")
 # Child: Post (belongs_to :feed)
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   default_policies true
 
@@ -634,7 +634,7 @@ Parent instance filters are combined with RBAC scopes using OR logic.
 # (unless Post has scope_through :feed)
 
 # CORRECT — add scope_through to the child resource
-ash_grant do
+grants do
   scope_through :feed
 end
 ```
@@ -646,7 +646,7 @@ end
 Write `field_policies` yourself using `AshGrant.field_check/1`:
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
 
   field_group :public, [:name, :department]
@@ -674,7 +674,7 @@ end
 Set `default_field_policies: true` to auto-generate from field group definitions:
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   default_field_policies true
 
@@ -805,7 +805,7 @@ permissions like `"post:*:read:always"` will raise a runtime error because
 the scope `"always"` cannot be resolved.
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   scope :always, true  # Always include this
   scope :own, expr(author_id == ^actor(:id))

@@ -289,13 +289,11 @@ defmodule AshGrant.DomainGrantsTest do
           extensions: [AshGrant.Domain],
           validate_config_inclusion?: false
 
-        ash_grant do
+        grants do
           resolver(fn _actor, _context -> ["grants_domain_post:*:read:"] end)
 
-          grants do
-            grant :admin, expr(^actor(:role) == :admin) do
-              permission(:admin_all, :*, :always)
-            end
+          grant :admin, expr(^actor(:role) == :admin) do
+            permission(:admin_all, :*, :always)
           end
         end
 
@@ -317,12 +315,10 @@ defmodule AshGrant.DomainGrantsTest do
           extensions: [AshGrant.Domain],
           validate_config_inclusion?: false
 
-        ash_grant do
-          grants do
-            grant :universal, expr(^actor(:role) == :universal) do
-              permission(:read_anywhere, :read)
-              permission(:manage_anywhere, :*, :always)
-            end
+        grants do
+          grant :universal, expr(^actor(:role) == :universal) do
+            permission(:read_anywhere, :read)
+            permission(:manage_anywhere, :*, :always)
           end
         end
 
@@ -348,11 +344,9 @@ defmodule AshGrant.DomainGrantsTest do
               extensions: [AshGrant.Domain],
               validate_config_inclusion?: false
 
-            ash_grant do
-              grants do
-                grant :weird, expr(^actor(:role) == :weird) do
-                  permission(:read_phantom, :read, :phantom)
-                end
+            grants do
+              grant :weird, expr(^actor(:role) == :weird) do
+                permission(:read_phantom, :read, :phantom)
               end
             end
 
@@ -373,11 +367,9 @@ defmodule AshGrant.DomainGrantsTest do
               extensions: [AshGrant.Domain],
               validate_config_inclusion?: false
 
-            ash_grant do
-              grants do
-                grant :weird, expr(^actor(:role) == :weird) do
-                  permission(:nuke_things, :nuke, :always)
-                end
+            grants do
+              grant :weird, expr(^actor(:role) == :weird) do
+                permission(:nuke_things, :nuke, :always)
               end
             end
 

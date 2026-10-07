@@ -15,7 +15,7 @@ defmodule AshGrant.Test.CodeInterfaceCyclePost do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     default_policies(true)
   end
 
