@@ -1,4 +1,4 @@
-defmodule AshGrant.Verifiers.ValidateResolverPresent do
+defmodule AshGrant.Resource.Verifiers.ValidateResolverPresent do
   @moduledoc """
   Spark DSL verifier that warns at compile time when neither the resource nor
   its domain defines a resolver.
@@ -58,14 +58,26 @@ defmodule AshGrant.Verifiers.ValidateResolverPresent do
   @spec resolver_present?(dsl_state :: map()) :: boolean()
   defp resolver_present?(dsl_state) do
     Verifier.get_option(dsl_state, [:ash_grant], :resolver) != nil or
-      domain_resolver_present?(dsl_state)
+      grants_present?(dsl_state) or
+      domain_source_present?(dsl_state)
   end
 
-  @spec domain_resolver_present?(dsl_state :: map()) :: boolean()
-  defp domain_resolver_present?(dsl_state) do
+  @spec grants_present?(dsl_state :: map()) :: boolean()
+  defp grants_present?(dsl_state) do
+    Verifier.get_entities(dsl_state, [:ash_grant, :grants]) != []
+  end
+
+  # Either a domain-level `resolver` or a domain-level `grants` block
+  # qualifies — both produce permissions the resource can use.
+  @spec domain_source_present?(dsl_state :: map()) :: boolean()
+  defp domain_source_present?(dsl_state) do
     case Verifier.get_persisted(dsl_state, :domain) do
-      nil -> false
-      domain -> AshGrant.Domain.Info.resolver(domain) != nil
+      nil ->
+        false
+
+      domain ->
+        AshGrant.Domain.Info.resolver(domain) != nil or
+          AshGrant.Domain.Info.grants(domain) != []
     end
   end
 end

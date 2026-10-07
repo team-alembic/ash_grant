@@ -95,9 +95,8 @@ defmodule AshGrant.GrantsDslTest do
       assert :create_pro in names
     end
 
-    test "permission `on:` defaults to current resource" do
+    test "permission introspection returns the parsed fields" do
       read_all = Info.permissions(Post) |> Enum.find(&(&1.name == :read_all))
-      assert read_all.on == Post
       assert read_all.instance == :*
       assert read_all.action == :read
       assert read_all.scope == :always
@@ -223,27 +222,122 @@ defmodule AshGrant.GrantsDslTest do
       end
     end
 
-    test "rejects declaring both grants and explicit resolver" do
-      assert_raise Spark.Error.DslError, ~r/both `grants` and `resolver`/s, fn ->
-        defmodule DualResolverPost do
+    test "accepts both grants and an explicit resolver — outputs merge" do
+      # Both compile cleanly; `GrantsResolver` runs grants *and* calls the
+      # user resolver, concatenating their permission lists. Deny-wins in
+      # the evaluator continues to hold because both contributions flow
+      # through the same `Evaluator.has_access?/3` path.
+      defmodule DualPost do
+        use Ash.Resource,
+          domain: nil,
+          validate_domain_inclusion?: false,
+          extensions: [AshGrant]
+
+        ash_grant do
+          resource_name("dualpost")
+
+          resolver(fn actor, _context ->
+            case actor do
+              %{role: :dynamic} -> ["dualpost:*:read:"]
+              _ -> []
+            end
+          end)
+
+          scope(:always, true)
+
+          grants do
+            grant :admin, expr(^actor(:role) == :admin) do
+              permission(:manage_all, :*, :always)
+            end
+          end
+        end
+
+        actions do
+          defaults([:read])
+        end
+
+        attributes do
+          uuid_primary_key(:id)
+        end
+      end
+
+      assert AshGrant.Info.resolver(DualPost) == AshGrant.GrantsResolver
+
+      # Admin actor: grants match, user resolver returns []. Only the grant's
+      # permission shows up.
+      admin_perms = AshGrant.GrantsResolver.resolve(%{role: :admin}, %{resource: DualPost})
+      assert "dualpost:*:*:always" in admin_perms
+      refute "dualpost:*:read:" in admin_perms
+
+      # Dynamic actor: no grant matches, user resolver contributes.
+      dynamic_perms =
+        AshGrant.GrantsResolver.resolve(%{role: :dynamic}, %{resource: DualPost})
+
+      assert "dualpost:*:read:" in dynamic_perms
+      refute Enum.any?(dynamic_perms, &String.contains?(&1, ":*:always"))
+
+      # Actor matching neither: empty.
+      assert [] = AshGrant.GrantsResolver.resolve(%{role: :nobody}, %{resource: DualPost})
+    end
+
+    test "a raising user resolver propagates — no silent rescue" do
+      # Predicates are rescued (they evaluate user expressions over actor /
+      # tenant data and a nil shape shouldn't crash authorization). A user
+      # resolver, by contrast, is plain Elixir under the caller's control —
+      # bugs surface as crashes with real stacktraces.
+      defmodule RaisingResolverPost do
+        use Ash.Resource,
+          domain: nil,
+          validate_domain_inclusion?: false,
+          extensions: [AshGrant]
+
+        ash_grant do
+          resource_name("raising_resolver_post")
+          resolver(fn _actor, _context -> raise "resolver bug" end)
+
+          grants do
+            grant :admin, expr(^actor(:role) == :admin) do
+              permission(:manage_all, :*)
+            end
+          end
+        end
+
+        actions do
+          defaults([:read])
+        end
+
+        attributes do
+          uuid_primary_key(:id)
+        end
+      end
+
+      assert_raise RuntimeError, "resolver bug", fn ->
+        AshGrant.GrantsResolver.resolve(%{role: :admin}, %{resource: RaisingResolverPost})
+      end
+    end
+
+    test "rejects a literal `instance:` string containing `:`" do
+      assert_raise Spark.Error.DslError, ~r/contains `:`/, fn ->
+        defmodule BadInstancePost do
           use Ash.Resource,
             domain: nil,
             validate_domain_inclusion?: false,
             extensions: [AshGrant]
 
-          actions do
-            defaults([:read])
-          end
-
           ash_grant do
-            resolver(fn _actor, _context -> [] end)
+            resource_name("bad_instance_post")
+
             scope(:always, true)
 
             grants do
-              grant :noop, expr(^actor(:role) == :admin) do
-                permission(:read_all, :read, :always)
+              grant :owner, expr(^actor(:role) == :owner) do
+                permission(:manage, :update, :always, instance: "doc:abc:nope")
               end
             end
+          end
+
+          actions do
+            defaults([:read, :create, :update, :destroy])
           end
 
           attributes do

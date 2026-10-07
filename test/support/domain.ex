@@ -3,6 +3,12 @@ defmodule AshGrant.Test.Domain do
   use Ash.Domain, validate_config_inclusion?: false
 
   resources do
+    # Tests define ad-hoc resources inline (declaring this as their domain)
+    # that the domain can't statically register because they're created
+    # inside test bodies, after this module compiles. `allow_unregistered?`
+    # silences `Ash.Resource.Verifiers.VerifyAcceptedByDomain` for them.
+    allow_unregistered?(true)
+
     # Basic resources
     resource(AshGrant.Test.Post)
     resource(AshGrant.Test.Comment)
