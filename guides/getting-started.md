@@ -26,7 +26,7 @@ end
 Then reference it in your resource:
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   # ...
 end
@@ -37,7 +37,7 @@ end
 For more control, disable `default_policies` and define policies explicitly:
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   # default_policies false (default)
 
@@ -102,7 +102,7 @@ end
 
 ## Domain-Level DSL
 
-When multiple resources share the same resolver and scopes, define them once at the domain level instead of repeating the same `ash_grant do` block in every resource.
+When multiple resources share the same resolver and scopes, define them once at the domain level instead of repeating the same `grants do` block in every resource.
 
 **When to use:**
 - 3+ resources in a domain share the same resolver and common scopes (`:always`, `:own`, etc.)
@@ -119,7 +119,7 @@ defmodule MyApp.Blog do
   use Ash.Domain,
     extensions: [AshGrant.Domain]
 
-  ash_grant do
+  grants do
     resolver MyApp.PermissionResolver
 
     scope :always, true
@@ -142,7 +142,7 @@ defmodule MyApp.Blog.Post do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     default_policies true
     # No resolver needed — inherited from domain
     # :always and :own scopes inherited from domain
@@ -169,7 +169,7 @@ write the combined expression directly:
 ```elixir
 # Domain defines :own scope (author_id == ^actor(:id))
 # Resource adds its own combined scope
-ash_grant do
+grants do
   scope :own_draft, expr(author_id == ^actor(:id) and status == :draft)
 end
 ```
@@ -239,7 +239,7 @@ Once you're comfortable with the basics, AshGrant supports relationship-based sc
 using `exists()` and dot-path references. These work for both read and write actions:
 
 ```elixir
-ash_grant do
+grants do
   scope :team_member, expr(exists(team.memberships, user_id == ^actor(:id)))
   scope :same_center, expr(order.center_id == ^actor(:center_id))
 end

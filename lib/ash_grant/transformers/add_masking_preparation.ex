@@ -46,7 +46,7 @@ defmodule AshGrant.Transformers.AddMaskingPreparation do
   end
 
   defp get_field_group_entities(dsl_state) do
-    Transformer.get_entities(dsl_state, [:ash_grant])
+    Transformer.get_entities(dsl_state, [:grants])
     |> Enum.filter(&match?(%AshGrant.Dsl.FieldGroup{}, &1))
   end
 end

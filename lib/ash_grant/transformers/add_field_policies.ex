@@ -50,7 +50,7 @@ defmodule AshGrant.Transformers.AddFieldPolicies do
 
   @impl true
   def transform(dsl_state) do
-    default_fp = Transformer.get_option(dsl_state, [:ash_grant], :default_field_policies, false)
+    default_fp = Transformer.get_option(dsl_state, [:grants], :default_field_policies, false)
     field_groups = get_field_group_entities(dsl_state)
 
     if default_fp and field_groups != [] do
@@ -169,7 +169,7 @@ defmodule AshGrant.Transformers.AddFieldPolicies do
   end
 
   defp get_field_group_entities(dsl_state) do
-    Transformer.get_entities(dsl_state, [:ash_grant])
+    Transformer.get_entities(dsl_state, [:grants])
     |> Enum.filter(&match?(%AshGrant.Dsl.FieldGroup{}, &1))
   end
 end

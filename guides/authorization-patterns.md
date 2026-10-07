@@ -22,7 +22,7 @@ defmodule MyApp.Blog.Post do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     resolver MyApp.PermissionResolver
     default_policies true
 
@@ -93,7 +93,7 @@ attribute-based policy expression.
 Filter by properties of the actor:
 
 ```elixir
-ash_grant do
+grants do
   # Same department
   scope :same_department, expr(department_id == ^actor(:department_id))
 
@@ -113,7 +113,7 @@ end
 Filter by properties of the resource itself:
 
 ```elixir
-ash_grant do
+grants do
   # Status-based workflow
   scope :always, true
   scope :draft, expr(status == :draft)
@@ -139,7 +139,7 @@ end
 Filter by external context like time or injected parameters:
 
 ```elixir
-ash_grant do
+grants do
   # Business hours only
   scope :business_hours, expr(
     fragment("EXTRACT(HOUR FROM NOW()) BETWEEN 9 AND 17")
@@ -171,7 +171,7 @@ Scope inheritance lets you AND conditions together — combining user, resource,
 context attributes in a single scope:
 
 ```elixir
-ash_grant do
+grants do
   scope :own, expr(author_id == ^actor(:id))
   scope :same_tenant, expr(tenant_id == ^actor(:tenant_id))
 
@@ -198,7 +198,7 @@ A complete example showing transaction limit tiers:
 
 ```elixir
 # Resource
-ash_grant do
+grants do
   resolver MyApp.PaymentResolver
   default_policies true
 
@@ -273,7 +273,7 @@ The resulting filter combines both with OR:
 Use `exists()` to filter through join tables and associations:
 
 ```elixir
-ash_grant do
+grants do
   scope :always, true
   scope :own, expr(author_id == ^actor(:id))
 
@@ -311,7 +311,7 @@ Propagate a parent resource's instance permissions to child resources:
 defmodule MyApp.Comment do
   use Ash.Resource, extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     resolver MyApp.PermissionResolver
     default_policies true
 
@@ -337,7 +337,7 @@ calculations.
 Model tree-structured access with list membership:
 
 ```elixir
-ash_grant do
+grants do
   scope :always, true
 
   # Same organizational unit
@@ -401,7 +401,7 @@ Use deny rules for:
 AshGrant supports tenant isolation using `^tenant()` or `^actor(:tenant_id)`:
 
 ```elixir
-ash_grant do
+grants do
   scope :always, true
   scope :same_tenant, expr(tenant_id == ^tenant())
   scope :own, expr(author_id == ^actor(:id))
@@ -425,7 +425,7 @@ See the [Scopes guide](scopes.md#multi-tenancy-support) for detailed setup.
 Control which fields are visible based on permissions:
 
 ```elixir
-ash_grant do
+grants do
   scope :always, true
   default_field_policies true
 
@@ -453,7 +453,7 @@ Share resolver and scopes across all resources in a domain:
 defmodule MyApp.Blog do
   use Ash.Domain, extensions: [AshGrant.Domain]
 
-  ash_grant do
+  grants do
     resolver MyApp.PermissionResolver
 
     scope :always, true
@@ -471,7 +471,7 @@ Resources can add extra scopes or override inherited ones:
 
 ```elixir
 # Inherits :always and :own from domain, adds :published
-ash_grant do
+grants do
   default_policies true
   scope :published, expr(status == :published)
 end
@@ -482,7 +482,7 @@ end
 Generate per-record boolean calculations for frontend use:
 
 ```elixir
-ash_grant do
+grants do
   can_perform_actions [:update, :destroy]
 
   # Or with a custom name
@@ -524,7 +524,7 @@ end)
 
 ```elixir
 # Example: all patterns combined
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   default_policies true
   default_field_policies true

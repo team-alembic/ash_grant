@@ -75,7 +75,7 @@ defmodule AshGrant.FieldGroupExceptTest do
             authorizers: [Ash.Policy.Authorizer],
             extensions: [AshGrant]
 
-          ash_grant do
+          grants do
             resolver(fn _, _ -> [] end)
             default_policies(true)
             default_field_policies(true)
@@ -108,7 +108,7 @@ defmodule AshGrant.FieldGroupExceptTest do
             authorizers: [Ash.Policy.Authorizer],
             extensions: [AshGrant]
 
-          ash_grant do
+          grants do
             resolver(fn _, _ -> [] end)
             default_policies(true)
             default_field_policies(true)
@@ -139,7 +139,7 @@ defmodule AshGrant.FieldGroupExceptTest do
             authorizers: [Ash.Policy.Authorizer],
             extensions: [AshGrant]
 
-          ash_grant do
+          grants do
             resolver(fn _, _ -> [] end)
             default_policies(true)
             default_field_policies(true)
@@ -177,7 +177,7 @@ defmodule AshGrant.FieldGroupExceptTest do
           extensions: [AshGrant],
           validate_domain_inclusion?: false
 
-        ash_grant do
+        grants do
           resolver(fn _, _ -> [] end)
           default_policies(true)
           default_field_policies(true)

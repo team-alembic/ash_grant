@@ -19,7 +19,7 @@ defmodule AshGrant.Test.Auth.Refund do
     private?(true)
   end
 
-  ash_grant do
+  grants do
     resolver(fn actor, _context ->
       case actor do
         nil -> []

@@ -11,7 +11,7 @@ defmodule AshGrant.Check do
 
   > #### Auto-generated Policies {: .info}
   >
-  > When using `default_policies: true` in your resource's `ash_grant` block,
+  > When using `default_policies: true` in your resource's `grants` block,
   > this check is automatically configured for write actions and generic actions.
 
   ## When to Use
@@ -400,7 +400,7 @@ defmodule AshGrant.Check do
   defp resolve_permissions(nil, _actor, %{resource: resource}) do
     raise ArgumentError,
           "AshGrant: no resolver configured for #{inspect(resource)}. " <>
-            "Set `resolver` in the resource's `ash_grant` block, or on the " <>
+            "Set `resolver` in the resource's `grants` block, or on the " <>
             "domain via `AshGrant.Domain`."
   end
 
@@ -783,16 +783,16 @@ defmodule AshGrant.Check do
     raise """
     AshGrant: Scope "#{scope}" not found in inline scope DSL and no scope_resolver configured.
 
-    Either define the scope inline in your ash_grant block:
+    Either define the scope inline in your grants block:
 
-        ash_grant do
+        grants do
           resolver MyApp.PermissionResolver
           scope :#{scope}, expr(...)
         end
 
     Or configure a scope_resolver:
 
-        ash_grant do
+        grants do
           resolver MyApp.PermissionResolver
           scope_resolver MyApp.ScopeResolver
         end

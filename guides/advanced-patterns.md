@@ -57,7 +57,7 @@ defmodule MyApp.Orders.Refund do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     resolver MyApp.PermissionResolver
     default_policies true
 
@@ -136,7 +136,7 @@ defmodule MyApp.Workspaces.Post do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     resolver MyApp.PermissionResolver
     default_policies true
 
@@ -238,7 +238,7 @@ defmodule MyApp.Workspaces.Comment do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     resolver MyApp.PermissionResolver
     default_policies true
 

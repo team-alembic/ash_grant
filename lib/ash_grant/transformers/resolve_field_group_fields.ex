@@ -129,7 +129,7 @@ defmodule AshGrant.Transformers.ResolveFieldGroupFields do
 
     if unknown != [] do
       raise Spark.Error.DslError,
-        path: [:ash_grant, :field_group, group_name],
+        path: [:grants, :field_group, group_name],
         message:
           "Field group #{inspect(group_name)} has `except` fields that are not " <>
             "resource attributes: #{inspect(unknown)}"
@@ -142,7 +142,7 @@ defmodule AshGrant.Transformers.ResolveFieldGroupFields do
 
     if masked_in_except != [] do
       raise Spark.Error.DslError,
-        path: [:ash_grant, :field_group, fg.name],
+        path: [:grants, :field_group, fg.name],
         message:
           "Field group #{inspect(fg.name)} has masked fields #{inspect(masked_in_except)} " <>
             "that are also in `except`. Masked fields must be visible (not excluded)."
@@ -156,19 +156,19 @@ defmodule AshGrant.Transformers.ResolveFieldGroupFields do
       match?(%AshGrant.Dsl.FieldGroup{}, entity) and entity.name == name
     end
 
-    Transformer.replace_entity(dsl_state, [:ash_grant], resolved_fg, matcher)
+    Transformer.replace_entity(dsl_state, [:grants], resolved_fg, matcher)
   end
 
   defp dsl_error(resource, group_name, message) do
     Spark.Error.DslError.exception(
       module: resource,
-      path: [:ash_grant, :field_group, group_name],
+      path: [:grants, :field_group, group_name],
       message: message
     )
   end
 
   defp get_field_group_entities(dsl_state) do
-    Transformer.get_entities(dsl_state, [:ash_grant])
+    Transformer.get_entities(dsl_state, [:grants])
     |> Enum.filter(&match?(%AshGrant.Dsl.FieldGroup{}, &1))
   end
 

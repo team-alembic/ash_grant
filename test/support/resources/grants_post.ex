@@ -18,35 +18,33 @@ defmodule AshGrant.Test.GrantsPost do
     repo(AshGrant.TestRepo)
   end
 
-  ash_grant do
+  grants do
     resource_name("grants_post")
 
     scope(:always, true)
     scope(:own, expr(author_id == ^actor(:id)))
     scope(:published, expr(status == :published))
 
-    grants do
-      grant :admin, expr(^actor(:role) == :admin) do
-        description("Full administrative access")
-        permission(:manage_all, :*, :always)
-      end
+    grant :admin, expr(^actor(:role) == :admin) do
+      description("Full administrative access")
+      permission(:manage_all, :*, :always)
+    end
 
-      grant :editor, expr(^actor(:role) == :editor) do
-        description("Editors read all, update own, create any")
-        permission(:read_all, :read, :always)
-        permission(:create_any, :create, :always)
-        permission(:update_own, :update, :own)
-      end
+    grant :editor, expr(^actor(:role) == :editor) do
+      description("Editors read all, update own, create any")
+      permission(:read_all, :read, :always)
+      permission(:create_any, :create, :always)
+      permission(:update_own, :update, :own)
+    end
 
-      grant :viewer, expr(^actor(:role) == :viewer) do
-        description("Viewers see published only")
-        permission(:read_published, :read, :published)
-      end
+    grant :viewer, expr(^actor(:role) == :viewer) do
+      description("Viewers see published only")
+      permission(:read_published, :read, :published)
+    end
 
-      # Compound predicate — editor on a paid plan gets destroy rights
-      grant :paid_editor, expr(^actor(:role) == :editor and ^actor(:plan) == :pro) do
-        permission(:destroy_own, :destroy, :own)
-      end
+    # Compound predicate — editor on a paid plan gets destroy rights
+    grant :paid_editor, expr(^actor(:role) == :editor and ^actor(:plan) == :pro) do
+      permission(:destroy_own, :destroy, :own)
     end
   end
 

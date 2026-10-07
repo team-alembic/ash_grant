@@ -11,15 +11,13 @@ defmodule AshGrant.Test.GrantsDomainOverridePost do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     resource_name("grants_domain_override_post")
     default_policies(true)
 
-    grants do
-      grant :admin, expr(^actor(:role) == :super_admin) do
-        description("Resource-level override: only :super_admin matches here")
-        permission(:manage_all, :*, :always)
-      end
+    grant :admin, expr(^actor(:role) == :super_admin) do
+      description("Resource-level override: only :super_admin matches here")
+      permission(:manage_all, :*, :always)
     end
   end
 

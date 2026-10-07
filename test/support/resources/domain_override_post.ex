@@ -6,7 +6,7 @@ defmodule AshGrant.Test.DomainOverridePost do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     # Own resolver overrides domain's
     resolver(fn actor, _context ->
       case actor do

@@ -4,7 +4,7 @@ AshGrant provides a DSL-based testing framework for verifying policy configurati
 
 ## Resource Setup
 
-Policy tests verify how your resolver converts roles to permissions. Use any resource with an `ash_grant` block configured (see the [Getting Started guide](getting-started.md)).
+Policy tests verify how your resolver converts roles to permissions. Use any resource with a `grants` block configured (see the [Getting Started guide](getting-started.md)).
 
 ## DSL-Based Tests
 

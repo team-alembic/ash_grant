@@ -12,21 +12,19 @@ defmodule AshGrant.Test.GrantsOnlyDomain do
     extensions: [AshGrant.Domain],
     validate_config_inclusion?: false
 
-  ash_grant do
+  grants do
     scope(:always, true)
     scope(:own, expr(author_id == ^actor(:id)))
     scope(:published, expr(status == :published))
 
-    grants do
-      grant :admin, expr(^actor(:role) == :admin) do
-        description("Full administrative access — broadcast across the domain")
-        permission(:manage_all, :*, :always)
-      end
+    grant :admin, expr(^actor(:role) == :admin) do
+      description("Full administrative access — broadcast across the domain")
+      permission(:manage_all, :*, :always)
+    end
 
-      grant :viewer, expr(^actor(:role) == :viewer) do
-        description("Viewers see published rows on every resource")
-        permission(:read_published, :read, :published)
-      end
+    grant :viewer, expr(^actor(:role) == :viewer) do
+      description("Viewers see published rows on every resource")
+      permission(:read_published, :read, :published)
     end
   end
 

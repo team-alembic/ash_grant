@@ -57,7 +57,7 @@ prefer argument-based scopes — they keep the scope expression in-memory-evalua
 and push relationship traversal into the resource's own change pipeline:
 
 ```elixir
-ash_grant do
+grants do
   scope :at_own_unit, expr(^arg(:center_id) in ^actor(:own_org_unit_ids))
   resolve_argument :center_id, from_path: [:order, :center_id]
 end
@@ -83,7 +83,7 @@ Using `write:` still works but emits a compile-time deprecation warning.
 Add descriptions to scopes for better debugging output:
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
 
   scope :always, true, description: "All records without restriction"
@@ -275,7 +275,7 @@ Exit codes:
 Ash's default expression inspect is readable but uses internal
 references like `{:_actor, :id}` instead of the DSL-facing
 `^actor(:id)`. `AshGrant.ExprStringify.to_string/1` produces the
-human-facing form — the same form users write in their `ash_grant do`
+human-facing form — the same form users write in their `grants do`
 blocks.
 
 ```elixir

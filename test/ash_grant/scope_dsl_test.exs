@@ -4,14 +4,14 @@ defmodule AshGrant.ScopeDslTest do
   alias AshGrant.Info
 
   # Test resource with scope DSL
-  # Note: expr macro is auto-imported by the ash_grant DSL section
+  # Note: expr macro is auto-imported by the grants DSL section
   defmodule TestPost do
     use Ash.Resource,
       domain: nil,
       validate_domain_inclusion?: false,
       extensions: [AshGrant]
 
-    ash_grant do
+    grants do
       resolver(fn _actor, _context -> [] end)
 
       scope(:always, true, description: "All records without restriction")
@@ -122,7 +122,7 @@ defmodule AshGrant.ScopeDslTest do
         validate_domain_inclusion?: false,
         extensions: [AshGrant]
 
-      ash_grant do
+      grants do
         resolver(fn _actor, _context -> [] end)
 
         scope :always, true do

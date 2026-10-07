@@ -70,7 +70,7 @@ resource populates the argument from its own FK lazily.
 
 ```elixir
 # After
-ash_grant do
+grants do
   scope :at_own_unit, expr(^arg(:center_id) in ^actor(:own_org_unit_ids))
 
   resolve_argument :center_id, from_path: [:order, :center_id]
@@ -149,7 +149,7 @@ defmodule MyApp.PostScopeResolver do
   def resolve(:published, _ctx), do: expr(status == :published)
 end
 
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   scope_resolver MyApp.PostScopeResolver
 end
@@ -163,11 +163,11 @@ see the scopes.
 
 ### What replaces it
 
-The inline `scope` entity inside the `ash_grant` block:
+The inline `scope` entity inside the `grants` block:
 
 ```elixir
 # After
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
 
   scope :own, expr(author_id == ^actor(:id))
@@ -182,7 +182,7 @@ them.
 ### Migration steps
 
 1. For each scope your resolver module returns, add an equivalent
-   `scope :name, expr(...)` entity inside `ash_grant do ... end`.
+   `scope :name, expr(...)` entity inside `grants do ... end`.
 2. Translate any `ctx` the resolver module used:
    - `ctx.actor` → `^actor(:field)` inside `expr()`
    - `ctx.tenant` → `^tenant()`
@@ -190,7 +190,7 @@ them.
      time via `Ash.Query.set_context/2` or
      `Ash.Changeset.set_context/2`; see
      [Scopes: Context Injection](scopes.md#context-injection-context)).
-3. Remove the `scope_resolver` option from `ash_grant do`.
+3. Remove the `scope_resolver` option from `grants do`.
 4. Delete the resolver module (or keep it for any scopes you couldn't
    express inline — see the next section).
 
@@ -202,7 +202,7 @@ take priority; any scope name not found inline falls back to
 the safe state to run in while migrating one scope at a time.
 
 ```elixir
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   scope_resolver MyApp.PostScopeResolver   # still here, falls back
 
@@ -241,13 +241,13 @@ surface, and composes with other scopes through inheritance.
 
 ```elixir
 # Before
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   owner_field :author_id
 end
 
 # After
-ash_grant do
+grants do
   resolver MyApp.PermissionResolver
   scope :own, expr(author_id == ^actor(:id))
 end

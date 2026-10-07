@@ -25,7 +25,7 @@ defmodule AshGrant.Transformers.ValidateScopeThroughs do
     resource = Transformer.get_persisted(dsl_state, :module)
 
     scope_throughs =
-      Transformer.get_entities(dsl_state, [:ash_grant])
+      Transformer.get_entities(dsl_state, [:grants])
       |> Enum.filter(&match?(%AshGrant.Dsl.ScopeThrough{}, &1))
 
     Enum.each(scope_throughs, fn st ->
@@ -42,7 +42,7 @@ defmodule AshGrant.Transformers.ValidateScopeThroughs do
     unless rel do
       raise Spark.Error.DslError,
         module: resource,
-        path: [:ash_grant, :scope_through],
+        path: [:grants, :scope_through],
         message:
           "Relationship :#{scope_through.relationship} not found on #{inspect(resource)}. " <>
             "scope_through requires a belongs_to relationship to the parent resource."

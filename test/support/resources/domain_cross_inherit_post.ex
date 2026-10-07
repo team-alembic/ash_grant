@@ -6,7 +6,7 @@ defmodule AshGrant.Test.DomainCrossInheritPost do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     default_policies(true)
 
     scope(:own_draft, expr(author_id == ^actor(:id) and status == :draft))

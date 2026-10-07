@@ -13,7 +13,7 @@ defmodule AshGrant.ExplainTest do
       validate_domain_inclusion?: false,
       extensions: [AshGrant]
 
-    ash_grant do
+    grants do
       resolver(fn actor, _context ->
         case actor do
           %{role: :admin} ->

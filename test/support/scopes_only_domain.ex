@@ -4,7 +4,7 @@ defmodule AshGrant.Test.ScopesOnlyDomain do
     extensions: [AshGrant.Domain],
     validate_config_inclusion?: false
 
-  ash_grant do
+  grants do
     scope(:always, true)
     scope(:own, expr(author_id == ^actor(:id)))
     scope(:published, expr(status == :published))

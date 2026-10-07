@@ -3,7 +3,7 @@ defmodule AshGrant.Test.Auth.RefundDefaults do
   # Minimal Refund variant that combines `default_policies true` with
   # `resolve_argument`: no explicit policies block, no manual argument/change
   # wiring on actions. The entire authorization setup lives in the
-  # `ash_grant` block.
+  # `grants` block.
 
   use Ash.Resource,
     domain: AshGrant.Test.Auth.Domain,
@@ -15,7 +15,7 @@ defmodule AshGrant.Test.Auth.RefundDefaults do
     private?(true)
   end
 
-  ash_grant do
+  grants do
     resolver(fn actor, _context ->
       case actor do
         nil -> []

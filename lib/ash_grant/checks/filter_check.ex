@@ -11,7 +11,7 @@ defmodule AshGrant.FilterCheck do
 
   > #### Auto-generated Policies {: .info}
   >
-  > When using `default_policies: true` in your resource's `ash_grant` block,
+  > When using `default_policies: true` in your resource's `grants` block,
   > this check is automatically configured for read actions. You don't need
   > to manually add it to your policies.
 
@@ -422,16 +422,16 @@ defmodule AshGrant.FilterCheck do
     raise """
     AshGrant: Scope "#{scope}" not found in inline scope DSL and no scope_resolver configured.
 
-    Either define the scope inline in your ash_grant block:
+    Either define the scope inline in your grants block:
 
-        ash_grant do
+        grants do
           resolver MyApp.PermissionResolver
           scope :#{scope}, expr(...)
         end
 
     Or configure a scope_resolver:
 
-        ash_grant do
+        grants do
           resolver MyApp.PermissionResolver
           scope_resolver MyApp.ScopeResolver
         end

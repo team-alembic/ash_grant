@@ -36,17 +36,15 @@ defmodule AshGrant.OptionalScopeTest do
       validate_domain_inclusion?: false,
       extensions: [AshGrant]
 
-    ash_grant do
+    grants do
       resource_name("post")
 
-      grants do
-        grant :admin, expr(^actor(:role) == :admin) do
-          permission(:manage_all, :*)
-        end
+      grant :admin, expr(^actor(:role) == :admin) do
+        permission(:manage_all, :*)
+      end
 
-        grant :reader, expr(^actor(:role) == :reader) do
-          permission(:read_any, :read)
-        end
+      grant :reader, expr(^actor(:role) == :reader) do
+        permission(:read_any, :read)
       end
     end
 
@@ -111,11 +109,9 @@ defmodule AshGrant.OptionalScopeTest do
       extensions: [AshGrant.Domain],
       validate_config_inclusion?: false
 
-    ash_grant do
-      grants do
-        grant :admin, expr(^actor(:role) == :admin) do
-          permission(:manage_everything, :*)
-        end
+    grants do
+      grant :admin, expr(^actor(:role) == :admin) do
+        permission(:manage_everything, :*)
       end
     end
 

@@ -7,9 +7,9 @@ defmodule AshGrant.Transformers.AddDefaultPolicies do
 
   ## Configuration
 
-  Enable in your resource's `ash_grant` block:
+  Enable in your resource's `grants` block:
 
-      ash_grant do
+      grants do
         resolver MyApp.PermissionResolver
         default_policies true  # or :all, :read, :write
       end
@@ -69,7 +69,7 @@ defmodule AshGrant.Transformers.AddDefaultPolicies do
 
   @impl true
   def transform(dsl_state) do
-    default_policies = Transformer.get_option(dsl_state, [:ash_grant], :default_policies, false)
+    default_policies = Transformer.get_option(dsl_state, [:grants], :default_policies, false)
 
     case default_policies do
       false ->

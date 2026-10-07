@@ -36,8 +36,8 @@ defmodule AshGrant.Resource.Verifiers.ValidateScopes do
 
   @spec resolver_configured?(dsl_state :: map()) :: boolean()
   defp resolver_configured?(dsl_state) do
-    Verifier.get_option(dsl_state, [:ash_grant], :resolver) != nil or
-      Verifier.get_entities(dsl_state, [:ash_grant, :grants]) != [] or
+    Verifier.get_option(dsl_state, [:grants], :resolver) != nil or
+      Enum.any?(Verifier.get_entities(dsl_state, [:grants]), &match?(%AshGrant.Dsl.Grant{}, &1)) or
       domain_source?(dsl_state)
   end
 
@@ -54,7 +54,7 @@ defmodule AshGrant.Resource.Verifiers.ValidateScopes do
 
   @spec validate_deprecated_options(dsl_state :: map(), resource :: module()) :: :ok
   defp validate_deprecated_options(dsl_state, resource) do
-    if owner_field = Verifier.get_option(dsl_state, [:ash_grant], :owner_field) do
+    if owner_field = Verifier.get_option(dsl_state, [:grants], :owner_field) do
       IO.warn(
         """
         AshGrant: owner_field is deprecated in #{inspect(resource)}.
@@ -71,7 +71,7 @@ defmodule AshGrant.Resource.Verifiers.ValidateScopes do
       )
     end
 
-    if Verifier.get_option(dsl_state, [:ash_grant], :scope_resolver) do
+    if Verifier.get_option(dsl_state, [:grants], :scope_resolver) do
       IO.warn(
         """
         AshGrant: scope_resolver is deprecated in #{inspect(resource)}.
@@ -91,7 +91,7 @@ defmodule AshGrant.Resource.Verifiers.ValidateScopes do
   @spec validate_instance_key(dsl_state :: map(), resource :: module()) ::
           :ok | {:error, Spark.Error.DslError.t()}
   defp validate_instance_key(dsl_state, resource) do
-    instance_key = Verifier.get_option(dsl_state, [:ash_grant], :instance_key)
+    instance_key = Verifier.get_option(dsl_state, [:grants], :instance_key)
 
     if instance_key && instance_key != :id do
       attributes = Verifier.get_entities(dsl_state, [:attributes])
@@ -103,7 +103,7 @@ defmodule AshGrant.Resource.Verifiers.ValidateScopes do
         {:error,
          Spark.Error.DslError.exception(
            module: resource,
-           path: [:ash_grant, :instance_key],
+           path: [:grants, :instance_key],
            message:
              "instance_key :#{instance_key} does not exist as an attribute on #{inspect(resource)}. " <>
                "Available attributes: #{inspect(attr_names)}"

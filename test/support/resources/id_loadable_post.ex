@@ -12,7 +12,7 @@ defmodule AshGrant.Test.IdLoadablePost do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     resolver(AshGrant.Test.IdLoadableResolver)
     resource_name("id_loadable_post")
 
@@ -56,7 +56,7 @@ defmodule AshGrant.Test.NoLoadActorPost do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     resolver(AshGrant.Test.NoLoadActorResolver)
     resource_name("no_load_actor_post")
 

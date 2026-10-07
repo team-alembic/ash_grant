@@ -3,7 +3,7 @@ defmodule AshGrant.Transformers.AddCanPerformCalculations do
   Spark DSL transformer that generates CanPerform calculations from DSL entities.
 
   This transformer reads `can_perform` entities and the `can_perform_actions`
-  option from the `ash_grant` section and adds corresponding boolean calculations
+  option from the `grants` section and adds corresponding boolean calculations
   using `Ash.Resource.Builder.add_new_calculation/5`.
 
   ## Usage Rules
@@ -46,12 +46,12 @@ defmodule AshGrant.Transformers.AddCanPerformCalculations do
     # Collect from can_perform entities
     entities =
       dsl_state
-      |> Transformer.get_entities([:ash_grant])
+      |> Transformer.get_entities([:grants])
       |> Enum.filter(&match?(%AshGrant.Dsl.CanPerform{}, &1))
 
     # Collect from can_perform_actions option
     batch_actions =
-      Transformer.get_option(dsl_state, [:ash_grant], :can_perform_actions) || []
+      Transformer.get_option(dsl_state, [:grants], :can_perform_actions) || []
 
     # Build combined list: [{calc_name, action_string, public?}, ...]
     calcs_from_entities =
@@ -82,7 +82,7 @@ defmodule AshGrant.Transformers.AddCanPerformCalculations do
 
         raise Spark.Error.DslError,
           module: resource,
-          path: [:ash_grant, :can_perform_actions],
+          path: [:grants, :can_perform_actions],
           message: """
           Action :#{action_atom} does not exist on #{inspect(resource)}.
 

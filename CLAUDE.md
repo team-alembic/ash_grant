@@ -50,7 +50,7 @@ mix ash_grant.verify path/to/test.yaml --verbose  # Verbose output
 ### Core Modules
 
 - **`AshGrant`** (`lib/ash_grant.ex`) - Main extension module, exports `check/1` and `filter_check/1`
-- **`AshGrant.Dsl`** (`lib/ash_grant/dsl.ex`) - Spark DSL definition for the `ash_grant` block
+- **`AshGrant.Dsl`** (`lib/ash_grant/dsl.ex`) - Spark DSL definition for the `grants` block
 - **`AshGrant.Permission`** (`lib/ash_grant/permission.ex`) - Parses and matches permission strings (`resource:instance_id:action:scope`)
 - **`AshGrant.Evaluator`** (`lib/ash_grant/evaluator.ex`) - Implements deny-wins evaluation logic
 
@@ -109,7 +109,7 @@ mix ash_grant.verify path/to/test.yaml --verbose  # Verbose output
 Scopes are defined inline with `expr()` expressions:
 
 ```elixir
-ash_grant do
+grants do
   scope :always, true
   scope :own, expr(author_id == ^actor(:id))
   scope :own_draft, [:own], expr(status == :draft)  # Inherits from :own

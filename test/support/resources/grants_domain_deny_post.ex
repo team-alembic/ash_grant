@@ -12,15 +12,13 @@ defmodule AshGrant.Test.GrantsDomainDenyPost do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     resource_name("grants_domain_deny_post")
     default_policies(true)
 
-    grants do
-      grant :admin_no_destroy, expr(^actor(:role) == :admin) do
-        description("Resource-level deny: admins cannot destroy on this resource")
-        permission(:no_destroy, :destroy, deny: true)
-      end
+    grant :admin_no_destroy, expr(^actor(:role) == :admin) do
+      description("Resource-level deny: admins cannot destroy on this resource")
+      permission(:no_destroy, :destroy, deny: true)
     end
   end
 

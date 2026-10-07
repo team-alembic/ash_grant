@@ -9,40 +9,38 @@ defmodule AshGrant.GrantsDslTest do
       validate_domain_inclusion?: false,
       extensions: [AshGrant]
 
-    ash_grant do
+    grants do
       resource_name("post")
 
       scope(:always, true)
       scope(:own, expr(author_id == ^actor(:id)))
       scope(:published, expr(status == :published))
 
-      grants do
-        grant :admin, expr(^actor(:role) == :admin) do
-          description("Full administrative access")
-          permission(:manage_all, :*, :always, description: "Any action on any post")
-        end
+      grant :admin, expr(^actor(:role) == :admin) do
+        description("Full administrative access")
+        permission(:manage_all, :*, :always, description: "Any action on any post")
+      end
 
-        grant :editor, expr(^actor(:role) == :editor) do
-          description("Editors manage content")
-          permission(:read_all, :read, :always)
-          permission(:update_own, :update, :own)
-        end
+      grant :editor, expr(^actor(:role) == :editor) do
+        description("Editors manage content")
+        permission(:read_all, :read, :always)
+        permission(:update_own, :update, :own)
+      end
 
-        grant :viewer, expr(^actor(:role) == :viewer) do
-          permission(:read_published, :read, :published, description: "Read published posts")
-        end
+      grant :viewer, expr(^actor(:role) == :viewer) do
+        permission(:read_published, :read, :published, description: "Read published posts")
+      end
 
-        grant :archived_guard, expr(^actor(:role) == :editor) do
-          permission(:no_destroy_archived, :destroy, :published, deny: true)
-        end
+      grant :archived_guard, expr(^actor(:role) == :editor) do
+        permission(:no_destroy_archived, :destroy, :published, deny: true)
+      end
 
-        grant :specific_admin, expr(^actor(:role) == :specific) do
-          permission(:manage_root_post, :update, :always, instance: "root-post-id")
-        end
+      grant :specific_admin, expr(^actor(:role) == :specific) do
+        permission(:manage_root_post, :update, :always, instance: "root-post-id")
+      end
 
-        grant :paid_user, expr(^actor(:plan) == :pro and ^actor(:trial_expired) == false) do
-          permission(:create_pro, :create, :always)
-        end
+      grant :paid_user, expr(^actor(:plan) == :pro and ^actor(:trial_expired) == false) do
+        permission(:create_pro, :create, :always)
       end
     end
 
@@ -205,13 +203,11 @@ defmodule AshGrant.GrantsDslTest do
             defaults([:read])
           end
 
-          ash_grant do
+          grants do
             scope(:always, true)
 
-            grants do
-              grant :bad, expr(^actor(:role) == :admin) do
-                permission(:audit_read, :read, :always, purpose: :whatever)
-              end
+            grant :bad, expr(^actor(:role) == :admin) do
+              permission(:audit_read, :read, :always, purpose: :whatever)
             end
           end
 
@@ -233,7 +229,7 @@ defmodule AshGrant.GrantsDslTest do
           validate_domain_inclusion?: false,
           extensions: [AshGrant]
 
-        ash_grant do
+        grants do
           resource_name("dualpost")
 
           resolver(fn actor, _context ->
@@ -245,10 +241,8 @@ defmodule AshGrant.GrantsDslTest do
 
           scope(:always, true)
 
-          grants do
-            grant :admin, expr(^actor(:role) == :admin) do
-              permission(:manage_all, :*, :always)
-            end
+          grant :admin, expr(^actor(:role) == :admin) do
+            permission(:manage_all, :*, :always)
           end
         end
 
@@ -291,14 +285,12 @@ defmodule AshGrant.GrantsDslTest do
           validate_domain_inclusion?: false,
           extensions: [AshGrant]
 
-        ash_grant do
+        grants do
           resource_name("raising_resolver_post")
           resolver(fn _actor, _context -> raise "resolver bug" end)
 
-          grants do
-            grant :admin, expr(^actor(:role) == :admin) do
-              permission(:manage_all, :*)
-            end
+          grant :admin, expr(^actor(:role) == :admin) do
+            permission(:manage_all, :*)
           end
         end
 
@@ -324,15 +316,13 @@ defmodule AshGrant.GrantsDslTest do
             validate_domain_inclusion?: false,
             extensions: [AshGrant]
 
-          ash_grant do
+          grants do
             resource_name("bad_instance_post")
 
             scope(:always, true)
 
-            grants do
-              grant :owner, expr(^actor(:role) == :owner) do
-                permission(:manage, :update, :always, instance: "doc:abc:nope")
-              end
+            grant :owner, expr(^actor(:role) == :owner) do
+              permission(:manage, :update, :always, instance: "doc:abc:nope")
             end
           end
 

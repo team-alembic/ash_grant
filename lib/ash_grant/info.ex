@@ -34,7 +34,7 @@ defmodule AshGrant.Info do
       [:all, :own, :published]
   """
 
-  use Spark.InfoGenerator, extension: AshGrant, sections: [:ash_grant]
+  use Spark.InfoGenerator, extension: AshGrant, sections: [:grants]
 
   require Ash.Expr
 
@@ -66,7 +66,7 @@ defmodule AshGrant.Info do
   @doc false
   @spec raw_resolver(resource :: Ash.Resource.t()) :: module() | function() | nil
   def raw_resolver(resource) do
-    case Spark.Dsl.Extension.get_opt(resource, [:ash_grant], :resolver) do
+    case Spark.Dsl.Extension.get_opt(resource, [:grants], :resolver) do
       nil -> domain_resolver(resource)
       resolver -> resolver
     end
@@ -87,7 +87,7 @@ defmodule AshGrant.Info do
   """
   @spec scope_resolver(Ash.Resource.t()) :: module() | function() | nil
   def scope_resolver(resource) do
-    Spark.Dsl.Extension.get_opt(resource, [:ash_grant], :scope_resolver)
+    Spark.Dsl.Extension.get_opt(resource, [:grants], :scope_resolver)
   end
 
   @doc """
@@ -97,7 +97,7 @@ defmodule AshGrant.Info do
   """
   @spec resource_name(Ash.Resource.t()) :: String.t()
   def resource_name(resource) do
-    case Spark.Dsl.Extension.get_opt(resource, [:ash_grant], :resource_name) do
+    case Spark.Dsl.Extension.get_opt(resource, [:grants], :resource_name) do
       nil -> derive_resource_name(resource)
       name -> name
     end
@@ -110,7 +110,7 @@ defmodule AshGrant.Info do
   """
   @spec instance_key(Ash.Resource.t()) :: atom()
   def instance_key(resource) do
-    Spark.Dsl.Extension.get_opt(resource, [:ash_grant], :instance_key) || :id
+    Spark.Dsl.Extension.get_opt(resource, [:grants], :instance_key) || :id
   end
 
   @doc """
@@ -120,7 +120,7 @@ defmodule AshGrant.Info do
   """
   @spec scope_throughs(Ash.Resource.t()) :: [AshGrant.Dsl.ScopeThrough.t()]
   def scope_throughs(resource) do
-    Spark.Dsl.Extension.get_entities(resource, [:ash_grant])
+    Spark.Dsl.Extension.get_entities(resource, [:grants])
     |> Enum.filter(&match?(%AshGrant.Dsl.ScopeThrough{}, &1))
   end
 
@@ -133,7 +133,7 @@ defmodule AshGrant.Info do
   @deprecated "Use explicit scope expressions instead of owner_field"
   @spec owner_field(Ash.Resource.t()) :: atom() | nil
   def owner_field(resource) do
-    case Spark.Dsl.Extension.get_opt(resource, [:ash_grant], :owner_field) do
+    case Spark.Dsl.Extension.get_opt(resource, [:grants], :owner_field) do
       nil ->
         nil
 
@@ -159,7 +159,7 @@ defmodule AshGrant.Info do
   """
   @spec default_policies(Ash.Resource.t()) :: boolean() | :read | :write | :all
   def default_policies(resource) do
-    Spark.Dsl.Extension.get_opt(resource, [:ash_grant], :default_policies, false)
+    Spark.Dsl.Extension.get_opt(resource, [:grants], :default_policies, false)
   end
 
   @doc """
@@ -169,7 +169,7 @@ defmodule AshGrant.Info do
   """
   @spec can_perform_actions(Ash.Resource.t()) :: [atom()]
   def can_perform_actions(resource) do
-    Spark.Dsl.Extension.get_opt(resource, [:ash_grant], :can_perform_actions) || []
+    Spark.Dsl.Extension.get_opt(resource, [:grants], :can_perform_actions) || []
   end
 
   @doc """
@@ -180,7 +180,7 @@ defmodule AshGrant.Info do
   """
   @spec default_field_policies(Ash.Resource.t()) :: boolean()
   def default_field_policies(resource) do
-    Spark.Dsl.Extension.get_opt(resource, [:ash_grant], :default_field_policies, false)
+    Spark.Dsl.Extension.get_opt(resource, [:grants], :default_field_policies, false)
   end
 
   @doc """
@@ -203,7 +203,7 @@ defmodule AshGrant.Info do
   @spec scopes(resource :: Ash.Resource.t()) :: [AshGrant.Dsl.Scope.t()]
   def scopes(resource) do
     resource_scopes =
-      Spark.Dsl.Extension.get_entities(resource, [:ash_grant])
+      Spark.Dsl.Extension.get_entities(resource, [:grants])
       |> Enum.filter(&match?(%AshGrant.Dsl.Scope{}, &1))
 
     merge_domain_scopes(resource, resource_scopes)
@@ -239,7 +239,7 @@ defmodule AshGrant.Info do
   """
   @spec resolve_arguments(Ash.Resource.t()) :: [AshGrant.Dsl.ResolveArgument.t()]
   def resolve_arguments(resource) do
-    Spark.Dsl.Extension.get_entities(resource, [:ash_grant])
+    Spark.Dsl.Extension.get_entities(resource, [:grants])
     |> Enum.filter(&match?(%AshGrant.Dsl.ResolveArgument{}, &1))
   end
 
@@ -248,7 +248,7 @@ defmodule AshGrant.Info do
   """
   @spec field_groups(Ash.Resource.t()) :: [AshGrant.Dsl.FieldGroup.t()]
   def field_groups(resource) do
-    Spark.Dsl.Extension.get_entities(resource, [:ash_grant])
+    Spark.Dsl.Extension.get_entities(resource, [:grants])
     |> Enum.filter(&match?(%AshGrant.Dsl.FieldGroup{}, &1))
   end
 
@@ -264,7 +264,10 @@ defmodule AshGrant.Info do
   """
   @spec grants(Ash.Resource.t()) :: [AshGrant.Dsl.Grant.t()]
   def grants(resource) do
-    resource_grants = Spark.Dsl.Extension.get_entities(resource, [:ash_grant, :grants])
+    resource_grants =
+      Spark.Dsl.Extension.get_entities(resource, [:grants])
+      |> Enum.filter(&match?(%AshGrant.Dsl.Grant{}, &1))
+
     merge_domain_grants(resource, resource_grants)
   end
 

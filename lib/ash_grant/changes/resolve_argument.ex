@@ -4,7 +4,7 @@ defmodule AshGrant.Changes.ResolveArgument do
   own relationships.
 
   Installed automatically by `AshGrant.Transformers.AddArgumentResolvers` when a
-  resource declares `resolve_argument` in its `ash_grant` block. Users rarely
+  resource declares `resolve_argument` in its `grants` block. Users rarely
   reference this module directly.
 
   ## Options

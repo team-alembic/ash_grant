@@ -23,7 +23,7 @@ defmodule AshGrant.Test.ServiceRequest do
     repo(AshGrant.TestRepo)
   end
 
-  ash_grant do
+  grants do
     # Tenant-aware resolver: uses context.tenant to look up permissions
     resolver(fn actor, context ->
       case actor do

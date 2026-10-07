@@ -49,7 +49,7 @@ defmodule MyApp.Blog.Post do
     authorizers: [Ash.Policy.Authorizer],
     extensions: [AshGrant]
 
-  ash_grant do
+  grants do
     default_policies true  # Auto-generates read/write policies
 
     # Row-level filters — only declare the ones your grants actually reference.
@@ -58,20 +58,18 @@ defmodule MyApp.Blog.Post do
 
     # Grants pair an actor predicate with a set of compile-time-verified
     # permissions. AshGrant synthesizes the resolver from these.
-    grants do
-      grant :admin, expr(^actor(:role) == :admin) do
-        permission :manage_all, :*                # no scope = unrestricted
-      end
+    grant :admin, expr(^actor(:role) == :admin) do
+      permission :manage_all, :*                # no scope = unrestricted
+    end
 
-      grant :editor, expr(^actor(:role) == :editor) do
-        permission :read_all,   :read             # unrestricted read
-        permission :create_any, :create           # unrestricted create
-        permission :update_own, :update, :own     # row-level filter
-      end
+    grant :editor, expr(^actor(:role) == :editor) do
+      permission :read_all,   :read             # unrestricted read
+      permission :create_any, :create           # unrestricted create
+      permission :update_own, :update, :own     # row-level filter
+    end
 
-      grant :viewer, expr(^actor(:role) == :viewer) do
-        permission :read_published, :read, :published
-      end
+    grant :viewer, expr(^actor(:role) == :viewer) do
+      permission :read_published, :read, :published
     end
   end
 
@@ -110,7 +108,7 @@ instance-specific permissions (e.g. per-row sharing fetched from a database),
 use a `resolver` function instead — it's mutually exclusive with `grants`:
 
 ```elixir
-ash_grant do
+grants do
   resolver fn actor, _context ->
     MyApp.Accounts.load_permissions(actor)  # returns list of permission strings
   end
@@ -130,19 +128,17 @@ bounded context without repeating the same grant on each resource:
 defmodule MyApp.Blog do
   use Ash.Domain, extensions: [AshGrant.Domain]
 
-  ash_grant do
+  grants do
     scope :always, true
     scope :own, expr(author_id == ^actor(:id))
 
-    grants do
-      grant :admin, expr(^actor(:role) == :admin) do
-        permission :manage_all, :*, :always
-      end
+    grant :admin, expr(^actor(:role) == :admin) do
+      permission :manage_all, :*, :always
+    end
 
-      grant :editor, expr(^actor(:role) == :editor) do
-        permission :read_all,   :read              # unrestricted on every resource
-        permission :update_own, :update, :own
-      end
+    grant :editor, expr(^actor(:role) == :editor) do
+      permission :read_all,   :read              # unrestricted on every resource
+      permission :update_own, :update, :own
     end
   end
 

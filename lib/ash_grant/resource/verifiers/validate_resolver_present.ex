@@ -33,13 +33,13 @@ defmodule AshGrant.Resource.Verifiers.ValidateResolverPresent do
       {:error,
        Spark.Error.DslError.exception(
          module: resource,
-         path: [:ash_grant, :resolver],
+         path: [:grants, :resolver],
          message: """
          No resolver configured for #{inspect(resource)}.
 
          Either set a resolver on the resource:
 
-             ash_grant do
+             grants do
                resolver MyApp.PermissionResolver
              end
 
@@ -47,7 +47,7 @@ defmodule AshGrant.Resource.Verifiers.ValidateResolverPresent do
 
              use Ash.Domain, extensions: [AshGrant.Domain]
 
-             ash_grant do
+             grants do
                resolver MyApp.PermissionResolver
              end
          """
@@ -57,14 +57,14 @@ defmodule AshGrant.Resource.Verifiers.ValidateResolverPresent do
 
   @spec resolver_present?(dsl_state :: map()) :: boolean()
   defp resolver_present?(dsl_state) do
-    Verifier.get_option(dsl_state, [:ash_grant], :resolver) != nil or
+    Verifier.get_option(dsl_state, [:grants], :resolver) != nil or
       grants_present?(dsl_state) or
       domain_source_present?(dsl_state)
   end
 
   @spec grants_present?(dsl_state :: map()) :: boolean()
   defp grants_present?(dsl_state) do
-    Verifier.get_entities(dsl_state, [:ash_grant, :grants]) != []
+    Enum.any?(Verifier.get_entities(dsl_state, [:grants]), &match?(%AshGrant.Dsl.Grant{}, &1))
   end
 
   # Either a domain-level `resolver` or a domain-level `grants` block

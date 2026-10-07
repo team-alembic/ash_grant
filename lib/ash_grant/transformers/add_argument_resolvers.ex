@@ -38,7 +38,7 @@ defmodule AshGrant.Transformers.AddArgumentResolvers do
   def transform(dsl_state) do
     resolve_args =
       dsl_state
-      |> Transformer.get_entities([:ash_grant])
+      |> Transformer.get_entities([:grants])
       |> Enum.filter(&match?(%AshGrant.Dsl.ResolveArgument{}, &1))
 
     case resolve_args do
@@ -66,7 +66,7 @@ defmodule AshGrant.Transformers.AddArgumentResolvers do
   # DSL state (not the compiled resource — it's not compiled yet).
   defp build_arg_map(dsl_state) do
     dsl_state
-    |> Transformer.get_entities([:ash_grant])
+    |> Transformer.get_entities([:grants])
     |> Enum.filter(&match?(%AshGrant.Dsl.Scope{}, &1))
     |> Enum.reduce(%{}, fn scope, acc ->
       expr = if scope.write == nil, do: scope.filter, else: scope.write
@@ -85,7 +85,7 @@ defmodule AshGrant.Transformers.AddArgumentResolvers do
       {:error,
        Spark.Error.DslError.exception(
          module: resource,
-         path: [:ash_grant, :resolve_argument, name],
+         path: [:grants, :resolve_argument, name],
          message: """
          resolve_argument :#{name} is declared but no scope references ^arg(:#{name}).
 
@@ -103,7 +103,7 @@ defmodule AshGrant.Transformers.AddArgumentResolvers do
   defp do_validate_path(_dsl_state, _original_resource, [], _traversed, _cursor, name) do
     {:error,
      Spark.Error.DslError.exception(
-       path: [:ash_grant, :resolve_argument, name],
+       path: [:grants, :resolve_argument, name],
        message: "resolve_argument :#{name} requires a non-empty from_path"
      )}
   end
@@ -114,7 +114,7 @@ defmodule AshGrant.Transformers.AddArgumentResolvers do
         {:error,
          Spark.Error.DslError.exception(
            module: original_resource,
-           path: [:ash_grant, :resolve_argument, name],
+           path: [:grants, :resolve_argument, name],
            message: """
            resolve_argument :#{name} — path #{inspect(traversed ++ [leaf])} ends on a
            relationship (:#{leaf}). The final path segment must be an attribute, not
@@ -132,7 +132,7 @@ defmodule AshGrant.Transformers.AddArgumentResolvers do
             {:error,
              Spark.Error.DslError.exception(
                module: original_resource,
-               path: [:ash_grant, :resolve_argument, name],
+               path: [:grants, :resolve_argument, name],
                message: """
                resolve_argument :#{name} — path #{inspect(traversed ++ [leaf])} ends at
                :#{leaf} on #{inspect(cursor_module(cursor))}, but that is neither a
@@ -149,7 +149,7 @@ defmodule AshGrant.Transformers.AddArgumentResolvers do
         {:error,
          Spark.Error.DslError.exception(
            module: original_resource,
-           path: [:ash_grant, :resolve_argument, name],
+           path: [:grants, :resolve_argument, name],
            message: """
            resolve_argument :#{name} — #{inspect(cursor_module(cursor))} has no
            relationship :#{key} (at path segment #{inspect(traversed ++ [key])}).
@@ -170,7 +170,7 @@ defmodule AshGrant.Transformers.AddArgumentResolvers do
         {:error,
          Spark.Error.DslError.exception(
            module: original_resource,
-           path: [:ash_grant, :resolve_argument, name],
+           path: [:grants, :resolve_argument, name],
            message: """
            resolve_argument :#{name} — intermediate relationship :#{key} on
            #{inspect(cursor_module(cursor))} is a :#{type}, but only :belongs_to is
@@ -262,7 +262,7 @@ defmodule AshGrant.Transformers.AddArgumentResolvers do
     else
       raise Spark.Error.DslError,
         module: resource,
-        path: [:ash_grant, :resolve_argument, arg_name, :for_actions],
+        path: [:grants, :resolve_argument, arg_name, :for_actions],
         message: """
         resolve_argument :#{arg_name} :for_actions references actions
         #{inspect(missing)} that are not defined as create/update/destroy actions on

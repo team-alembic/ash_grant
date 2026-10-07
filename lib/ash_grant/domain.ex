@@ -30,20 +30,18 @@ defmodule AshGrant.Domain do
         use Ash.Domain,
           extensions: [AshGrant.Domain]
 
-        ash_grant do
+        grants do
           scope :always, true
           scope :own, expr(author_id == ^actor(:id))
 
-          grants do
-            # Broadcast — every resource in the domain
-            grant :admin, expr(^actor(:role) == :admin) do
-              permission :manage_all, :*, :always
-            end
+          # Broadcast — every resource in the domain
+          grant :admin, expr(^actor(:role) == :admin) do
+            permission :manage_all, :*, :always
+          end
 
-            grant :editor, expr(^actor(:role) == :editor) do
-              permission :read_all,   :read
-              permission :update_own, :update, :own
-            end
+          grant :editor, expr(^actor(:role) == :editor) do
+            permission :read_all,   :read
+            permission :update_own, :update, :own
           end
         end
 
@@ -57,11 +55,9 @@ defmodule AshGrant.Domain do
       defmodule MyApp.Blog.Post do
         use Ash.Resource, domain: MyApp.Blog, extensions: [AshGrant]
 
-        ash_grant do
-          grants do
-            grant :auditor, expr(^actor(:role) == :auditor) do
-              permission :audit_posts, :read
-            end
+        grants do
+          grant :auditor, expr(^actor(:role) == :auditor) do
+            permission :audit_posts, :read
           end
         end
       end
