@@ -1,4 +1,7 @@
 defmodule AshGrant.ScopeRegistryTest do
+  # Not async: the registry is looked up through `Application.get_env`, which
+  # is a global the suite shares. Flipping it on/off inside a parallel run
+  # would be seen by any other test that reads `AshGrant.Info.scopes/1`.
   use ExUnit.Case, async: false
 
   alias AshGrant.Info
