@@ -369,18 +369,20 @@ end
 
 ## Global scope registry
 
-When the same scope — `:own`, `:same_tenant`, `:always` — appears on every
+When the same scope — `:own`, `:same_org`, `:always` — appears on every
 resource across several domains, declare it once in a config-level registry
-and let every resource pick it up silently.
+and let every resource pick it up automatically.
 
 ```elixir
 # lib/my_app/global_scopes.ex
 defmodule MyApp.GlobalScopes do
   use AshGrant.ScopeRegistry
 
-  scope :always, true
-  scope :own, expr(author_id == ^actor(:id))
-  scope :same_tenant, expr(tenant_id == ^tenant())
+  scopes do
+    scope :always, true
+    scope :own, expr(author_id == ^actor(:id))
+    scope :same_org, expr(org_id == ^actor(:org_id))
+  end
 end
 
 # config/config.exs
@@ -388,7 +390,7 @@ config :ash_grant, scope_registry: MyApp.GlobalScopes
 ```
 
 Every resource that uses `AshGrant` now sees `:always`, `:own`, and
-`:same_tenant` as if it had declared them in its own `ash_grant do` block.
+`:same_org` as if it had declared them in its own `ash_grant do` block.
 
 ### Precedence
 
@@ -396,15 +398,10 @@ A scope declared closer to the resource wins:
 
     resource > domain > registry
 
-So a resource that declares its own `scope :own, expr(...)` overrides the
+A resource that declares its own `scope :own, expr(...)` overrides the
 registry's `:own`, and a domain that declares `scope :own, expr(...)` overrides
 the registry's `:own` for every resource in that domain. Same-name is the
 only rule — unrelated scopes merge freely.
-
-### Backwards compatibility
-
-With no `:scope_registry` configured, behaviour is identical to earlier
-versions. The registry is purely additive.
 
 ### Inheritance
 

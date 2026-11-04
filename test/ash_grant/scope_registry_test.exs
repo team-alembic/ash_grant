@@ -24,17 +24,12 @@ defmodule AshGrant.ScopeRegistryTest do
   end
 
   describe "AshGrant.ScopeRegistry" do
-    test "__scopes__/0 returns a map keyed by scope name" do
-      scopes = GlobalScopes.__scopes__()
-
-      assert is_map(scopes)
-      assert %AshGrant.Dsl.Scope{name: :always, filter: true} = scopes[:always]
-      assert %AshGrant.Dsl.Scope{name: :own} = scopes[:own]
-    end
-
     test "scopes/0 reads the configured registry" do
       names = AshGrant.ScopeRegistry.scopes() |> Enum.map(& &1.name) |> Enum.sort()
       assert names == [:always, :own, :registry_only]
+
+      assert %AshGrant.Dsl.Scope{filter: true} =
+               Enum.find(AshGrant.ScopeRegistry.scopes(), &(&1.name == :always))
     end
 
     test "scopes/0 returns [] when no registry is configured" do

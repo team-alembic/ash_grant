@@ -2,9 +2,11 @@ defmodule AshGrant.Test.GlobalScopes do
   @moduledoc false
   use AshGrant.ScopeRegistry
 
-  scope(:always, true)
-  scope(:own, expr(author_id == ^actor(:id)))
-  scope(:registry_only, expr(status == :archived))
+  scopes do
+    scope(:always, true)
+    scope(:own, expr(author_id == ^actor(:id)))
+    scope(:registry_only, expr(status == :archived))
+  end
 end
 
 defmodule AshGrant.Test.RegistryDomain do
