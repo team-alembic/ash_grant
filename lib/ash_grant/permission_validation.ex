@@ -59,7 +59,6 @@ defmodule AshGrant.PermissionValidation do
   | `:unknown_action` | `:action` | error | a literal action name no targeted resource has |
   | `:unknown_action_type` | `:action` | error | from `AshGrant.Permission.diagnostics/1` |
   | `:deprecated_type_wildcard` | `:action` | warning | from `AshGrant.Permission.diagnostics/1` |
-  | `:dead_instance_type_wildcard` | `:action` | warning | from `AshGrant.Permission.diagnostics/1` |
   | `:undeclared_scope` | `:scope` | error¹ | no resource the grant applies to declares the scope |
   | `:scope_missing_on` | `:scope` | error¹ | some of the resources the grant applies to lack the scope — listed in `:resources` |
   | `:unverifiable_scope` | `:scope` | warning | undeclared, but a `scope_resolver` is configured and may know it |
@@ -138,9 +137,6 @@ defmodule AshGrant.PermissionValidation do
 
   @diagnostic_severities %{
     deprecated_type_wildcard: :warning,
-    # A warning, not an error: the read-filter path does match these (#131), so
-    # "never matches" is not yet true everywhere.
-    dead_instance_type_wildcard: :warning,
     unknown_action_type: :error
   }
 

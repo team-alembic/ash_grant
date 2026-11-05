@@ -457,9 +457,10 @@ defmodule AshGrant.PermissionCheckTest do
                issues_for("note:*:@delete:always")
     end
 
-    test "a type wildcard on an instance permission is a warning (#131)" do
-      assert [%{code: :dead_instance_type_wildcard, severity: :warning}] =
-               issues_for("note:9f1c:@read:")
+    test "a type wildcard on an instance permission is NOT flagged (#131)" do
+      # Live via matches_instance?/4 and get_matching_instance_ids/4 when action_type
+      # is supplied, which every framework call site does.
+      assert issues_for("note:9f1c:@read:") == []
     end
 
     test "a valid type with no action of that type on the resource is not an error" do

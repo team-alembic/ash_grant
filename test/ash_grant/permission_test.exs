@@ -553,18 +553,20 @@ defmodule AshGrant.PermissionTest do
       assert d.suggestion == "!blog:*:@read:always:sensitive"
     end
 
-    test "type wildcard on an instance permission is flagged as dead" do
-      assert [d] = Permission.diagnostics("blog:post_abc:@read:")
-
-      assert d.code == :dead_instance_type_wildcard
-      assert d.suggestion == nil
+    test "type wildcard on an instance permission is NOT flagged — it is live (#131)" do
+      # The grant is alive via `matches_instance?/4` and `get_matching_instance_ids/4`
+      # when an action_type is supplied, which every framework call site does.
+      assert Permission.diagnostics("blog:post_abc:@read:") == []
     end
 
-    test "dead instance grant is caught in both spellings" do
+    test "deprecated instance-scoped `read*` still reports the spelling, not deadness" do
       codes = fn s -> s |> Permission.diagnostics() |> Enum.map(& &1.code) end
 
-      assert :dead_instance_type_wildcard in codes.("blog:post_abc:read*:")
-      assert :dead_instance_type_wildcard in codes.("blog:post_abc:@read:")
+      # `read*` is deprecated regardless of instance vs RBAC, but no diagnostic claims
+      # the grant is dead — because it isn't (#131).
+      refute :dead_instance_type_wildcard in codes.("blog:post_abc:read*:")
+      refute :dead_instance_type_wildcard in codes.("blog:post_abc:@read:")
+      assert :deprecated_type_wildcard in codes.("blog:post_abc:read*:")
     end
 
     test "unknown action type is flagged, with @destroy suggested for delete" do
@@ -601,11 +603,11 @@ defmodule AshGrant.PermissionTest do
       assert unknown.suggestion == "blog:*:@destroy:always"
     end
 
-    test "does not suggest @read for a grant that is dead either way" do
+    test "suggests @read for an instance-scoped read* (#131 — the grant is live)" do
       diagnostics = Permission.diagnostics("blog:post_abc:read*:")
       deprecated = Enum.find(diagnostics, &(&1.code == :deprecated_type_wildcard))
 
-      assert deprecated.suggestion == nil
+      assert deprecated.suggestion == "blog:post_abc:@read:"
     end
 
     test "no suggestion is ever itself flagged" do

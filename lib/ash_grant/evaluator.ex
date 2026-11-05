@@ -194,6 +194,13 @@ defmodule AshGrant.Evaluator do
   Instance permissions use the format `resource:instance_id:action:scope` where
   the scope can be empty (backward compatible) or contain a scope condition.
 
+  ## Pass an `action_type` if any instance grant may be a type wildcard
+
+  Type wildcards (`"@read"`, or the deprecated `"read*"`) on instance permissions
+  compare the Ash action **type**, so they cannot be evaluated without an `action_type`
+  and are treated as non-matching (issue #131). `AshGrant.IndeterminateMatch` reports
+  these calls.
+
   ## Examples
 
       iex> permissions = ["feed:feed_abc123xyz789ab:read:", "feed:feed_abc123xyz789ab:write:"]
@@ -205,23 +212,36 @@ defmodule AshGrant.Evaluator do
       true
 
   """
-  @spec has_instance_access?(permissions(), String.t(), String.t()) :: boolean()
-  def has_instance_access?(permissions, instance_id, action) do
+  @spec has_instance_access?(permissions(), String.t(), String.t(), atom() | nil) :: boolean()
+  def has_instance_access?(permissions, instance_id, action, action_type \\ nil) do
     permissions = normalize_permissions(permissions)
+    match = &Permission.matches_instance?(&1, instance_id, action, action_type)
 
-    # Check for deny rules first
-    has_deny =
-      Enum.any?(permissions, fn perm ->
-        Permission.deny?(perm) and Permission.matches_instance?(perm, instance_id, action)
-      end)
+    compute = fn match ->
+      has_deny = Enum.any?(permissions, &(Permission.deny?(&1) and match.(&1)))
 
-    if has_deny do
-      false
-    else
-      # Check for allow rules
-      Enum.any?(permissions, fn perm ->
-        not Permission.deny?(perm) and Permission.matches_instance?(perm, instance_id, action)
-      end)
+      not has_deny and Enum.any?(permissions, &(not Permission.deny?(&1) and match.(&1)))
+    end
+
+    AshGrant.IndeterminateMatch.guard_instance(
+      compute,
+      match,
+      permissions,
+      resource_of(permissions, instance_id),
+      action,
+      action_type
+    )
+  end
+
+  # The resource name used in indeterminacy signals for instance-path calls. Instance
+  # permissions carry the resource they target, so pull the first matching perm's
+  # resource for the signal; the guard only uses it to annotate the message.
+  defp resource_of(permissions, instance_id) do
+    case Enum.find(permissions, fn perm ->
+           Permission.instance_permission?(perm) and perm.instance_id == instance_id
+         end) do
+      nil -> "?"
+      perm -> perm.resource
     end
   end
 
@@ -249,25 +269,29 @@ defmodule AshGrant.Evaluator do
       nil
 
   """
-  @spec get_instance_scope(permissions(), String.t(), String.t()) :: String.t() | nil
-  def get_instance_scope(permissions, instance_id, action) do
+  @spec get_instance_scope(permissions(), String.t(), String.t(), atom() | nil) ::
+          String.t() | nil
+  def get_instance_scope(permissions, instance_id, action, action_type \\ nil) do
     permissions = normalize_permissions(permissions)
+    match = &Permission.matches_instance?(&1, instance_id, action, action_type)
 
-    # Check for deny first
-    has_deny =
-      Enum.any?(permissions, fn perm ->
-        Permission.deny?(perm) and Permission.matches_instance?(perm, instance_id, action)
-      end)
+    compute = fn match -> first_instance_scope(permissions, match) end
 
-    if has_deny do
+    AshGrant.IndeterminateMatch.guard_instance(
+      compute,
+      match,
+      permissions,
+      resource_of(permissions, instance_id),
+      action,
+      action_type
+    )
+  end
+
+  defp first_instance_scope(permissions, match) do
+    if Enum.any?(permissions, &(Permission.deny?(&1) and match.(&1))) do
       nil
     else
-      # Find first matching allow permission and return its scope
-      permissions
-      |> Enum.find(fn perm ->
-        not Permission.deny?(perm) and Permission.matches_instance?(perm, instance_id, action)
-      end)
-      |> case do
+      case Enum.find(permissions, &(not Permission.deny?(&1) and match.(&1))) do
         nil -> nil
         perm -> perm.scope
       end
@@ -291,27 +315,35 @@ defmodule AshGrant.Evaluator do
       []
 
   """
-  @spec get_all_instance_scopes(permissions(), String.t(), String.t()) :: [String.t()]
-  def get_all_instance_scopes(permissions, instance_id, action) do
+  @spec get_all_instance_scopes(permissions(), String.t(), String.t(), atom() | nil) :: [
+          String.t()
+        ]
+  def get_all_instance_scopes(permissions, instance_id, action, action_type \\ nil) do
     permissions = normalize_permissions(permissions)
+    match = &Permission.matches_instance?(&1, instance_id, action, action_type)
 
-    # Check for deny first
-    has_deny =
-      Enum.any?(permissions, fn perm ->
-        Permission.deny?(perm) and Permission.matches_instance?(perm, instance_id, action)
-      end)
+    compute = fn match ->
+      has_deny = Enum.any?(permissions, &(Permission.deny?(&1) and match.(&1)))
 
-    if has_deny do
-      []
-    else
-      permissions
-      |> Enum.filter(fn perm ->
-        not Permission.deny?(perm) and Permission.matches_instance?(perm, instance_id, action)
-      end)
-      |> Enum.map(& &1.scope)
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq()
+      if has_deny do
+        []
+      else
+        permissions
+        |> Enum.filter(&(not Permission.deny?(&1) and match.(&1)))
+        |> Enum.map(& &1.scope)
+        |> Enum.reject(&is_nil/1)
+        |> Enum.uniq()
+      end
     end
+
+    AshGrant.IndeterminateMatch.guard_instance(
+      compute,
+      match,
+      permissions,
+      resource_of(permissions, instance_id),
+      action,
+      action_type
+    )
   end
 
   @doc """
@@ -656,34 +688,40 @@ defmodule AshGrant.Evaluator do
   @spec get_matching_instance_ids(permissions(), String.t(), String.t(), atom() | nil) ::
           [String.t()]
   def get_matching_instance_ids(permissions, resource, action, action_type \\ nil) do
-    # No IndeterminateMatch guard: this considers only instance permissions
-    # (instance_id != "*"), and a type wildcard on an instance permission is dead, not
-    # indeterminate — `AshGrant.Permission.diagnostics/1` reports it. RBAC wildcards
-    # (the indeterminate case) never enter here, so a guard would be a no-op.
+    # Instance type wildcards are alive here when an action_type is supplied, and
+    # silently skipped without one (issue #131). The guard reports the untyped case.
     permissions = normalize_permissions(permissions)
+    match = &Permission.matches_action?(&1.action, action, action_type)
 
-    # Find all instance permissions that match resource and action
-    instance_perms =
-      permissions
-      |> Enum.filter(fn perm ->
-        Permission.instance_permission?(perm) and
-          Permission.matches_resource?(perm.resource, resource) and
-          Permission.matches_action?(perm.action, action, action_type)
-      end)
+    compute = fn match ->
+      instance_perms =
+        Enum.filter(permissions, fn perm ->
+          Permission.instance_permission?(perm) and
+            Permission.matches_resource?(perm.resource, resource) and
+            match.(perm)
+        end)
 
-    # Get denied instance IDs
-    denied_ids =
+      denied_ids =
+        instance_perms
+        |> Enum.filter(&Permission.deny?/1)
+        |> Enum.map(& &1.instance_id)
+        |> MapSet.new()
+
       instance_perms
-      |> Enum.filter(&Permission.deny?/1)
+      |> Enum.reject(&Permission.deny?/1)
       |> Enum.map(& &1.instance_id)
-      |> MapSet.new()
+      |> Enum.reject(&MapSet.member?(denied_ids, &1))
+      |> Enum.uniq()
+    end
 
-    # Get allowed instance IDs (excluding denied ones)
-    instance_perms
-    |> Enum.reject(&Permission.deny?/1)
-    |> Enum.map(& &1.instance_id)
-    |> Enum.reject(&MapSet.member?(denied_ids, &1))
-    |> Enum.uniq()
+    AshGrant.IndeterminateMatch.guard_instance(
+      compute,
+      match,
+      permissions,
+      resource,
+      action,
+      action_type
+    )
   end
 
   @doc """

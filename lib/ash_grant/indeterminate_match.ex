@@ -54,9 +54,19 @@ defmodule AshGrant.IndeterminateMatch do
   Forcing all wildcards at once can, in rare mixed allow/deny cases, mask a difference
   (a false *negative*); it never invents one (no false *positive*).
 
-  Only RBAC grants (`instance_id == "*"`) are forced. A type wildcard on an instance
-  permission is dead outright — `AshGrant.Permission.diagnostics/1` reports that — so it
-  is treated as non-matching in both passes, never as indeterminate.
+  The guard has two variants matching the two match surfaces:
+
+    * `guard/6` forces RBAC type wildcards (`instance_id == "*"`) for callers that go
+      through `Permission.matches?/4` (`has_access?`, `get_scope`, `get_all_scopes`,
+      `get_write_scopes`, `get_field_group`, `get_all_field_groups`, `find_matching`,
+      `field_group_grants`).
+    * `guard_instance/6` forces instance-permission type wildcards for callers that go
+      through `Permission.matches_instance?/4` (`has_instance_access?`,
+      `get_instance_scope`, `get_all_instance_scopes`, `get_matching_instance_ids`).
+
+  Forcing is always kind-matched to the match surface — forcing an RBAC wildcard in an
+  instance-path recompute (or vice versa) would fabricate a match the compute could not
+  otherwise see.
 
   ## Fixing a reported call
 
@@ -119,49 +129,83 @@ defmodule AshGrant.IndeterminateMatch do
           atom() | nil
         ) ::
           term()
-  # A supplied action_type means every wildcard was evaluated — nothing to force.
-  def guard(compute, match_fn, _permissions, _resource, _action, action_type)
-      when not is_nil(action_type) do
+  def guard(compute, match_fn, permissions, resource, action, action_type) do
+    offenders = rbac_wildcards(permissions, resource)
+    do_guard(compute, match_fn, offenders, resource, action, action_type)
+  end
+
+  @doc """
+  The instance-path variant of `guard/6`.
+
+  Forces instance-permission type wildcards (rather than RBAC ones) when recomputing,
+  so the instance evaluator entry points (`has_instance_access?`, `get_instance_scope`,
+  `get_all_instance_scopes`, `get_matching_instance_ids`) can detect indeterminacy on
+  their own match surface — instance type wildcards are live when an `action_type` is
+  supplied, and skipped without one.
+  """
+  @spec guard_instance(
+          compute(),
+          (Permission.t() -> boolean()),
+          [Permission.t()],
+          String.t(),
+          String.t(),
+          atom() | nil
+        ) ::
+          term()
+  def guard_instance(compute, match_fn, permissions, resource, action, action_type) do
+    offenders = instance_wildcards(permissions, resource)
+    do_guard(compute, match_fn, offenders, resource, action, action_type)
+  end
+
+  defp do_guard(compute, match_fn, _offenders, _resource, _action, action_type)
+       when not is_nil(action_type) do
     compute.(match_fn)
   end
 
-  def guard(compute, match_fn, permissions, resource, action, nil) do
+  defp do_guard(compute, match_fn, offenders, resource, action, nil) do
     normal = compute.(match_fn)
-    detect(normal, compute, match_fn, permissions, resource, action, mode())
+    detect(normal, compute, match_fn, offenders, resource, action, mode())
   end
 
-  defp detect(normal, _compute, _match_fn, _permissions, _resource, _action, :off), do: normal
+  defp detect(normal, _compute, _match_fn, _offenders, _resource, _action, :off), do: normal
+  defp detect(normal, _compute, _match_fn, [], _resource, _action, _mode), do: normal
 
-  defp detect(normal, compute, match_fn, permissions, resource, action, active_mode) do
-    case wildcards(permissions, resource) do
-      [] ->
-        normal
+  defp detect(normal, compute, match_fn, offenders, resource, action, active_mode) do
+    forced = compute.(forced_match_fn(match_fn, offenders))
 
-      offenders ->
-        forced = compute.(forced_match_fn(match_fn, offenders))
-
-        if normal == forced,
-          do: normal,
-          else: report(normal, offenders, resource, action, active_mode)
-    end
+    if normal == forced,
+      do: normal,
+      else: report(normal, offenders, resource, action, active_mode)
   end
 
-  # The normal predicate, but every skipped RBAC type wildcard is treated as matching.
+  # The normal predicate, but every skipped type wildcard is treated as matching.
   defp forced_match_fn(match_fn, offenders) do
     forced = MapSet.new(offenders)
     fn perm -> MapSet.member?(forced, perm) or match_fn.(perm) end
   end
 
   # RBAC type-wildcard grants for this resource — the permissions whose match could not
-  # be determined without an action_type. Instance permissions are excluded: a type
-  # wildcard there is dead (see diagnostics/1), not indeterminate.
-  defp wildcards(permissions, resource) do
+  # be determined on the `Permission.matches?/4` surface without an action_type.
+  defp rbac_wildcards(permissions, resource) do
     Enum.filter(permissions, fn
       %Permission{instance_id: "*"} = perm ->
         Permission.type_wildcard?(perm) and Permission.matches_resource?(perm.resource, resource)
 
       %Permission{} ->
         false
+    end)
+  end
+
+  # Instance-permission type-wildcard grants for this resource — the permissions whose
+  # match could not be determined on the `Permission.matches_instance?/4` surface
+  # without an action_type (issue #131).
+  defp instance_wildcards(permissions, resource) do
+    Enum.filter(permissions, fn
+      %Permission{instance_id: "*"} ->
+        false
+
+      %Permission{} = perm ->
+        Permission.type_wildcard?(perm) and Permission.matches_resource?(perm.resource, resource)
     end)
   end
 

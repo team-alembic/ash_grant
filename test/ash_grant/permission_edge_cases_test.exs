@@ -177,10 +177,18 @@ defmodule AshGrant.PermissionEdgeCasesTest do
 
     test "action type wildcard in instance permission" do
       perm = Permission.parse!("blog:post_abc123:read*:")
-      # matches_instance? doesn't pass action_type, so read* never matches
+      # The 3-arity matches_instance? passes no action_type, so read* cannot match.
       refute Permission.matches_instance?(perm, "post_abc123", "read")
       refute Permission.matches_instance?(perm, "post_abc123", "read_comments")
       refute Permission.matches_instance?(perm, "post_abc123", "write")
+    end
+
+    test "action type wildcard matches on an instance permission when action_type given (#131)" do
+      perm = Permission.parse!("blog:post_abc123:@read:")
+      assert Permission.matches_instance?(perm, "post_abc123", "list_published", :read)
+      assert Permission.matches_instance?(perm, "post_abc123", "read", :read)
+      refute Permission.matches_instance?(perm, "post_abc123", "update", :update)
+      refute Permission.matches_instance?(perm, "other_instance", "read", :read)
     end
   end
 
