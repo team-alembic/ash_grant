@@ -337,19 +337,41 @@ defmodule AshGrant.EvaluatorPropertyTest do
       end
     end
 
-    property "5-part deny-wins blocks access" do
+    property "action-wide (group-less) deny-wins blocks has_access?" do
       check all(
               resource <- resource_gen(),
               action <- action_gen(),
               scope <- scope_gen(),
               field_group <- field_group_gen()
             ) do
+        # The allow may carry a field_group; the deny deliberately does NOT —
+        # only a group-less deny participates in action-level deny-wins (#117).
         permissions = [
           "#{resource}:*:#{action}:#{scope}:#{field_group}",
-          "!#{resource}:*:#{action}:#{scope}:#{field_group}"
+          "!#{resource}:*:#{action}:#{scope}"
         ]
 
         refute Evaluator.has_access?(permissions, resource, action)
+      end
+    end
+
+    property "a field-group-qualified deny does NOT block the whole action (#117)" do
+      check all(
+              resource <- resource_gen(),
+              action <- action_gen(),
+              scope <- scope_gen(),
+              field_group <- field_group_gen(),
+              field_group != nil
+            ) do
+        # A group-less allow plus a field-group deny: the action stays
+        # authorized by the allow; only the named group is subtracted at the
+        # field-visibility layer.
+        permissions = [
+          "#{resource}:*:#{action}:#{scope}",
+          "!#{resource}:*:#{action}:#{scope}:#{field_group}"
+        ]
+
+        assert Evaluator.has_access?(permissions, resource, action)
       end
     end
   end

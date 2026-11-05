@@ -29,7 +29,7 @@ defmodule AshGrant.FieldGroupPermissionsTest do
     end
   end
 
-  describe "end-to-end :strict resource" do
+  describe "end-to-end :strict resource — field_group_permissions is dormant since #117" do
     setup do
       record =
         StrictFieldGroupRecord
@@ -43,7 +43,8 @@ defmodule AshGrant.FieldGroupPermissionsTest do
       %{record: record}
     end
 
-    test "a deny rule carrying a field_group raises InvalidPermissionError on read" do
+    test "a deny rule carrying a field_group reads normally and hides the named group",
+         %{record: record} do
       actor = %{
         permissions: [
           "strictfieldgrouprecord:*:read:always",
@@ -51,15 +52,22 @@ defmodule AshGrant.FieldGroupPermissionsTest do
         ]
       }
 
-      # AshGrant raises InvalidPermissionError; Ash wraps non-Ash exceptions
-      # from a check in Ash.Error.Unknown, preserving the (clear) message.
-      err =
-        assert_raise Ash.Error.Unknown, fn ->
-          StrictFieldGroupRecord |> Ash.read!(actor: actor)
-        end
+      # The deny is a valid field-group restriction now. The row-level read
+      # succeeds; only `:sensitive` fields are hidden.
+      log =
+        capture_log(fn ->
+          result =
+            StrictFieldGroupRecord
+            |> Ash.read!(actor: actor)
+            |> Enum.find(&(&1.id == record.id))
 
-      assert Exception.message(err) =~ "deny rules cannot carry a field_group"
-      assert Exception.message(err) =~ "!strictfieldgrouprecord:*:read:always:sensitive"
+          assert result != nil
+          assert result.name == "Alice"
+          assert result.department == "Eng"
+          assert match?(%Ash.ForbiddenField{}, result.phone)
+        end)
+
+      refute log =~ "deny rules cannot carry a field_group"
     end
 
     test "a valid allow + field_group permission reads normally", %{record: record} do
@@ -98,7 +106,8 @@ defmodule AshGrant.FieldGroupPermissionsTest do
       %{record: record}
     end
 
-    test "a deny rule carrying a field_group logs a warning and stays fail-closed" do
+    test "a deny rule carrying a field_group lets the row read and hides only that group",
+         %{record: record} do
       actor = %{
         permissions: [
           "sensitiverecord:*:read:always",
@@ -108,12 +117,21 @@ defmodule AshGrant.FieldGroupPermissionsTest do
 
       log =
         capture_log(fn ->
-          assert_raise Ash.Error.Forbidden, fn ->
-            SensitiveRecord |> Ash.read!(actor: actor)
-          end
+          result =
+            SensitiveRecord
+            |> Ash.read!(actor: actor)
+            |> Enum.find(&(&1.id == record.id))
+
+          assert result != nil
+          # :public fields stay visible.
+          assert result.name == "John"
+          assert result.position == "Dev"
+          # :sensitive fields are hidden by the field-group deny.
+          assert match?(%Ash.ForbiddenField{}, result.phone)
+          assert match?(%Ash.ForbiddenField{}, result.address)
         end)
 
-      assert log =~ "deny rules cannot carry a field_group"
+      refute log =~ "deny rules cannot carry a field_group"
     end
   end
 end

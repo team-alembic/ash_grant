@@ -140,7 +140,7 @@ defmodule AshGrant.FieldCheckTest do
       refute AshGrant.FieldCheck.match?(actor, authorizer, field_group: :confidential)
     end
 
-    test "5-part deny on field_group blocks access" do
+    test "5-part deny on field_group subtracts only the named group (issue #117)" do
       actor = %{
         permissions: [
           "sensitiverecord:*:read:always:confidential",
@@ -150,9 +150,10 @@ defmodule AshGrant.FieldCheckTest do
 
       authorizer = build_authorizer()
 
-      # deny-wins: deny matches resource+action, blocks all field access
-      refute AshGrant.FieldCheck.match?(actor, authorizer, field_group: :confidential)
-      refute AshGrant.FieldCheck.match?(actor, authorizer, field_group: :public)
+      # The deny only names :sensitive. The :confidential grant still reaches
+      # :confidential and :public (unchanged by the field-group deny).
+      assert AshGrant.FieldCheck.match?(actor, authorizer, field_group: :confidential)
+      assert AshGrant.FieldCheck.match?(actor, authorizer, field_group: :public)
     end
 
     test "5-part with action wildcard grants field access" do

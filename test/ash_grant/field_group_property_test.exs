@@ -350,7 +350,10 @@ defmodule AshGrant.FieldGroupPropertyTest do
   # ============================================
 
   describe "5-part deny semantics" do
-    property "5-part deny blocks has_access?" do
+    property "a field-group deny does NOT block has_access? (issue #117)" do
+      # A field-group-qualified deny restricts only the named group's
+      # visibility; the row-level action stays authorized by the matching
+      # allow. Action-level deny-wins applies only to group-less denies.
       check all(
               resource <- resource_gen(),
               action <- action_gen(),
@@ -360,6 +363,22 @@ defmodule AshGrant.FieldGroupPropertyTest do
         permissions = [
           "#{resource}:*:#{action}:#{scope}:#{field_group}",
           "!#{resource}:*:#{action}:#{scope}:#{field_group}"
+        ]
+
+        assert Evaluator.has_access?(permissions, resource, action)
+      end
+    end
+
+    property "an action-wide (group-less) deny still blocks has_access?" do
+      check all(
+              resource <- resource_gen(),
+              action <- action_gen(),
+              scope <- scope_gen(),
+              field_group <- non_nil_field_group_gen()
+            ) do
+        permissions = [
+          "#{resource}:*:#{action}:#{scope}:#{field_group}",
+          "!#{resource}:*:#{action}:#{scope}"
         ]
 
         refute Evaluator.has_access?(permissions, resource, action)

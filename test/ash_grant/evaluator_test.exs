@@ -416,26 +416,29 @@ defmodule AshGrant.EvaluatorTest do
   end
 
   describe "5-part with deny field_group" do
-    test "5-part deny blocks access even when field_group matches" do
+    test "5-part deny does not block action-level access (issue #117)" do
+      # A field-group deny subtracts only the named group's visibility. The
+      # action-level read stays allowed by the group-less or group-mismatched
+      # allow — only the targeted field_group is cleared.
       permissions = [
         "employee:*:read:always:sensitive",
         "!employee:*:read:always:sensitive"
       ]
 
-      refute Evaluator.has_access?(permissions, "employee", "read")
-      assert Evaluator.get_field_group(permissions, "employee", "read") == nil
+      assert Evaluator.has_access?(permissions, "employee", "read")
       assert Evaluator.get_all_field_groups(permissions, "employee", "read") == []
     end
 
-    test "5-part deny on specific field_group blocks that field_group" do
-      # Deny with field_group still matches resource:action, so deny-wins blocks everything
+    test "5-part deny on one group does not touch another (issue #117)" do
+      # An allow for :billing and a deny for :sensitive: the action is
+      # authorized by the :billing allow, and :billing stays visible.
       permissions = [
         "employee:*:read:always:billing",
         "!employee:*:read:always:sensitive"
       ]
 
-      # deny-wins: the deny matches resource+action, so all access is denied
-      refute Evaluator.has_access?(permissions, "employee", "read")
+      assert Evaluator.has_access?(permissions, "employee", "read")
+      assert Evaluator.get_all_field_groups(permissions, "employee", "read") == ["billing"]
     end
 
     test "5-part deny does not affect different resource" do
@@ -483,14 +486,22 @@ defmodule AshGrant.EvaluatorTest do
       assert Evaluator.get_field_group(permissions, "employee", "read") == "sensitive"
     end
 
-    test "deny 5-part with action wildcard blocks specific actions" do
+    test "deny 5-part with action wildcard only subtracts a field group, not the action" do
+      # Both grants carry field_group `:sensitive`, so the deny subtracts that
+      # group's visibility on `:delete`. The action itself stays authorized by
+      # the wildcard allow — only the field-group reach changes.
       permissions = [
         "employee:*:*:always:sensitive",
         "!employee:*:delete:always:sensitive"
       ]
 
       assert Evaluator.has_access?(permissions, "employee", "read")
-      refute Evaluator.has_access?(permissions, "employee", "delete")
+      assert Evaluator.has_access?(permissions, "employee", "delete")
+
+      # On :delete, the deny clears every :sensitive grant that reaches the
+      # action; on :read, the wildcard allow still contributes.
+      assert Evaluator.get_all_field_groups(permissions, "employee", "delete") == []
+      assert Evaluator.get_all_field_groups(permissions, "employee", "read") == ["sensitive"]
     end
   end
 

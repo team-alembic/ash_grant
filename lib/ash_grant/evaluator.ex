@@ -361,8 +361,25 @@ defmodule AshGrant.Evaluator do
     end
   end
 
+  # Action-level deny: a deny that carries a `field_group` (5th part) is a
+  # field-visibility restriction, not an action restriction. It must leave the
+  # row-level read untouched — the per-field subtraction happens in
+  # `field_group_grants/5` and `all_field_groups/2`. Only group-less denies
+  # participate in action-wide deny-wins (issue #117).
   defp denied?(permissions, match) do
-    Enum.any?(permissions, &(Permission.deny?(&1) and match.(&1)))
+    Enum.any?(permissions, fn perm ->
+      Permission.deny?(perm) and is_nil(perm.field_group) and match.(perm)
+    end)
+  end
+
+  # Field-group denies that match this resource/action — the subtractive input
+  # to the field-group paths. Returns raw Permission structs so callers can
+  # consult each deny's own `field_group` (plus inheritance via
+  # `grants_field_group?/3`).
+  defp field_group_denies(permissions, match) do
+    Enum.filter(permissions, fn perm ->
+      Permission.deny?(perm) and not is_nil(perm.field_group) and match.(perm)
+    end)
   end
 
   @doc """
@@ -527,15 +544,20 @@ defmodule AshGrant.Evaluator do
       []
     else
       matching_allows = Enum.filter(permissions, &(not Permission.deny?(&1) and match.(&1)))
+      denied_groups = permissions |> field_group_denies(match) |> MapSet.new(& &1.field_group)
 
       # A group-less (4-part) allow grant means "all fields are visible" and dominates
       # the union, so it collapses the result to [] (unrestricted). Without this, adding
       # a narrower field-group grant on top of a broad group-less grant would silently
-      # subtract access (see issue #116).
-      if Enum.any?(matching_allows, &is_nil(&1.field_group)) do
+      # subtract access (see issue #116). A field-group deny in play breaks the
+      # collapse — the deny's named group must stay subtracted (issue #117).
+      if Enum.any?(matching_allows, &is_nil(&1.field_group)) and MapSet.size(denied_groups) == 0 do
         []
       else
-        matching_allows |> Enum.map(& &1.field_group) |> Enum.uniq()
+        matching_allows
+        |> Enum.map(& &1.field_group)
+        |> Enum.reject(&(is_nil(&1) or MapSet.member?(denied_groups, &1)))
+        |> Enum.uniq()
       end
     end
   end
@@ -564,12 +586,13 @@ defmodule AshGrant.Evaluator do
     match = &Permission.matches_action?(&1.action, action, action_type)
 
     compute = fn match ->
-      Enum.filter(permissions, fn perm ->
-        not Permission.deny?(perm) and
-          Permission.matches_resource?(perm.resource, resource_name) and
-          match.(perm) and
-          grants_field_group?(resource_module, perm.field_group, required_group)
-      end)
+      compute_field_group_grants(
+        permissions,
+        match,
+        resource_module,
+        resource_name,
+        required_group
+      )
     end
 
     AshGrant.IndeterminateMatch.guard(
@@ -582,12 +605,65 @@ defmodule AshGrant.Evaluator do
     )
   end
 
+  # Shared body for field_group_grants/5: apply the field-group-deny
+  # subtraction, then return the remaining contributing allow grants.
+  #
+  # A field-group deny of X subtracts every contributing grant whose reach
+  # into `required_group` is `X`. Only RBAC denies (`instance_id == "*"`)
+  # participate — an instance-scoped deny applies to a specific record and
+  # is handled by the per-row predicate, not by removing every actor-wide
+  # allow.
+  defp compute_field_group_grants(
+         permissions,
+         match,
+         resource_module,
+         resource_name,
+         required_group
+       ) do
+    resource_action_match = fn perm ->
+      Permission.matches_resource?(perm.resource, resource_name) and match.(perm)
+    end
+
+    if field_group_denied?(permissions, resource_action_match, resource_module, required_group) do
+      []
+    else
+      Enum.filter(permissions, fn perm ->
+        not Permission.deny?(perm) and
+          resource_action_match.(perm) and
+          grants_field_group?(resource_module, perm.field_group, required_group)
+      end)
+    end
+  end
+
+  defp field_group_denied?(permissions, resource_action_match, resource_module, required_group) do
+    Enum.any?(permissions, fn perm ->
+      Permission.deny?(perm) and
+        perm.instance_id == "*" and
+        not is_nil(perm.field_group) and
+        resource_action_match.(perm) and
+        deny_applies_to_field_group?(resource_module, perm.field_group, required_group)
+    end)
+  end
+
   # A group-less (4-part) grant has no field_group — it grants every group.
   defp grants_field_group?(_resource_module, nil, _required), do: true
 
   defp grants_field_group?(resource_module, field_group, required) when is_binary(field_group) do
     field_group == to_string(required) or
       field_group_inherits_toward?(resource_module, field_group, required)
+  end
+
+  # A deny on `deny_fg` applies only to the field group it names. It does NOT
+  # propagate along inherits in either direction: a deny on `:sensitive` does
+  # not touch `:public` (which `:sensitive` inherits from), and a deny on
+  # `:public` does not touch `:sensitive` (which inherits `:public`). The
+  # subtractive effect of a deny on a grant that reaches the required group
+  # via inherits is handled implicitly — when required equals the deny's
+  # group, the deny removes every reaching grant, including a wider grant
+  # like `:confidential` that would otherwise contribute via inheritance.
+  defp deny_applies_to_field_group?(_resource_module, deny_fg, required)
+       when is_binary(deny_fg) do
+    deny_fg == to_string(required)
   end
 
   defp field_group_inherits_toward?(resource_module, field_group, required) do

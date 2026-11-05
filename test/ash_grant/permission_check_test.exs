@@ -436,13 +436,15 @@ defmodule AshGrant.PermissionCheckTest do
       assert instance.message =~ "get_instance_scope"
     end
 
-    test "deny + field_group is the #117 rule, as a code" do
-      assert [%{code: :deny_with_field_group, severity: :error, segment: :field_group}] =
-               issues_for("!note:*:read:always:sensitive")
+    test "deny + known field_group reports no issues (issue #117 is now supported)" do
+      assert issues_for("!note:*:read:always:sensitive") == []
     end
 
-    test "deny + field_group does not also report the group as unknown" do
-      assert codes("!note:*:read:always:nowhere") == [:deny_with_field_group]
+    test "deny + unknown field_group still reports :unknown_field_group" do
+      # A field-group deny is now a real subtractive grant, so the check
+      # treats its field_group the same way it treats an allow's — an unknown
+      # name is still a configuration bug.
+      assert codes("!note:*:read:always:nowhere") == [:unknown_field_group]
     end
   end
 

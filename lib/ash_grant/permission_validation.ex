@@ -1,26 +1,15 @@
 defmodule AshGrant.PermissionValidation do
   @moduledoc """
-  Validates permissions: a request-time rule for the permissions an actor
-  resolves to, and a static checker for the strings an application stores.
+  Validates permissions: a request-time entry point for AshGrant's checks, and
+  a static checker for the strings an application stores.
 
   ## Request time: `validate/3`
 
-  Enforces one rule (issue #117): a permission that is a **deny** (`!` prefix)
-  must not carry a **field_group** (5th part). A field-group deny is invalid
-  because field-group access is positive-only — column restrictions belong in
-  the resource's `field_group` definition (`inherits`/`except`/`mask`), and a
-  deny carrying a field_group currently over-denies the *entire* action
-  (fail-closed) rather than the named group.
-
-  The validator never changes the authorization outcome; it only *signals* the
-  invalid permission according to the configured mode:
-
-    * `:off`    — do nothing
-    * `:warn`   — emit a `Logger.warning` (deduplicated per process)
-    * `:strict` — raise `AshGrant.PermissionValidation.InvalidPermissionError`
-
-  The mode is configured per resource via the `field_group_permissions` option in
-  the `ash_grant` DSL block (default `:warn`).
+  No-op since the field-group deny fix (issue #117): a deny carrying a
+  `field_group` is a valid field-visibility restriction (it subtracts only the
+  named group, leaving the action untouched), so nothing is flagged here. The
+  function stays for API compatibility and still accepts the
+  `field_group_permissions` mode, which is now dormant.
 
   ## Ahead of time: `check/2` and `check_all/2`
 
@@ -65,7 +54,6 @@ defmodule AshGrant.PermissionValidation do
   | `:unverifiable_scope` | `:scope` | warning | undeclared, but a `scope_resolver` is configured and may know it |
   | `:unknown_field_group` | `:field_group` | error | no resource the grant applies to declares the field group |
   | `:field_group_missing_on` | `:field_group` | error | some of the resources the grant applies to lack the field group — listed in `:resources` |
-  | `:deny_with_field_group` | `:field_group` | error | the rule `validate/3` enforces at request time |
 
   ¹ A warning on a **deny** or an **instance** permission: the framework never
   resolves those scopes (a deny applies whatever its scope; an instance scope is
@@ -98,15 +86,14 @@ defmodule AshGrant.PermissionValidation do
     * **Field group** — `AshGrant.Info.field_groups/1`.
   """
 
-  require Logger
-
   alias AshGrant.Permission
   alias AshGrant.PermissionValidation.ResourceIndex
 
   defmodule InvalidPermissionError do
     @moduledoc """
-    Raised in `:strict` mode when an actor's permissions contain a deny rule that
-    carries a field_group — an invalid combination. See `AshGrant.PermissionValidation`.
+    Historical: raised by the (now no-op) `validate/3` before issue #117 was
+    fixed. Kept as a public type for API compatibility; no AshGrant code raises
+    it any more.
     """
     defexception [:message]
   end
@@ -145,28 +132,13 @@ defmodule AshGrant.PermissionValidation do
   }
 
   @doc """
-  Validates `permissions` and signals any invalid deny+field_group entries per `mode`.
-
-  Accepts the same permission representations the resolver may return (strings,
-  `%AshGrant.Permission{}` structs, `%AshGrant.PermissionInput{}`, or
-  `Permissionable` maps). Always returns `:ok`; raises `InvalidPermissionError`
-  only in `:strict` mode when an offender is present.
-
-  ## Options
-
-    * `:resource` — the resource module, included in the message for context.
+  No-op since issue #117: a deny carrying a `field_group` is a valid
+  field-visibility restriction. Kept for API compatibility and still accepts
+  the three `field_group_permissions` modes (`:off | :warn | :strict`); none
+  raises. Always returns `:ok`.
   """
   @spec validate(list(), mode(), keyword()) :: :ok
-  def validate(permissions, mode, opts \\ [])
-
-  def validate(_permissions, :off, _opts), do: :ok
-
-  def validate(permissions, mode, opts) when mode in [:warn, :strict] do
-    case offenders(permissions) do
-      [] -> :ok
-      offenders -> signal(offenders, mode, opts)
-    end
-  end
+  def validate(_permissions, _mode, _opts \\ []), do: :ok
 
   @doc """
   Checks one permission against the application's resources.
@@ -257,8 +229,7 @@ defmodule AshGrant.PermissionValidation do
 
     case targets(perm, index) do
       [] ->
-        [unknown_resource(perm, string, index) | action_syntax_issues(perm, string)] ++
-          deny_field_group_issues(perm, string)
+        [unknown_resource(perm, string, index) | action_syntax_issues(perm, string)]
 
       targets ->
         # A scope or field group is only read where the grant matches an action,
@@ -441,9 +412,6 @@ defmodule AshGrant.PermissionValidation do
 
   defp field_group_issues(%Permission{field_group: nil}, _string, _readers, _broad?), do: []
 
-  defp field_group_issues(%Permission{deny: true} = perm, string, _readers, _broad?),
-    do: deny_field_group_issues(perm, string)
-
   defp field_group_issues(perm, string, readers, broad?) do
     # Under `*` or a shared name, a resource with no field groups has nothing for
     # the 5th segment to restrict, so it is not expected to declare this one.
@@ -488,23 +456,6 @@ defmodule AshGrant.PermissionValidation do
     end
   end
 
-  defp deny_field_group_issues(%Permission{deny: true, field_group: group} = _perm, string)
-       when not is_nil(group) do
-    [
-      issue(
-        :deny_with_field_group,
-        :error,
-        :field_group,
-        string,
-        "A deny rule cannot carry a field_group: it over-denies the entire action " <>
-          "(fail-closed) rather than the named group. Field-group access is positive-only — " <>
-          "express column restrictions in the resource's field_group definition."
-      )
-    ]
-  end
-
-  defp deny_field_group_issues(_perm, _string), do: []
-
   # -- helpers ----------------------------------------------------------------
 
   defp issue(code, severity, segment, permission, message, resources \\ []) do
@@ -533,51 +484,4 @@ defmodule AshGrant.PermissionValidation do
       {_distance, candidate} -> " Did you mean `#{candidate}`?"
     end
   end
-
-  defp offenders(permissions) do
-    permissions
-    |> AshGrant.Evaluator.normalize_permissions()
-    |> Enum.filter(fn
-      %Permission{} = p -> p.deny and not is_nil(p.field_group)
-      _ -> false
-    end)
-  end
-
-  defp signal(offenders, :strict, opts) do
-    raise InvalidPermissionError, message: message(offenders, opts)
-  end
-
-  defp signal(offenders, :warn, opts) do
-    key = {opts[:resource], offenders |> offender_strings() |> Enum.sort()}
-
-    unless warned?(key) do
-      mark_warned(key)
-      Logger.warning(message(offenders, opts))
-    end
-
-    :ok
-  end
-
-  defp message(offenders, opts) do
-    strings = offender_strings(offenders)
-    on = if resource = opts[:resource], do: " on #{inspect(resource)}", else: ""
-
-    "AshGrant: deny rules cannot carry a field_group (5th part)#{on}. " <>
-      "These permissions are invalid and currently over-deny the entire action " <>
-      "(fail-closed): #{inspect(strings)}. Field-group access is positive-only — " <>
-      "express column restrictions in the resource's field_group definition " <>
-      "(inherits/except/mask) and grant groups positively."
-  end
-
-  defp offender_strings(offenders), do: Enum.map(offenders, &Permission.to_string/1)
-
-  # Per-process dedup so repeated checks within one request log at most once per
-  # {resource, offender-set}. The dedup set lives in the process dictionary; in a
-  # typical request-per-process model it dies with the request. Offenders are a
-  # misconfiguration and expected to be rare, so the set stays small.
-  defp warned?(key), do: MapSet.member?(warned_set(), key)
-
-  defp mark_warned(key), do: Process.put(__MODULE__, MapSet.put(warned_set(), key))
-
-  defp warned_set, do: Process.get(__MODULE__, MapSet.new())
 end
